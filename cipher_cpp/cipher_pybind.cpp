@@ -61,6 +61,29 @@ py::array_t<T> sum_by_col_wrapper(py::array_t<T, py::array::c_style | py::array:
     return result;
 }
 
+template <typename T>
+void shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> input, T amt) {
+    if (input.ndim() != 2) {
+        throw std::runtime_error("Input should be a 2D array");
+    }
+
+    auto buf = input.template mutable_unchecked<2>(); // Get buffer info for direct access
+    int M = buf.shape(0);
+    int N = buf.shape(1);
+
+    // Allocate int** for input
+    T** in = new T*[M];
+    for (int i = 0; i < M; ++i) {
+        in[i] = &buf(i, 0);
+    }
+
+    // Call the original function
+    jpyo0803::Shift(in, amt, M, N);
+
+    // Clean up
+    delete[] in;
+}
+
 template<typename T>
 void bind_sum_by_row(py::module_& m, const std::string& typestr) {
     m.def(("SumByRow_" + typestr).c_str(), &sum_by_row_wrapper<T>,
@@ -75,6 +98,14 @@ void bind_sum_by_col(py::module_& m, const std::string& typestr) {
           ("Sum elements of each col for type " + typestr).c_str());
 }
 
+template<typename T>
+void bind_shift(py::module_& m, const std::string& typestr) {
+    m.def(("Shift_" + typestr).c_str(), &shift_wrapper<T>,
+          py::arg("input"), py::arg("amt"),
+          ("Shift elements of a 2D array by a specified amount for type " + typestr).c_str());
+}
+
+
 PYBIND11_MODULE(cipher_cpp, m) {
   m.doc() = "Test";
   bind_sum_by_row<int32_t>(m, "int32");
@@ -86,4 +117,9 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_sum_by_col<int64_t>(m, "int64");
   bind_sum_by_col<uint32_t>(m, "uint32");
   bind_sum_by_col<uint64_t>(m, "uint64");
+  
+  bind_shift<int32_t>(m, "int32");
+  bind_shift<int64_t>(m, "int64");
+  bind_shift<uint32_t>(m, "uint32");
+  bind_shift<uint64_t>(m, "uint64");
 }
