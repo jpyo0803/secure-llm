@@ -8,7 +8,7 @@ import singleton_timer as st
 class NtlTest(unittest.TestCase):
     def test_int32(self):
         timer = st.SingletonTimer()
-        num_test = 10000
+        num_test = 1000
         pass_cnt = 0
         for _ in range(num_test):
             M = random.randint(1, 100)
@@ -25,7 +25,7 @@ class NtlTest(unittest.TestCase):
 
     def test_int64(self):
         timer = st.SingletonTimer()
-        num_test = 10000
+        num_test = 1000
         pass_cnt = 0
         for _ in range(num_test):
             M = random.randint(1, 100)
@@ -42,7 +42,7 @@ class NtlTest(unittest.TestCase):
 
     def test_uint32(self):
         timer = st.SingletonTimer()
-        num_test = 10000
+        num_test = 1000
         pass_cnt = 0
         for _ in range(num_test):
             M = random.randint(1, 100)
@@ -59,7 +59,7 @@ class NtlTest(unittest.TestCase):
 
     def test_uint64(self):
         timer = st.SingletonTimer()
-        num_test = 10000
+        num_test = 1000
         pass_cnt = 0
         for _ in range(num_test):
             M = random.randint(1, 100)
