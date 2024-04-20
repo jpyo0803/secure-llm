@@ -10,6 +10,72 @@ from pycuda.compiler import SourceModule
 import math
 
 wt_matmul = None
+wt_matmul_s8x_s8y_s32z = None
+
+
+def UnsecureMatmul(x: torch.Tensor, y: torch.Tensor):
+    timer = st.SingletonTimer()
+
+    global wt_matmul_s8x_s8y_s32z
+    if wt_matmul_s8x_s8y_s32z is None:
+        with open('./cipher_cuda/warptile_matmul_s8x_s8y_s32z.cuh', 'r') as fin:
+            cuda_kernel = fin.read()
+        mod = SourceModule(cuda_kernel)
+        wt_matmul_s8x_s8y_s32z = mod.get_function("sgemmWarptiling")
+
+    assert x.size()[1] == y.size()[0]
+    M, K = x.size()
+    _, N = y.size()
+
+    # Type must be int32 to properly handle negatives
+    t = timer.start(tag='torch to numpy, Unsecure', category='torch to numpy, Unsecure')
+    x_np = x.numpy().astype(np.int8)
+    y_np = y.numpy().astype(np.int8)
+    timer.end(t)
+
+    t = timer.start(tag='Allocate z_np (CPU), Unsecure', category='Allocate z_np (CPU), Unsecure')
+    z_np = np.zeros((M, N), dtype=np.int32)
+    timer.end(t)
+
+    t = timer.start(tag='Allocate x_np, y_np, z_np (GPU), Unsecure',
+                    category='Allocate x_np, y_np, z_np (GPU), Unsecure')
+    x_np_gpu = cuda.mem_alloc(x_np.nbytes)
+    y_np_gpu = cuda.mem_alloc(y_np.nbytes)
+    z_np_gpu = cuda.mem_alloc(z_np.nbytes)
+    timer.end(t)
+
+    t = timer.start(tag='Transfer x_np, y_np from CPU to GPU, Unsecure',
+                    category='Transfer x_np, y_np from CPU to GPU, Unsecure')
+    cuda.memcpy_htod(x_np_gpu, x_np)
+    cuda.memcpy_htod(y_np_gpu, y_np)
+    timer.end(t)
+
+    t = timer.start(tag='GPU Computation (Pre), Unsecure',
+                    category='GPU Computation (Pre), Unsecure')
+    NUM_THREADS = 128
+    BN = 128
+    BM = 128
+
+    block_size = (NUM_THREADS, 1, 1)
+    grid_size = (
+        int(np.ceil(N / BN)), int(np.ceil(M / BM)))
+    timer.end(t)
+
+    t = timer.start(tag='GPU Computation, Unsecure', category='GPU Computation, Unsecure')
+    wt_matmul_s8x_s8y_s32z(x_np_gpu, y_np_gpu, z_np_gpu, np.int32(M), np.int32(N),
+                           np.int32(K), block=block_size, grid=grid_size)
+    cuda.Context.synchronize()
+    timer.end(t)
+
+    t = timer.start(tag='Transfer z_np from GPU to CPU, Unsecure',
+                    category='Transfer z_np from GPU to CPU, Unsecure')
+    cuda.memcpy_dtoh(z_np, z_np_gpu)
+    timer.end(t)
+
+    t = timer.start(tag='numpy to torch, Unsecure', category='numpy to torch, Unsecure')
+    z = torch.from_numpy(z_np)
+    timer.end(t)
+    return z
 
 
 def SecureMatmul(x: torch.Tensor, y: torch.Tensor, B: int):

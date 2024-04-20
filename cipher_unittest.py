@@ -62,7 +62,7 @@ class NtlTest(unittest.TestCase):
 
     def test_secure_matmul(self):
         timer = st.SingletonTimer()
-        
+
         num_test = 5
         B = 8
         lower = 2**14
@@ -73,18 +73,17 @@ class NtlTest(unittest.TestCase):
             K = random.randint(lower, upper)
             N = random.randint(lower, upper)
 
-            x = torch.randint(-(2**(B-1)), 2**(B-1), (M, K), dtype=torch.int32)
-            y = torch.randint(-(2**(B-1)), 2**(B-1), (K, N), dtype=torch.int32)
+            x = torch.randint(-(2**(B-1)), 2**(B-1), (M, K), dtype=torch.int8)
+            y = torch.randint(-(2**(B-1)), 2**(B-1), (K, N), dtype=torch.int8)
 
-            x_cp = x.clone().detach().to(torch.float32).to(torch.device("cuda:0"))
-            y_cp = y.clone().detach().to(torch.float32).to(torch.device("cuda:0"))
+            x_cp = x.clone().detach()
+            y_cp = y.clone().detach()
 
             z = cip.SecureMatmul(x, y, B)
+            z_cp = cip.UnsecureMatmul(x_cp, y_cp)
 
-            z_py = torch.matmul(x_cp, y_cp)
-            z_py = z_py.to(torch.device("cpu")).to(torch.int32)
-            self.assertTrue(torch.equal(z, z_py))
-        
+            self.assertTrue(torch.equal(z, z_cp))
+
         timer.display_log()
         timer.display_summary()
 
