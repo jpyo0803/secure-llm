@@ -84,6 +84,34 @@ void shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> inp
     delete[] in;
 }
 
+template <typename T>
+void undo_shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> input,
+                              T amt, T K,
+                              py::array_t<T, py::array::c_style | py::array::forcecast> row_sum_x,
+                              py::array_t<T, py::array::c_style | py::array::forcecast> col_sum_y) {
+    if (input.ndim() != 2 || row_sum_x.ndim() != 1 || col_sum_y.ndim() != 1) {
+        throw std::runtime_error("Input and sums should be 2D and 1D arrays respectively");
+    }
+
+    auto buf = input.template mutable_unchecked<2>(); // Get buffer info for direct access
+    auto r_sum = row_sum_x.template unchecked<1>(); // Direct access to row_sum_x elements
+    auto c_sum = col_sum_y.template unchecked<1>(); // Direct access to col_sum_y elements
+    int M = buf.shape(0);
+    int N = buf.shape(1);
+
+    T** in = new T*[M];
+    for (int i = 0; i < M; ++i) {
+        in[i] = &buf(i, 0);
+    }
+
+    T* row_sums = row_sum_x.mutable_data();
+    T* col_sums = col_sum_y.mutable_data();
+
+    jpyo0803::UndoShift(in, amt, K, row_sums, col_sums, M, N);
+
+    delete[] in;
+}
+
 template<typename T>
 void bind_sum_by_row(py::module_& m, const std::string& typestr) {
     m.def(("SumByRow_" + typestr).c_str(), &sum_by_row_wrapper<T>,
@@ -105,6 +133,12 @@ void bind_shift(py::module_& m, const std::string& typestr) {
           ("Shift elements of a 2D array by a specified amount for type " + typestr).c_str());
 }
 
+template<typename T>
+void bind_undo_shift(py::module_& m, const std::string& typestr) {
+    m.def(("UndoShift_" + typestr).c_str(), &undo_shift_wrapper<T>,
+          py::arg("input"), py::arg("amt"), py::arg("K"), py::arg("row_sum_x"), py::arg("col_sum_y"),
+          ("Undo shift operation on a 2D array with control over row and column adjustments for type " + typestr).c_str());
+}
 
 PYBIND11_MODULE(cipher_cpp, m) {
   m.doc() = "Test";
@@ -122,4 +156,9 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_shift<int64_t>(m, "int64");
   bind_shift<uint32_t>(m, "uint32");
   bind_shift<uint64_t>(m, "uint64");
+  
+  bind_undo_shift<int32_t>(m, "int32");
+  bind_undo_shift<int64_t>(m, "int64");
+  bind_undo_shift<uint32_t>(m, "uint32");
+  bind_undo_shift<uint64_t>(m, "uint64");
 }
