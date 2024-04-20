@@ -50,8 +50,9 @@ void UndoShift(T** in, T amt, T K, T* row_sum_x, T* col_sum_y, int M, int N) {
   }
 }
 
+void EncryptMatrix2D(uint32_t** in, uint32_t a, uint32_t b, uint64_t m, int M, int N);
+
+void DecryptMatrix2D(uint32_t** in, uint32_t K, uint32_t a1, uint32_t b1, uint32_t a2, uint32_t b2, uint32_t a_12_inv, uint64_t m, uint32_t* row_sum_x, uint32_t* col_sum_y, int M, int N);
 }
-
-
 
 #endif
