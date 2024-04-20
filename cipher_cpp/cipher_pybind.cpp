@@ -33,11 +33,46 @@ py::array_t<T> sum_by_row_wrapper(py::array_t<T, py::array::c_style | py::array:
     return result;
 }
 
+template <typename T>
+py::array_t<T> sum_by_col_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> input) {
+    if (input.ndim() != 2) {
+        throw std::runtime_error("Input should be a 2D array");
+    }
+
+    int M = input.shape(0);
+    int N = input.shape(1);
+
+    auto result = py::array_t<T>(N);
+    std::fill_n(result.mutable_data(), N, 0); // Explicitly set to zero
+    auto r = result.mutable_data();
+
+    // Allocate int** for input
+    T** in = new T*[M];
+    for (int i = 0; i < M; ++i) {
+        in[i] = &input.mutable_at(i, 0); // Assume row-major order
+    }
+
+    // Call the original function
+    jpyo0803::SumByCol(in, result.mutable_data(), M, N);
+
+    // Clean up
+    delete[] in;
+
+    return result;
+}
+
 template<typename T>
 void bind_sum_by_row(py::module_& m, const std::string& typestr) {
     m.def(("SumByRow_" + typestr).c_str(), &sum_by_row_wrapper<T>,
           py::arg("input"),
           ("Sum elements of each row for type " + typestr).c_str());
+}
+
+template<typename T>
+void bind_sum_by_col(py::module_& m, const std::string& typestr) {
+    m.def(("SumByCol_" + typestr).c_str(), &sum_by_col_wrapper<T>,
+          py::arg("input"),
+          ("Sum elements of each col for type " + typestr).c_str());
 }
 
 PYBIND11_MODULE(cipher_cpp, m) {
@@ -46,4 +81,9 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_sum_by_row<int64_t>(m, "int64");
   bind_sum_by_row<uint32_t>(m, "uint32");
   bind_sum_by_row<uint64_t>(m, "uint64");
+  
+  bind_sum_by_col<int32_t>(m, "int32");
+  bind_sum_by_col<int64_t>(m, "int64");
+  bind_sum_by_col<uint32_t>(m, "uint32");
+  bind_sum_by_col<uint64_t>(m, "uint64");
 }

@@ -15,6 +15,17 @@ void SumByRow(T** in, T* out, int M, int N) {
   }
 }
 
+template <typename T>
+void SumByCol(T** in, T* out, int M, int N) {
+  #pragma omp parallel for
+  for (int i = 0; i < M; ++i) {
+    for (int j = 0; j < N; ++j) {
+      #pragma omp atomic
+      out[j] += in[i][j];
+    }
+  }
+}
+
 }
 
 
