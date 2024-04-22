@@ -2,6 +2,9 @@
 #define CIPHER_CPP_CIPHER_H_
 
 #include <stdint.h>
+#include <vector>
+#include <cassert>
+#include <omp.h>
 
 namespace jpyo0803 {
 
@@ -50,10 +53,39 @@ void UndoShift(T** in, T amt, T K, T* row_sum_x, T* col_sum_y, int M, int N) {
   }
 }
 
-void EncryptMatrix2D(uint32_t** in, uint32_t a, uint32_t b, uint64_t m, int M, int N);
 
-void DecryptMatrix2D(uint32_t** in, uint32_t K, uint32_t a1, uint32_t b1, uint32_t a2, uint32_t b2, uint32_t a_12_inv, uint64_t m, uint32_t* row_sum_x, uint32_t* col_sum_y, int M, int N);
 
+template<typename T>
+std::vector<std::vector<T>> Matmul(const std::vector<std::vector<T>>& X, const std::vector<std::vector<T>>& Y) {
+    assert(!X.empty() && !Y.empty());
+
+    int rowsX = X.size();
+    int colsX = X[0].size();
+    int rowsY = Y.size();
+    int colsY = Y[0].size();
+
+    assert(colsX == rowsY);
+
+    // Resultant matrix dimensions must be rowsX x colsY
+    std::vector<std::vector<T>> Z(rowsX, std::vector<T>(colsY, 0));
+
+    // Matrix multiplication
+    #pragma omp parallel for collapse(2) 
+    for (int i = 0; i < rowsX; i++) {
+        for (int j = 0; j < colsY; j++) {
+            for (int k = 0; k < colsX; k++) {
+                Z[i][j] += X[i][k] * Y[k][j];
+            }
+        }
+    }
+
+    return Z;
+}
+
+
+void EncryptMatrix2D(std::vector<std::vector<uint32_t>>& in, const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, uint64_t m, bool vertical);
+
+void DecryptMatrix2D(std::vector<std::vector<uint32_t>>& in, uint32_t K, const std::vector<uint32_t> a1, const std::vector<uint32_t> b1, const std::vector<uint32_t> a2, const std::vector<uint32_t> b2, uint64_t m, const std::vector<uint32_t> row_sum_x, const std::vector<uint32_t> col_sum_y);
 }
 
 #endif

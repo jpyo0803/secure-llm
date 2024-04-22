@@ -3,6 +3,7 @@
 #include "cipher.h"
 #include <iostream>
 #include <stdint.h>
+#include <pybind11/stl.h>
 
 namespace py = pybind11;
 
@@ -112,59 +113,6 @@ void undo_shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast
     delete[] in;
 }
 
-void encrypt_matrix_2d_wrapper(py::array_t<uint32_t, py::array::c_style | py::array::forcecast> input, uint32_t a, uint32_t b, uint64_t m) {
-    if (input.ndim() != 2) {
-        throw std::runtime_error("Input should be a 2D array");
-    }
-
-    auto buf = input.mutable_unchecked<2>(); // Get buffer info for direct access
-    int M = buf.shape(0);
-    int N = buf.shape(1);
-
-    // Allocate int** for input
-    uint32_t** in = new uint32_t*[M];
-    for (int i = 0; i < M; ++i) {
-        in[i] = &buf(i, 0);
-    }
-
-    // Call the original function
-    jpyo0803::EncryptMatrix2D(in, a, b, m, M, N);
-
-    // Clean up
-    delete[] in;
-}
-
-void decrypt_matrix_2d_wrapper(py::array_t<uint32_t, py::array::c_style | py::array::forcecast> input,
-                               uint32_t K, uint32_t a1, uint32_t b1, uint32_t a2, uint32_t b2, uint32_t a_12_inv, uint64_t m,
-                               py::array_t<uint32_t, py::array::c_style | py::array::forcecast> row_sum_x,
-                               py::array_t<uint32_t, py::array::c_style | py::array::forcecast> col_sum_y) {
-    if (input.ndim() != 2 || row_sum_x.ndim() != 1 || col_sum_y.ndim() != 1) {
-        throw std::runtime_error("Input and sums should be 2D and 1D arrays respectively");
-    }
-
-    auto buf = input.mutable_unchecked<2>();
-    auto r_sum = row_sum_x.unchecked<1>();
-    auto c_sum = col_sum_y.unchecked<1>();
-    int M = buf.shape(0);
-    int N = buf.shape(1);
-
-    // Allocate int** for input
-    uint32_t** in = new uint32_t*[M];
-    for (int i = 0; i < M; ++i) {
-        in[i] = &buf(i, 0);
-    }
-
-    // Convert row_sum_x and col_sum_y to int*
-    uint32_t* row_sums = row_sum_x.mutable_data();
-    uint32_t* col_sums = col_sum_y.mutable_data();
-
-    // Call the original function
-    jpyo0803::DecryptMatrix2D(in, K, a1, b1, a2, b2, a_12_inv, m, row_sums, col_sums, M, N);
-
-    // Clean up
-    delete[] in;
-}
-
 template<typename T>
 void bind_sum_by_row(py::module_& m, const std::string& typestr) {
     m.def(("SumByRow_" + typestr).c_str(), &sum_by_row_wrapper<T>,
@@ -193,6 +141,14 @@ void bind_undo_shift(py::module_& m, const std::string& typestr) {
           ("Undo shift operation on a 2D array with control over row and column adjustments for type " + typestr).c_str());
 }
 
+template<typename T>
+void bind_matrix_multiply(py::module_& m, const std::string& typestr) {
+    m.def(("Matmul_" + typestr).c_str(), &jpyo0803::Matmul<T>,
+          py::arg("X"), py::arg("Y"),
+          ("Multiply two matrices of type " + typestr + " and return the result").c_str());
+}
+
+
 PYBIND11_MODULE(cipher_cpp, m) {
   m.doc() = "Test";
   bind_sum_by_row<int32_t>(m, "int32");
@@ -214,7 +170,17 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_undo_shift<int64_t>(m, "int64");
   bind_undo_shift<uint32_t>(m, "uint32");
   bind_undo_shift<uint64_t>(m, "uint64");
+  
+  bind_matrix_multiply<int32_t>(m, "int32");
+  bind_matrix_multiply<int64_t>(m, "int64");
+  bind_matrix_multiply<uint32_t>(m, "uint32");
+  bind_matrix_multiply<uint64_t>(m, "uint64");
 
-  m.def("EncryptMatrix2D", &encrypt_matrix_2d_wrapper, "encrypt matrix 2d");
-  m.def("DecryptMatrix2D", &decrypt_matrix_2d_wrapper, "decrypt matrix 2d");
+  m.def("EncryptMatrix2D", &jpyo0803::EncryptMatrix2D,
+        "EncryptMatrix2D",
+     py::arg("input"), py::arg("a"), py::arg("b"), py::arg("m"), py::arg("vertical"));
+
+  m.def("DecryptMatrix2D", &jpyo0803::DecryptMatrix2D,
+        "DecryptMatrix2D",
+     py::arg("input"), py::arg("K"), py::arg("a1"), py::arg("b1"), py::arg("a2"), py::arg("b2"), py::arg("m"), py::arg("row_sum_x"), py::arg("col_sum_y"));
 }

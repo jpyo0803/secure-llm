@@ -65,8 +65,8 @@ class NtlTest(unittest.TestCase):
 
         num_test = 5
         B = 8
-        lower = 2**14
-        upper = 2**14
+        lower = 2**10
+        upper = 2**10
 
         for _ in range(num_test):
             M = random.randint(lower, upper)
@@ -79,7 +79,7 @@ class NtlTest(unittest.TestCase):
             x_cp = x.clone().detach()
             y_cp = y.clone().detach()
 
-            z = cip.SecureMatmul(x, y, B)
+            z = cip.SecureMatmul(x, y)
             z_cp = cip.UnsecureMatmul(x_cp, y_cp)
 
             self.assertTrue(torch.equal(z, z_cp))
