@@ -206,4 +206,9 @@ PYBIND11_MODULE(cipher_cpp, m) {
   m.def("DecryptMatrix2D", &jpyo0803::DecryptMatrix2D,
         "DecryptMatrix2D",
      py::arg("input"), py::arg("K"), py::arg("a1"), py::arg("b1"), py::arg("a2"), py::arg("b2"), py::arg("m"), py::arg("row_sum_x"), py::arg("col_sum_y"));
+
+  m.def("GenerateKeySetA", &jpyo0803::GenerateKeySetA,
+        "GenerateKeySetA",
+     py::arg("mod"), py::arg("N"));
+
 }

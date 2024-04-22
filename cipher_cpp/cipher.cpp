@@ -38,6 +38,20 @@ uint64_t FindKeyInvModNonPrime(uint64_t key, uint64_t mod) {
 
 namespace jpyo0803 {
 
+std::vector<uint32_t> GenerateKeySetA(uint64_t mod, int n) {
+  std::vector<uint32_t> key_set(n);
+  for (int i = 0; i < n; ++i) {
+    while (true) {
+      auto x = GenerateRandomNumber<uint64_t>(1, mod - 1);
+      if (std::gcd(x, mod) == 1) {
+        key_set[i] = static_cast<uint32_t>(x);
+        break;
+      }
+    }
+  }
+  return key_set;
+}
+
 void EncryptMatrix2D(std::vector<std::vector<uint32_t>>& in, const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, uint64_t m, bool vertical = false) {
   int M = in.size();
   int N = in[0].size();

@@ -6,6 +6,7 @@
 #include <cassert>
 #include <omp.h>
 #include <random>
+#include <numeric>
 
 namespace jpyo0803 {
 
@@ -103,6 +104,8 @@ std::vector<std::vector<T>> RandInt2D(T low, T high, int M, int N) {
   }
   return ret;
 }
+
+std::vector<uint32_t> GenerateKeySetA(uint64_t mod, int n);
 
 void EncryptMatrix2D(std::vector<std::vector<uint32_t>>& in, const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, uint64_t m, bool vertical);
 
