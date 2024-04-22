@@ -148,6 +148,19 @@ void bind_matrix_multiply(py::module_& m, const std::string& typestr) {
           ("Multiply two matrices of type " + typestr + " and return the result").c_str());
 }
 
+template <typename T>
+void bind_generate_random_number(py::module_& m, const std::string& typestr) {
+    m.def(("GenerateRandomNumber_" + typestr).c_str(), &jpyo0803::GenerateRandomNumber<T>,
+          py::arg("low"), py::arg("high"),
+          ("Generate a random number within a specified range for type " + typestr).c_str());
+}
+
+template <typename T>
+void bind_randint_2d(py::module_& m, const std::string& typestr) {
+    m.def(("RandInt2D_" + typestr).c_str(), &jpyo0803::RandInt2D<T>,
+          py::arg("low"), py::arg("high"),py::arg("M"), py::arg("N"),
+          ("Generate 2D random number array within a specified range for type " + typestr).c_str());
+}
 
 PYBIND11_MODULE(cipher_cpp, m) {
   m.doc() = "Test";
@@ -175,6 +188,16 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_matrix_multiply<int64_t>(m, "int64");
   bind_matrix_multiply<uint32_t>(m, "uint32");
   bind_matrix_multiply<uint64_t>(m, "uint64");
+
+  bind_generate_random_number<int32_t>(m, "int32");
+  bind_generate_random_number<int64_t>(m, "int64");
+  bind_generate_random_number<uint32_t>(m, "uint32");
+  bind_generate_random_number<uint64_t>(m, "uint64");
+
+  bind_randint_2d<int32_t>(m, "int32");
+  bind_randint_2d<int64_t>(m, "int64");
+  bind_randint_2d<uint32_t>(m, "uint32");
+  bind_randint_2d<uint64_t>(m, "uint64");
 
   m.def("EncryptMatrix2D", &jpyo0803::EncryptMatrix2D,
         "EncryptMatrix2D",

@@ -5,6 +5,7 @@
 #include <vector>
 #include <cassert>
 #include <omp.h>
+#include <random>
 
 namespace jpyo0803 {
 
@@ -82,6 +83,26 @@ std::vector<std::vector<T>> Matmul(const std::vector<std::vector<T>>& X, const s
     return Z;
 }
 
+template <typename T>
+T GenerateRandomNumber(T low, T high) {
+  static thread_local std::random_device rd;  // Non-deterministic random device
+  static thread_local std::mt19937 rng(rd()); // Random-number engine used (Mersenne-Twister in this case)
+  std::uniform_int_distribution<T> uni(low, high);
+  return uni(rng);
+}
+
+template <typename T>
+std::vector<std::vector<T>> RandInt2D(T low, T high, int M, int N) {
+  std::vector<std::vector<T>> ret(M, std::vector<T>(N));
+
+  #pragma omp parallel for
+  for (int i = 0; i < M; ++i) {
+    for (int j = 0; j < N; ++j) {
+      ret[i][j] = GenerateRandomNumber<T>(low, high);
+    }
+  }
+  return ret;
+}
 
 void EncryptMatrix2D(std::vector<std::vector<uint32_t>>& in, const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, uint64_t m, bool vertical);
 
