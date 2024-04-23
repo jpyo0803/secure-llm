@@ -82,6 +82,121 @@ def UnsecureMatmul(x: np.ndarray, y: np.ndarray):
     return z
 
 
+def BatchSecureMatmulFull(x: np.ndarray, y: np.ndarray):
+    assert x.ndim == 3 and y.ndim == 3, "Input tensors must be 3D (batched matrices)"
+    assert x.shape[0] == y.shape[0], "Number of batches must be equal"
+
+    batch_size, M, K = x.shape
+    _, K, N = y.shape
+
+    results = []
+
+    for i in range(batch_size):
+        results.append(SecureMatmulFull(x[i], y[i]))
+
+    z = np.stack(results)
+    return z
+
+
+a_x = None
+a_y = None
+b_x = None
+b_y = None
+b_factor = None
+key_inv = None
+
+
+def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
+    assert x.ndim == 2 and y.ndim == 2
+    assert x.shape[1] == y.shape[0]
+    assert x.dtype == np.int8 and y.dtype == np.int8
+    B = 8
+
+    M, K = x.shape
+    _, N = y.shape
+
+    # 8 bit -> 32 bit
+    x = x.astype(np.int32)
+    y = y.astype(np.int32)
+
+    mod = 2**32
+
+    # Generate metadata for shifting
+    shift_row_sum_x = np.sum(x, axis=1, dtype=np.int32)
+    shift_col_sum_y = np.sum(y, axis=0, dtype=np.int32)
+
+    amt = 2**(B-1)
+
+    # Shift
+    x += amt
+    y += amt
+
+    # int32 -> uint32
+    x = x.astype(np.uint32)
+    y = y.astype(np.uint32)
+
+    # Generate metadata for decryption
+
+    # Do precomputation only once
+    global a_x, a_y, b_x, b_y, b_factor, key_inv
+    if a_x is None:
+        a_x = np.asanyarray(cip_cpp.GenerateKeySetA(mod, M), dtype=np.uint32)
+        a_y = np.asanyarray(cip_cpp.GenerateKeySetA(mod, N), dtype=np.uint32)
+        b_x = np.random.randint(0, mod - 1, (K), dtype=np.uint32)
+        b_y = np.random.randint(0, mod - 1, (K), dtype=np.uint32)
+
+        b_factor = np.dot(b_x, b_y)
+
+        key_inv = np.asanyarray(
+            cip_cpp.FindKeyInvModFull(a_x, a_y), dtype=np.uint32)
+
+    dec_row_sum_x = np.empty((M), dtype=np.uint32)
+    dec_col_sum_y = np.empty((N), dtype=np.uint32)
+    for i in range(M):
+        dec_row_sum_x[i] = np.dot(b_y, x[i]) * a_x[i]
+    for i in range(N):
+        dec_col_sum_y[i] = np.dot(b_x, y[:, i]) * a_y[i]
+
+    cip_cpp.EncryptMatrix2DFull(x, a_x, b_x, False)
+    cip_cpp.EncryptMatrix2DFull(y, a_y, b_y, True)
+
+    z = np.zeros((M, N), dtype=np.uint32)
+
+    x_gpu = cuda.mem_alloc(x.nbytes)
+    y_gpu = cuda.mem_alloc(y.nbytes)
+    z_gpu = cuda.mem_alloc(z.nbytes)
+
+    cuda.memcpy_htod(x_gpu, x)
+    cuda.memcpy_htod(y_gpu, y)
+
+    NUM_THREADS = 128
+    BN = 128
+    BM = 128
+
+    block_size = (NUM_THREADS, 1, 1)
+    grid_size = (
+        int(np.ceil(N / BN)), int(np.ceil(M / BM)))
+
+    wt_matmul(x_gpu, y_gpu, z_gpu, np.int32(M), np.int32(N),
+              np.int32(K), block=block_size, grid=grid_size)
+    cuda.Context.synchronize()
+
+    cuda.memcpy_dtoh(z, z_gpu)
+
+    cip_cpp.DecryptMatrix2DFull(
+        z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
+
+    z = z.astype(np.int32)
+
+    cip_cpp.UndoShift_int32(z, amt, K, shift_row_sum_x, shift_col_sum_y)
+
+    x_gpu.free()
+    y_gpu.free()
+    z_gpu.free()
+
+    return z
+
+
 def SecureMatmul(x: torch.Tensor, y: torch.Tensor):
     assert x.dtype == torch.int8 and y.dtype == torch.int8
     if x.dtype == torch.int8:
