@@ -3,10 +3,15 @@ import build.cipher_cpp as cip_cpp
 import numpy as np
 import random
 import singleton_timer as st
-import ntl
 import torch
 import cipher as cip
+import cupy as cp
 
+
+a = cp.random.randint(0, 10, (5, 5), dtype=cp.uint32)
+b = cp.random.randint(0, 10, (5, 5), dtype=cp.uint32)
+c = cp.matmul(a, b)
+c = cp.asnumpy(c)
 
 class BmmTest(unittest.TestCase):
     # def test_bmm_unsecure(self):
@@ -57,18 +62,19 @@ class BmmTest(unittest.TestCase):
     def test_bmm_secure_full(self):
         timer = st.SingletonTimer()
 
-        num_test = 10
+        num_test = 20
         pass_cnt = 0
         B = 8
 
         batch_size = 10
-        lower = 2**5
-        upper = 2**5
 
         for i in range(num_test):
-            M = random.randint(lower, upper)
-            K = random.randint(lower, upper)
-            N = random.randint(lower, upper)
+            print("Test #", i + 1)
+            M = random.randint(1, 2**10)
+            # M = random.randint(1, 1)
+            K = random.randint(1, 2**10)
+            N = random.randint(1, 2**10)
+            print(M, K, N)
 
             x = np.random.randint(-(2**(B-1)), 2**(B-1),
                               (batch_size, M, K), dtype=np.int8)
@@ -79,18 +85,17 @@ class BmmTest(unittest.TestCase):
             y2 = torch.tensor(y.copy()).to(torch.float32)
             # Assuming cip.UnsecureMatmul returns int32; adjust if different
 
-            t = timer.start(tag='test_bmm_secure_full',
-                            category='test_bmm_secure_full')
+   
             z = cip.BatchSecureMatmulFull(x, y)
-            timer.end(t)
             
-            t = timer.start(tag='test_bmm_torch',
-                            category='test_bmm_torch')
+            z2 = torch.bmm(x2, y2)
+            # t = timer.start(tag='test_bmm_torch',
+            #                 category='test_bmm_torch')
             x2 = x2.to(torch.device("cuda:0"))
             y2 = y2.to(torch.device("cuda:0"))
             z2 = torch.bmm(x2, y2)
             z2 = z2.to(torch.device("cpu")).to(torch.int32)
-            timer.end(t)
+            # timer.end(t)
             z = torch.tensor(z)
             self.assertTrue(torch.equal(z, z2))
             pass_cnt += 1
