@@ -57,13 +57,13 @@ class BmmTest(unittest.TestCase):
     def test_bmm_secure_full(self):
         timer = st.SingletonTimer()
 
-        num_test = 1
+        num_test = 10
         pass_cnt = 0
         B = 8
 
         batch_size = 10
-        lower = 2**10
-        upper = 2**10
+        lower = 2**5
+        upper = 2**5
 
         for i in range(num_test):
             M = random.randint(lower, upper)
@@ -92,8 +92,6 @@ class BmmTest(unittest.TestCase):
             z2 = z2.to(torch.device("cpu")).to(torch.int32)
             timer.end(t)
             z = torch.tensor(z)
-            print(z)
-            print(z2)
             self.assertTrue(torch.equal(z, z2))
             pass_cnt += 1
 

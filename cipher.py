@@ -9,7 +9,7 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 import math
 import ntl
-
+import cupy as cp
 wt_matmul = None
 wt_matmul_s8x_s8y_s32z = None
 
@@ -160,28 +160,11 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     cip_cpp.EncryptMatrix2DFull(x, a_x, b_x, False)
     cip_cpp.EncryptMatrix2DFull(y, a_y, b_y, True)
 
-    z = np.zeros((M, N), dtype=np.uint32)
+    x_gpu = cp.asarray(x)
+    y_gpu = cp.asarray(y)
 
-    x_gpu = cuda.mem_alloc(x.nbytes)
-    y_gpu = cuda.mem_alloc(y.nbytes)
-    z_gpu = cuda.mem_alloc(z.nbytes)
-
-    cuda.memcpy_htod(x_gpu, x)
-    cuda.memcpy_htod(y_gpu, y)
-
-    NUM_THREADS = 128
-    BN = 128
-    BM = 128
-
-    block_size = (NUM_THREADS, 1, 1)
-    grid_size = (
-        int(np.ceil(N / BN)), int(np.ceil(M / BM)))
-
-    wt_matmul(x_gpu, y_gpu, z_gpu, np.int32(M), np.int32(N),
-              np.int32(K), block=block_size, grid=grid_size)
-    cuda.Context.synchronize()
-
-    cuda.memcpy_dtoh(z, z_gpu)
+    z_gpu = cp.matmul(x_gpu, y_gpu)
+    z = cp.asnumpy(z_gpu)
 
     cip_cpp.DecryptMatrix2DFull(
         z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
@@ -189,10 +172,6 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     z = z.astype(np.int32)
 
     cip_cpp.UndoShift_int32(z, amt, K, shift_row_sum_x, shift_col_sum_y)
-
-    x_gpu.free()
-    y_gpu.free()
-    z_gpu.free()
 
     return z
 
