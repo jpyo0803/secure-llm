@@ -110,34 +110,45 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     assert x.ndim == 2 and y.ndim == 2
     assert x.shape[1] == y.shape[0]
     assert x.dtype == np.int8 and y.dtype == np.int8
+    timer = st.SingletonTimer()
+
     B = 8
 
     M, K = x.shape
     _, N = y.shape
 
     # 8 bit -> 32 bit
+    t = timer.start(tag='int8 to int32', category='int8 to int32')
     x = x.astype(np.int32)
     y = y.astype(np.int32)
+    timer.end(t)
 
     mod = 2**32
 
+    t = timer.start(tag='gen. shift metadata', category='gen. shift metadata')
     # Generate metadata for shifting
     shift_row_sum_x = np.sum(x, axis=1, dtype=np.int32)
     shift_col_sum_y = np.sum(y, axis=0, dtype=np.int32)
+    timer.end(t)
 
     amt = 2**(B-1)
 
+    t = timer.start(tag='shift inputs', category='shift inputs')
     # Shift
     x += amt
     y += amt
+    timer.end(t)
 
     # int32 -> uint32
+    t = timer.start(tag='int32 to uint32', category='int32 to uint32')
     x = x.astype(np.uint32)
     y = y.astype(np.uint32)
+    timer.end(t)
 
     # Generate metadata for decryption
 
     # Do precomputation only once
+    t = timer.start(tag='precomputation', category='precomputation')
     global a_x, a_y, b_x, b_y, b_factor, key_inv
     if a_x is None:
         a_x = np.asanyarray(cip_cpp.GenerateKeySetA(mod, M), dtype=np.uint32)
@@ -149,29 +160,47 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
         key_inv = np.asanyarray(
             cip_cpp.FindKeyInvModFull(a_x, a_y), dtype=np.uint32)
+    timer.end(t)
 
+    t = timer.start(tag='gen. decryption metadata', category='gen. decryption metadata')
     dec_row_sum_x = np.empty((M), dtype=np.uint32)
     dec_col_sum_y = np.empty((N), dtype=np.uint32)
     for i in range(M):
         dec_row_sum_x[i] = np.dot(b_y, x[i]) * a_x[i]
     for i in range(N):
         dec_col_sum_y[i] = np.dot(b_x, y[:, i]) * a_y[i]
+    timer.end(t)
 
+    t = timer.start(tag='encryption', category='encryption')
     cip_cpp.EncryptMatrix2DFull(x, a_x, b_x, False)
     cip_cpp.EncryptMatrix2DFull(y, a_y, b_y, True)
+    timer.end(t)
 
+    t = timer.start(tag='host to device', category='host to device')
     x_gpu = cp.asarray(x)
     y_gpu = cp.asarray(y)
+    timer.end(t)
 
     z_gpu = cp.matmul(x_gpu, y_gpu)
+    t = timer.start(tag='gpu computation', category='gpu computation')
+    z_gpu = cp.matmul(x_gpu, y_gpu)
+    timer.end(t)
+    t = timer.start(tag='device to host', category='device to host')
     z = cp.asnumpy(z_gpu)
+    timer.end(t)
 
+    t = timer.start(tag='decryption', category='decryption')
     cip_cpp.DecryptMatrix2DFull(
         z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
+    timer.end(t)
 
+    t = timer.start(tag='uint32 to int32', category='uint32 to int32')
     z = z.astype(np.int32)
+    timer.end(t)
 
+    t = timer.start(tag='undo shift', category='undo shift')
     cip_cpp.UndoShift_int32(z, amt, K, shift_row_sum_x, shift_col_sum_y)
+    timer.end(t)
 
     return z
 
