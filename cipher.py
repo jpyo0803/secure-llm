@@ -82,6 +82,43 @@ def UnsecureMatmul(x: np.ndarray, y: np.ndarray):
     return z
 
 
+def decrypt_matrix_2d_full(in_matrix, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor):
+    adjusted_matrix = in_matrix - \
+        (dec_row_sum_x[:, np.newaxis] + dec_col_sum_y)
+    adjusted_matrix -= b_factor
+    adjusted_matrix *= key_inv
+    return adjusted_matrix
+
+
+def compute_decryption_sums(x, y, b_x, b_y, a_x, a_y):
+    M, N = x.shape[0], y.shape[1]
+
+    # Use np.einsum to compute the dot products more efficiently
+    # This computes the dot product of b_y with each row of x, then multiplies by each element in a_x
+    dec_row_sum_x = np.einsum('i,ij,j->i', b_y, x, a_x, optimize=True)
+
+    # This computes the dot product of b_x with each column of y, then multiplies by each element in a_y
+    dec_col_sum_y = np.einsum('j,ij,i->j', b_x, y.T, a_y, optimize=True)
+
+    return dec_row_sum_x, dec_col_sum_y
+
+
+def encrypt_matrix_2d_full(in_matrix, a, b, vertical):
+    M, N = in_matrix.shape
+
+    if vertical:
+        a = a.reshape(1, N)
+        b = b.reshape(M, 1)
+    else:
+        a = a.reshape(M, 1)
+        b = b.reshape(1, N)
+
+    in_matrix *= a
+    in_matrix += b
+
+    return in_matrix
+
+
 def BatchSecureMatmulFull(x: np.ndarray, y: np.ndarray):
     assert x.ndim == 3 and y.ndim == 3, "Input tensors must be 3D (batched matrices)"
     assert x.shape[0] == y.shape[0], "Number of batches must be equal"
@@ -162,18 +199,19 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
             cip_cpp.FindKeyInvModFull(a_x, a_y), dtype=np.uint32)
     timer.end(t)
 
-    t = timer.start(tag='gen. decryption metadata', category='gen. decryption metadata')
-    dec_row_sum_x = np.empty((M), dtype=np.uint32)
-    dec_col_sum_y = np.empty((N), dtype=np.uint32)
-    for i in range(M):
-        dec_row_sum_x[i] = np.dot(b_y, x[i]) * a_x[i]
-    for i in range(N):
-        dec_col_sum_y[i] = np.dot(b_x, y[:, i]) * a_y[i]
+    t = timer.start(tag='gen. decryption metadata',
+                    category='gen. decryption metadata')
+
+    dec_row_sum_x, dec_col_sum_y = compute_decryption_sums(
+        x, y, b_x, b_y, a_x, a_y)
+
     timer.end(t)
 
     t = timer.start(tag='encryption', category='encryption')
+
     cip_cpp.EncryptMatrix2DFull(x, a_x, b_x, False)
     cip_cpp.EncryptMatrix2DFull(y, a_y, b_y, True)
+
     timer.end(t)
 
     t = timer.start(tag='host to device', category='host to device')
@@ -190,8 +228,7 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     timer.end(t)
 
     t = timer.start(tag='decryption', category='decryption')
-    cip_cpp.DecryptMatrix2DFull(
-        z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
+    decrypt_matrix_2d_full(z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
     timer.end(t)
 
     t = timer.start(tag='uint32 to int32', category='uint32 to int32')
