@@ -84,8 +84,8 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
     # 8 bit -> 32 bit
     t = timer.start(tag='int8 to int32', category='int8 to int32')
-    x = x.astype(np.int32)
-    y = y.astype(np.int32)
+    x = x.astype(np.int32, copy=False)
+    y = y.astype(np.int32, copy=False)
     timer.end(t)
 
     mod = 2**32
@@ -106,8 +106,8 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
     # int32 -> uint32
     t = timer.start(tag='int32 to uint32', category='int32 to uint32')
-    x = x.astype(np.uint32)
-    y = y.astype(np.uint32)
+    x = x.astype(np.uint32, copy=False)
+    y = y.astype(np.uint32, copy=False)
     timer.end(t)
 
     # Generate metadata for decryption
@@ -120,9 +120,7 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     a_y = np.asanyarray(cip_cpp.GenerateKeySetA(mod, N), dtype=np.uint32)
     b_x = np.random.randint(0, mod - 1, (K), dtype=np.uint32)
     b_y = np.random.randint(0, mod - 1, (K), dtype=np.uint32)
-
     b_factor = np.dot(b_x, b_y)
-
     key_inv = np.asanyarray(
         cip_cpp.FindKeyInvModFull(a_x, a_y), dtype=np.uint32)
     # timer.end(t)
@@ -161,7 +159,7 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     timer.end(t)
 
     t = timer.start(tag='uint32 to int32', category='uint32 to int32')
-    z = z.astype(np.int32)
+    z = z.astype(np.int32, copy=False)
     timer.end(t)
 
     t = timer.start(tag='undo shift', category='undo shift')
