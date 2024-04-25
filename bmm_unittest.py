@@ -9,8 +9,8 @@ import cupy as cp
 from torch_int._CUDA import bmm_s8t_s8n_s32t
 import nvtx
 
-a = cp.random.randint(0, 10, (5, 5), dtype=cp.uint32)
-b = cp.random.randint(0, 10, (5, 5), dtype=cp.uint32)
+a = cp.random.randint(0, 10, (5, 5, 5), dtype=cp.uint32)
+b = cp.random.randint(0, 10, (5, 5, 5), dtype=cp.uint32)
 c = cp.matmul(a, b)
 c = cp.asnumpy(c)
 
@@ -70,11 +70,11 @@ class BmmTest(unittest.TestCase):
     def test_bmm_secure_full(self):
         timer = st.SingletonTimer()
 
-        num_test = 1
+        num_test = 10
         pass_cnt = 0
         B = 8
 
-        batch_size = 1
+        batch_size = 10
 
         for i in range(num_test):
             print("Test #", i + 1)
@@ -90,7 +90,8 @@ class BmmTest(unittest.TestCase):
             y = b.numpy()
             y = np.moveaxis(y, -1, -2)
 
-            z = cip.BatchSecureMatmulFull(x, y)
+            z = cip.SecureMatmulFull(x, y)
+
 
             t = timer.start(tag='test_bmm_torch htod',
                             category='test_bmm_torch htod')
