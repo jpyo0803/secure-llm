@@ -2,7 +2,7 @@ import build.cipher_cpp as cip_cpp
 import singleton_timer as st
 import numpy as np
 import cupy as cp
-
+import nvtx
 
 def decrypt_matrix_2d_full(in_matrix, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor):
     adjusted_matrix = in_matrix - \
@@ -141,16 +141,22 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     timer.end(t)
 
     t = timer.start(tag='host to device', category='host to device')
+    nvtx.push_range("host to device")
     x_gpu = cp.asarray(x)
     y_gpu = cp.asarray(y)
+    nvtx.pop_range()
     timer.end(t)
 
     z_gpu = cp.matmul(x_gpu, y_gpu)
     t = timer.start(tag='gpu computation', category='gpu computation')
+    nvtx.push_range("gpu computation")
     z_gpu = cp.matmul(x_gpu, y_gpu)
+    nvtx.pop_range()
     timer.end(t)
     t = timer.start(tag='device to host', category='device to host')
+    nvtx.push_range("device to host")
     z = cp.asnumpy(z_gpu)
+    nvtx.pop_range()
     timer.end(t)
 
     t = timer.start(tag='decryption', category='decryption')
