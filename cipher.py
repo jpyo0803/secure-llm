@@ -92,7 +92,7 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     batch_size, M, K = x.shape
     _, _, N = y.shape
 
-    # 8 bit -> 32 bit
+    # 8 bit -> 32 bit, here must be copied
     t = timer.start(tag='int8 to int32', category='int8 to int32')
     x = x.astype(np.int32, copy=False)
     y = y.astype(np.int32, copy=False)
@@ -116,8 +116,8 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
     # int32 -> uint32
     t = timer.start(tag='int32 to uint32', category='int32 to uint32')
-    x = x.astype(np.uint32, copy=False)
-    y = y.astype(np.uint32, copy=False)
+    x = x.view(np.uint32)
+    y = y.view(np.uint32)
     timer.end(t)
 
     # Generate metadata for decryption
@@ -142,15 +142,6 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
             key_inv[i] = np.asanyarray(
                 cip_cpp.FindKeyInvModFull(a_x[i], a_y[i]), dtype=np.uint32)
     # timer.end(t)
-    # b_factor correct
-  #  print("x: ", x)
-  #  print("y: ", y)
-  #  print("ax : ", a_x)
-  #  print("ay : ", a_y)
-   # print("bx : ", b_x)
-  #  print("by : ", b_y)
-  #  print("b factor : ", b_factor)
-   # print("key inv : ", key_inv)
 
     t = timer.start(tag='gen. decryption metadata',
                     category='gen. decryption metadata')
@@ -186,19 +177,14 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     timer.end(t)
 
     t = timer.start(tag='decryption', category='decryption')
-  #  print("z: ", z)
-  #  print("key inv: ", key_inv)
-   # print("dec row sum x: ", dec_row_sum_x)
-  #  print("dec col sum y: ", dec_col_sum_y)
-   # print("b_factor: ", b_factor)
+
     z = decrypt_matrix_2d_full(
         z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
-  #  print("dec z: ", z)
-  #  assert False
+
     timer.end(t)
 
     t = timer.start(tag='uint32 to int32', category='uint32 to int32')
-    z = z.astype(np.int32, copy=False)
+    z = z.view(np.int32)
     timer.end(t)
 
     t = timer.start(tag='undo shift', category='undo shift')
@@ -206,7 +192,6 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
     z = undo_shift(z, amt, K, shift_row_sum_x, shift_col_sum_y)
 
-  #  print("unddid:", z)
     timer.end(t)
 
     return z
