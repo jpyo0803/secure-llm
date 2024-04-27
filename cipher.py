@@ -3,6 +3,7 @@ import singleton_timer as st
 import numpy as np
 import cupy as cp
 import nvtx
+import concurrent.futures
 
 
 def decrypt_matrix_2d_full(in_matrix, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor):
@@ -13,7 +14,7 @@ def decrypt_matrix_2d_full(in_matrix, key_inv, dec_row_sum_x, dec_col_sum_y, b_f
     return adjusted_matrix
 
 
-def compute_decryption_sums(x, y, b_x, b_y, a_x, a_y):
+def compute_decryption_metadata(x, y, b_x, b_y, a_x, a_y):
     # print(b_y.shape)
     # print(x.shape)
     # print(a_x.shape)
@@ -155,7 +156,7 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     t = timer.start(tag='gen. decryption metadata',
                     category='gen. decryption metadata')
 
-    dec_row_sum_x, dec_col_sum_y = compute_decryption_sums(
+    dec_row_sum_x, dec_col_sum_y = compute_decryption_metadata(
         x, y, b_x, b_y, a_x, a_y)
 
     timer.end(t)
@@ -167,23 +168,23 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
     timer.end(t)
 
+    nvtx.push_range("host to device")
     t = timer.start(tag='host to device', category='host to device')
-    # nvtx.push_range("host to device")
     x_gpu = cp.asarray(x)
     y_gpu = cp.asarray(y)
-    # nvtx.pop_range()
     timer.end(t)
+    nvtx.pop_range()
 
+    nvtx.push_range("gpu computation")
     t = timer.start(tag='gpu computation', category='gpu computation')
-    # nvtx.push_range("gpu computation")
     z_gpu = cp.matmul(x_gpu, y_gpu)
-    # nvtx.pop_range()
     timer.end(t)
+    nvtx.pop_range()
+    nvtx.push_range("device to host")
     t = timer.start(tag='device to host', category='device to host')
-    # nvtx.push_range("device to host")
     z = cp.asnumpy(z_gpu)
-    # nvtx.pop_range()
     timer.end(t)
+    nvtx.pop_range()
 
     t = timer.start(tag='decryption', category='decryption')
 
