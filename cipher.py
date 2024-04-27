@@ -50,9 +50,16 @@ def encrypt_matrix_2d_full(in_matrix, a, b, vertical):
     return result
 
 
-def undo_shift(in_matrix, amt, K, row_sum_x, col_sum_y):
-    in_matrix -= amt * (row_sum_x[:, :, np.newaxis] +
-                        col_sum_y[:, np.newaxis, :] + K * amt)
+# def undo_shift(in_matrix, amt, K, row_sum_x, col_sum_y):
+#     in_matrix -= amt * (row_sum_x[:, :, np.newaxis] +
+#                         col_sum_y[:, np.newaxis, :] + K * amt)
+#     return in_matrix
+
+
+def undo_shift_optimized(in_matrix, amt, K, row_sum_x, col_sum_y):
+    adjustment = row_sum_x[:, :, np.newaxis] * amt + K * amt**2
+    in_matrix -= adjustment
+    in_matrix -= col_sum_y[:, np.newaxis, :] * amt
     return in_matrix
 
 
@@ -100,13 +107,15 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
     mod = 2**32
 
+    amt = 2**(B-1)
     t = timer.start(tag='gen. shift metadata', category='gen. shift metadata')
     # Generate metadata for shifting
     shift_row_sum_x = np.sum(x, axis=2, dtype=np.int32)
     shift_col_sum_y = np.sum(y, axis=1, dtype=np.int32)
-    timer.end(t)
 
-    amt = 2**(B-1)
+    undo_shift_factor = shift_row_sum_x[:, :, np.newaxis] * amt + \
+        K * amt**2 + shift_col_sum_y[:, np.newaxis, :] * amt
+    timer.end(t)
 
     t = timer.start(tag='shift inputs', category='shift inputs')
     # Shift
@@ -159,21 +168,21 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     timer.end(t)
 
     t = timer.start(tag='host to device', category='host to device')
-    nvtx.push_range("host to device")
+    # nvtx.push_range("host to device")
     x_gpu = cp.asarray(x)
     y_gpu = cp.asarray(y)
-    nvtx.pop_range()
+    # nvtx.pop_range()
     timer.end(t)
 
     t = timer.start(tag='gpu computation', category='gpu computation')
-    nvtx.push_range("gpu computation")
+    # nvtx.push_range("gpu computation")
     z_gpu = cp.matmul(x_gpu, y_gpu)
-    nvtx.pop_range()
+    # nvtx.pop_range()
     timer.end(t)
     t = timer.start(tag='device to host', category='device to host')
-    nvtx.push_range("device to host")
+    # nvtx.push_range("device to host")
     z = cp.asnumpy(z_gpu)
-    nvtx.pop_range()
+    # nvtx.pop_range()
     timer.end(t)
 
     t = timer.start(tag='decryption', category='decryption')
@@ -188,10 +197,7 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     timer.end(t)
 
     t = timer.start(tag='undo shift', category='undo shift')
-    # cip_cpp.UndoShift_int32(z, amt, K, shift_row_sum_x, shift_col_sum_y)
-
-    z = undo_shift(z, amt, K, shift_row_sum_x, shift_col_sum_y)
-
+    z -= undo_shift_factor
     timer.end(t)
 
     return z
