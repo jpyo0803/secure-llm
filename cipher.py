@@ -51,7 +51,8 @@ def encrypt_matrix_2d_full(in_matrix, a, b, vertical):
 
 
 def undo_shift(in_matrix, amt, K, row_sum_x, col_sum_y):
-    in_matrix -= amt * (row_sum_x[:, :, np.newaxis] + col_sum_y[:, np.newaxis, :] + K * amt)
+    in_matrix -= amt * (row_sum_x[:, :, np.newaxis] +
+                        col_sum_y[:, np.newaxis, :] + K * amt)
     return in_matrix
 
 
@@ -71,12 +72,12 @@ def BatchSecureMatmulFull(x: np.ndarray, y: np.ndarray):
     return z
 
 
-# a_x = None
-# a_y = None
-# b_x = None
-# b_y = None
-# b_factor = None
-# key_inv = None
+a_x = None
+a_y = None
+b_x = None
+b_y = None
+b_factor = None
+key_inv = None
 
 
 def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
@@ -123,22 +124,23 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
 
     # Do precomputation only once
     # t = timer.start(tag='precomputation', category='precomputation')
-    # global a_x, a_y, b_x, b_y, b_factor, key_inv
-    # if a_x is None:
-
-    a_x = np.empty((batch_size, M), dtype=np.uint32)
-    a_y = np.empty((batch_size, N), dtype=np.uint32)
-    b_x = np.random.randint(0, mod - 1, size=(batch_size, K), dtype=np.uint32)
-    b_y = np.random.randint(0, mod - 1, size=(batch_size, K), dtype=np.uint32)
-    b_factor = np.einsum('ij,ij->i', b_x, b_y)
-    key_inv = np.empty((batch_size, M, N), dtype=np.uint32)
-    for i in range(batch_size):
-        a_x[i] = np.asanyarray(
-            cip_cpp.GenerateKeySetA(mod, M), dtype=np.uint32)
-        a_y[i] = np.asanyarray(
-            cip_cpp.GenerateKeySetA(mod, N), dtype=np.uint32)
-        key_inv[i] = np.asanyarray(
-            cip_cpp.FindKeyInvModFull(a_x[i], a_y[i]), dtype=np.uint32)
+    global a_x, a_y, b_x, b_y, b_factor, key_inv
+    if a_x is None:
+        a_x = np.empty((batch_size, M), dtype=np.uint32)
+        a_y = np.empty((batch_size, N), dtype=np.uint32)
+        b_x = np.random.randint(
+            0, mod - 1, size=(batch_size, K), dtype=np.uint32)
+        b_y = np.random.randint(
+            0, mod - 1, size=(batch_size, K), dtype=np.uint32)
+        b_factor = np.einsum('ij,ij->i', b_x, b_y)
+        key_inv = np.empty((batch_size, M, N), dtype=np.uint32)
+        for i in range(batch_size):
+            a_x[i] = np.asanyarray(
+                cip_cpp.GenerateKeySetA(mod, M), dtype=np.uint32)
+            a_y[i] = np.asanyarray(
+                cip_cpp.GenerateKeySetA(mod, N), dtype=np.uint32)
+            key_inv[i] = np.asanyarray(
+                cip_cpp.FindKeyInvModFull(a_x[i], a_y[i]), dtype=np.uint32)
     # timer.end(t)
     # b_factor correct
   #  print("x: ", x)

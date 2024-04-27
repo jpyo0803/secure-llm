@@ -1,33 +1,33 @@
-import os
-from setuptools import setup, find_packages
-import torch
-from torch.utils import cpp_extension
+from setuptools import setup, Extension
+from pybind11.setup_helpers import Pybind11Extension, build_ext
 
-compute_capability = torch.cuda.get_device_capability()
-cuda_arch = compute_capability[0] * 100 + compute_capability[1] * 10
+ext_modules = [
+    Pybind11Extension(
+        "cipher_cpp",                               # Name of the module
+        # Correctly list source files
+        ["cipher_cpp/cipher_pybind.cpp", "cipher_cpp/cipher.cpp"],
+        # Update include directory if needed
+        include_dirs=["cipher_cpp"],
+        # Additional flags (like C++ standard)
+        extra_compile_args=['-std=c++17'],
+    )
+]
 
+
+# Setup function
 setup(
-    name='torch_int',
-    ext_modules=[
-        cpp_extension.CUDAExtension(
-            name='torch_int._CUDA',
-            sources=[
-                'torch_int/kernels/linear.cu',
-                'torch_int/kernels/bmm.cu',
-                'torch_int/kernels/fused.cu',
-                'torch_int/kernels/bindings.cpp',
-            ],
-            include_dirs=['torch_int/kernels/include'],
-            extra_link_args=['-lcublas_static', '-lcublasLt_static',
-                             '-lculibos', '-lcudart', '-lcudart_static',
-                             '-lrt', '-lpthread', '-ldl', '-L/usr/lib/x86_64-linux-gnu/'],
-            extra_compile_args={'cxx': ['-std=c++17', '-O3'],
-                                'nvcc': ['-O3', '-std=c++17', '-U__CUDA_NO_HALF_OPERATORS__', '-U__CUDA_NO_HALF_CONVERSIONS__', '-U__CUDA_NO_HALF2_OPERATORS__', f'-DCUDA_ARCH={cuda_arch}']},
-        ),
+    name="cipher",
+    version="0.0",
+    author="Jinwon Pyo",
+    description="Cipher library",
+    ext_modules=ext_modules,
+    cmdclass={"build_ext": build_ext},
+    install_requires=[
+        "pybind11>=2.12",    # Ensure pybind11 is installed
+        "cupy>=13.1.0",        # Specify the version of sympy you need
+        "numpy>=1.26.3",        # Specify the version of sympy you need
+        "singleton-timer>=0.0",
+        "nvtx>=0.2.10"
     ],
-    cmdclass={
-        'build_ext': cpp_extension.BuildExtension.with_options(use_ninja=False)
-    },
-    packages=find_packages(
-        exclude=['notebook', 'scripts', 'tests']),
+    zip_safe=False,
 )
