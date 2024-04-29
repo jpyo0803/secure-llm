@@ -1,2 +1,7 @@
 build/
 __pycache__/
+*.sqlite
+*.nsys-rep
+**/*.so
+*.egg-info/
+**/*.txt

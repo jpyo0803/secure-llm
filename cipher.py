@@ -4,7 +4,12 @@ import numpy as np
 import cupy as cp
 import nvtx
 import concurrent.futures
+from enum import Enum
 
+class CipherType(Enum):
+    Unsecure = 1
+    Mine = 2
+    Slalom = 3
 
 def decrypt_matrix_2d_full(in_matrix, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor):
     adjusted_matrix = in_matrix - \
@@ -64,20 +69,17 @@ def undo_shift_optimized(in_matrix, amt, K, row_sum_x, col_sum_y):
     return in_matrix
 
 
-def BatchSecureMatmulFull(x: np.ndarray, y: np.ndarray):
-    assert x.ndim == 3 and y.ndim == 3, "Input tensors must be 3D (batched matrices)"
-    assert x.shape[0] == y.shape[0], "Number of batches must be equal"
+def BatchSecureMatmul(x: np.ndarray, y: np.ndarray, scale: np.ndarray = None, timer_on=False):
+    return BatchSecureMatmulMine(x, y, timer_on)
 
-    batch_size, M, K = x.shape
-    _, K, N = y.shape
+def BSM_S8S8F32(x: np.ndarray, y: np.ndarray, scale: np.float32 = None, cipher_type: CipherType=CipherType.Mine, timer_on: bool=False):
+    if cipher_type is CipherType.Mine:
+        result = BatchSecureMatmulMine(x, y, timer_on)
+        return result * scale
 
-    results = []
-
-    for i in range(batch_size):
-        results.append(SecureMatmulFull(x[i], y[i]))
-
-    z = np.stack(results)
-    return z
+blind_factor = None
+def BatchSecureMatmulSlalom(x: np.ndarray, y: np.ndarray, timer_on: bool = False):
+    pass
 
 
 a_x = None
@@ -87,13 +89,13 @@ b_y = None
 b_factor = None
 key_inv = None
 
-
-def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
+def BatchSecureMatmulMine(x: np.ndarray, y: np.ndarray, timer_on):
     assert x.ndim == 3 and y.ndim == 3
     assert x.shape[0] == y.shape[0], "Number of batches must be equal"
     assert x.shape[2] == y.shape[1]
     assert x.dtype == np.int8 and y.dtype == np.int8
-    timer = st.SingletonTimer()
+    if timer_on:
+        timer = st.SingletonTimer()
 
     B = 8
 
@@ -101,34 +103,43 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
     _, _, N = y.shape
 
     # 8 bit -> 32 bit, here must be copied
-    t = timer.start(tag='int8 to int32', category='int8 to int32')
+    if timer_on:
+        t = timer.start(tag='int8 to int32', category='int8 to int32')
     x = x.astype(np.int32, copy=False)
     y = y.astype(np.int32, copy=False)
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
     mod = 2**32
 
     amt = 2**(B-1)
-    t = timer.start(tag='gen. shift metadata', category='gen. shift metadata')
+    if timer_on:
+        t = timer.start(tag='gen. shift metadata',
+                        category='gen. shift metadata')
     # Generate metadata for shifting
     shift_row_sum_x = np.sum(x, axis=2, dtype=np.int32)
     shift_col_sum_y = np.sum(y, axis=1, dtype=np.int32)
 
     undo_shift_factor = shift_row_sum_x[:, :, np.newaxis] * amt + \
         K * amt**2 + shift_col_sum_y[:, np.newaxis, :] * amt
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
-    t = timer.start(tag='shift inputs', category='shift inputs')
+    if timer_on:
+        t = timer.start(tag='shift inputs', category='shift inputs')
     # Shift
     x += amt
     y += amt
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
     # int32 -> uint32
-    t = timer.start(tag='int32 to uint32', category='int32 to uint32')
+    if timer_on:
+        t = timer.start(tag='int32 to uint32', category='int32 to uint32')
     x = x.view(np.uint32)
     y = y.view(np.uint32)
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
     # Generate metadata for decryption
 
@@ -153,52 +164,115 @@ def SecureMatmulFull(x: np.ndarray, y: np.ndarray):
                 cip_cpp.FindKeyInvModFull(a_x[i], a_y[i]), dtype=np.uint32)
     # timer.end(t)
 
-    t = timer.start(tag='gen. decryption metadata',
-                    category='gen. decryption metadata')
+    if timer_on:
+        t = timer.start(tag='gen. decryption metadata',
+                        category='gen. decryption metadata')
 
     dec_row_sum_x, dec_col_sum_y = compute_decryption_metadata(
         x, y, b_x, b_y, a_x, a_y)
 
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
-    t = timer.start(tag='encryption', category='encryption')
+    if timer_on:
+        t = timer.start(tag='encryption', category='encryption')
 
     x = encrypt_matrix_2d_full(x, a_x, b_x, False)
     y = encrypt_matrix_2d_full(y, a_y, b_y, True)
 
-    timer.end(t)
-
-    nvtx.push_range("host to device")
-    t = timer.start(tag='host to device', category='host to device')
+    if timer_on:
+        timer.end(t)
+    if timer_on:
+        nvtx.push_range("host to device")
+        t = timer.start(tag='host to device', category='host to device')
     x_gpu = cp.asarray(x)
     y_gpu = cp.asarray(y)
-    timer.end(t)
-    nvtx.pop_range()
+    if timer_on:
+        timer.end(t)
+        nvtx.pop_range()
 
-    nvtx.push_range("gpu computation")
-    t = timer.start(tag='gpu computation', category='gpu computation')
+    if timer_on:
+        nvtx.push_range("gpu computation")
+        t = timer.start(tag='gpu computation', category='gpu computation')
     z_gpu = cp.matmul(x_gpu, y_gpu)
-    timer.end(t)
-    nvtx.pop_range()
-    nvtx.push_range("device to host")
-    t = timer.start(tag='device to host', category='device to host')
+    if timer_on:
+        timer.end(t)
+        nvtx.pop_range()
+    if timer_on:
+        nvtx.push_range("device to host")
+        t = timer.start(tag='device to host', category='device to host')
     z = cp.asnumpy(z_gpu)
-    timer.end(t)
-    nvtx.pop_range()
+    if timer_on:
+        timer.end(t)
+        nvtx.pop_range()
 
-    t = timer.start(tag='decryption', category='decryption')
+    if timer_on:
+        t = timer.start(tag='decryption', category='decryption')
 
     z = decrypt_matrix_2d_full(
         z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
 
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
-    t = timer.start(tag='uint32 to int32', category='uint32 to int32')
+    if timer_on:
+        t = timer.start(tag='uint32 to int32', category='uint32 to int32')
     z = z.view(np.int32)
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
-    t = timer.start(tag='undo shift', category='undo shift')
+    if timer_on:
+        t = timer.start(tag='undo shift', category='undo shift')
     z -= undo_shift_factor
-    timer.end(t)
+    if timer_on:
+        timer.end(t)
 
     return z
+
+
+def BatchUnsecureMatmul(x: np.ndarray, y: np.ndarray, timer_on=False):
+    assert x.ndim == 3
+    assert x.shape[0] == y.shape[0], "Number of batches must be equal"
+    assert x.shape[2] == y.shape[1]
+    assert x.dtype == np.int8 and y.dtype == np.int8
+    
+    if y.ndim == 2:
+        y_gpu = y_gpu[np.newaxis, :, :]
+
+    if timer_on:
+        timer = st.SingletonTimer()
+
+    if timer_on:
+        t = timer.start(tag='int8 to int32 (unsecure)',
+                        category='int8 to int32 (unsecure)')
+    x = x.astype(np.int32, copy=False)
+    y = y.astype(np.int32, copy=False)
+    if timer_on:
+        timer.end(t)
+
+    if timer_on:
+        t = timer.start(tag='host to device (unsecure)',
+                        category='host to device (unsecure)')
+    x_gpu = cp.asarray(x)
+    y_gpu = cp.asarray(y)
+    if timer_on:
+        timer.end(t)
+
+    if timer_on:
+        t = timer.start(tag='gpu computation (unsecure)',
+                        category='gpu computation (unsecure)')
+    z_gpu = cp.matmul(x_gpu, y_gpu)
+    if timer_on:
+        timer.end(t)
+
+    if timer_on:
+        t = timer.start(tag='device to host (unsecure)',
+                        category='device to host (unsecure)')
+    z = cp.asnumpy(z_gpu)
+    if timer_on:
+        timer.end(t)
+
+    return z
+
+def BatchUnsecureLinear(x: np.ndarray, y: np.ndarray, bias: np.ndarray, timer_on=False):
+    pass

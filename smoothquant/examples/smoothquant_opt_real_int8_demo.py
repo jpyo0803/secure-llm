@@ -29,7 +29,7 @@ class Evaluator:
         end = torch.cuda.Event(enable_timing=True)
         latency = 0
         for batch in self.dataset:
-            input_ids = batch['input_ids'].cuda().unsqueeze(0)
+            input_ids = batch['input_ids'].cpu().unsqueeze(0)
             label = input_ids[:, -1]
             pad_len = 512 - input_ids.shape[1]
             input_ids = pad(input_ids, (0, pad_len), value=1)
@@ -70,7 +70,7 @@ from smoothquant.opt import Int8OPTForCausalLM
 model = Int8OPTForCausalLM.from_pretrained("mit-han-lab/opt-125m-smoothquant")
 
 model_smoothquant = Int8OPTForCausalLM.from_pretrained(
-    'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float16, device_map='auto')
+    'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float16, device_map='cpu')
 print_model_size(model_smoothquant)
 acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)
 print(

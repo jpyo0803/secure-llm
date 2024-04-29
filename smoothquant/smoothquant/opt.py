@@ -1,3 +1,6 @@
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
 import torch
 from torch import nn
 from transformers.models.opt.modeling_opt import (
@@ -117,11 +120,26 @@ class Int8OPTAttention(nn.Module):
      #   print(f'Act (input): {hidden_states.dtype}')
      #   print(f'Wgt (input): {self.q_proj.weight.dtype}')
      #   print(f'Bias (input): {self.q_proj.bias.dtype}')
+        # print("weight: ", self.q_proj.weight)
+        # print("weight size : ", self.q_proj.weight.size())
+        # print("bias: ", self.q_proj.bias)
+        # print("bias sz: ", self.q_proj.bias.size())
+        # print("hidden sz: ", hidden_states.size())
+
+        print("hidden dev2: ", type(hidden_states.device))
+        assert hidden_states.device == torch.device("cpu")
+        hidden_states = hidden_states.to(torch.device("cuda:0"))
+        assert hidden_states.device == torch.device("cuda:0")
         query_states = self.q_proj(hidden_states)
+        assert query_states.device == cuda0_dev
+        query_states = query_states.to(cpu_dev)
+        assert query_states.device == cpu_dev
+        # query_states = cip.BatchUnsecureMatmul(hidden_states)
     #    print(f'Output (output): {query_states.dtype}')
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
+            assert False
             key_states = past_key_value[0]
             value_states = past_key_value[1]
         elif is_cross_attention:
@@ -130,12 +148,14 @@ class Int8OPTAttention(nn.Module):
             value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
         elif past_key_value is not None:
             # reuse k, v, self_attention
+            assert False
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
+            assert False
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
@@ -169,19 +189,25 @@ class Int8OPTAttention(nn.Module):
       #  print(f'K (input): {key_states.dtype}')
        # print(f'Q size: ', query_states.size())
        # print(f'K size: ', key_states.size())
-        query_states_np = query_states.to(torch.device("cpu")).numpy()
-        key_states_np = key_states.to(
-            torch.device("cpu")).numpy()
+        # query_states_np = query_states.to(torch.device("cpu")).numpy()
+        # key_states_np = key_states.to(
+        #     torch.device("cpu")).numpy()
+        # print(query_states)
+        #query_states2 = query_states.clone().detach().to(torch.device("cuda:0"))
+        query_states = query_states.to(cuda0_dev)
+        key_states = key_states.to(cuda0_dev)
+        attn_weights = self.qk_bmm(query_states, key_states)
+        attn_weights = attn_weights.to(cpu_dev)
 
-        # attn_weights2 = self.qk_bmm(query_states, key_states)
-        key_states_np = np.moveaxis(key_states_np, -1, -2)
-        attn_weights = torch.tensor(
-            cip.SecureMatmulFull(query_states_np, key_states_np)).to(torch.float32)
-        attn_weights *= self.qk_bmm.a.item()
+        # key_states_np = np.moveaxis(key_states_np, -1, -2)
+        # print("type : ", self.qk_bmm.a.item())
+        # attn_weights = torch.tensor(
+        #     cip.BatchSecureMatmul(query_states_np, key_states_np, self.qk_bmm.a.item())).to(torch.float32)
+        # attn_weights *= self.qk_bmm.a.item()
         # print("attn 1 :", attn_weights)
         # print("attn 2 :", attn_weights2)
 
-        attn_weights = attn_weights.to(torch.device("cuda:0"))
+        # attn_weights = attn_weights.to(torch.device("cuda:0"))
      #   print(f'Output (output): {attn_weights.dtype}')
         # print(f'Running: {time.time()}')
 
@@ -196,6 +222,7 @@ class Int8OPTAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
+            attention_mask = attention_mask.to(cpu_dev)
             attn_weights = (
                 attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
                 + attention_mask
@@ -244,7 +271,12 @@ class Int8OPTAttention(nn.Module):
      #   print("[V Proj.]")
     #    print(f'Attn probs (input): {attn_probs.dtype}')
      #   print(f'Value states (input): {value_states.dtype}')
+        attn_probs = attn_probs.to(cuda0_dev)
+        print(value_states)
+        #value_states = value_states.to(cuda0_dev)
         attn_output = self.pv_bmm(attn_probs, value_states)
+        print(value_states)
+        assert False
     #    print(f'Attn output (output): {attn_output.dtype}')
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
@@ -349,9 +381,10 @@ class Int8OPTDecoderLayer(nn.Module):
         # Self Attention
         residual = hidden_states
      #   print("[Layer Norm Attn]")
-      #  print(f'Input (input): {hidden_states.dtype}')
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-      #  print(f'Output (output): {hidden_states.dtype}')
+        # print(f'Input (input): {hidden_states.dtype}')
+        # print("hl : ", hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states) # done in CPU
+        # print(f'Output (output): {hidden_states.dtype}')
 
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -360,6 +393,8 @@ class Int8OPTDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
+        # print("after")
+        # assert False
 
         residual.add_(hidden_states.to(residual.dtype))
 
