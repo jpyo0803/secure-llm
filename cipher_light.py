@@ -156,9 +156,8 @@ class SBMM_Light:
         # b_x, b_y: (K,)
         # x: (batch_size, M, K)
         # y: (batch_size, K, N)
-        dec_row_sum_x = np.sum(x * b_y, axis=2, dtype=np.uint32) * a_x
-        dec_col_sum_y = np.sum(
-            y * b_x[np.newaxis, :, np.newaxis], axis=1, dtype=np.uint32) * a_y
+        dec_row_sum_x = np.einsum('ijk, k->ij', x, b_y) * a_x
+        dec_col_sum_y = np.einsum('ijk, j->ik', y, b_x) * a_y
         return dec_row_sum_x, dec_col_sum_y
 
     def __encrypt_tensor(self, tensor, a, b, vertical):
