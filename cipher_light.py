@@ -59,17 +59,8 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='gen. keys (L)',
                                 category='gen. keys (L)')
-        b_x = np.random.randint(
-            0, self.mod - 1, size=(K), dtype=np.uint32)
-        b_y = np.random.randint(
-            0, self.mod - 1, size=(K), dtype=np.uint32)
-        a_x = np.array(ntl.ntl_cpp.GenerateRandomCoprimeLessthanN_uint64(
-            self.mod), dtype=np.uint32)
-        a_y = np.array(ntl.ntl_cpp.GenerateRandomCoprimeLessthanN_uint64(
-            self.mod), dtype=np.uint32)
-        key_inv = np.array(ntl.FindKeyInvModNonPrime(
-            a_x * a_y, self.mod), dtype=np.uint32)
-        b_factor = np.dot(b_x, b_y)
+        a_x, a_y, b_x, b_y = self.__generate_keys(K)
+
         # assert (a_x *a_y * key_inv % self.mod) == 1
         if self.timer_on:
             timer.end(t)
@@ -77,7 +68,7 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='gen. decryption metadata (L)',
                             category='gen. decryption metadata (L)')
-        dec_row_sum_x, dec_col_sum_y = self.__generate_decryption_metadata(
+        dec_row_sum_x, dec_col_sum_y, key_inv, b_factor = self.__generate_decryption_metadata(
             shifted_x, shifted_y, a_x, a_y, b_x, b_y)
         if self.timer_on:
             timer.end(t)
@@ -151,6 +142,17 @@ class SBMM_Light:
         y += self.shift_amt
         return x, y
 
+    def __generate_keys(self, K):
+        a_x = np.array(ntl.ntl_cpp.GenerateRandomCoprimeLessthanN_uint64(
+            self.mod), dtype=np.uint32)
+        a_y = np.array(ntl.ntl_cpp.GenerateRandomCoprimeLessthanN_uint64(
+            self.mod), dtype=np.uint32)
+        b_x = np.random.randint(
+            0, self.mod - 1, size=(K), dtype=np.uint32)
+        b_y = np.random.randint(
+            0, self.mod - 1, size=(K), dtype=np.uint32)
+        return a_x, a_y, b_x, b_y 
+
     def __generate_decryption_metadata(self, x, y, a_x, a_y, b_x, b_y):
         # a_x, a_y: (1,)
         # b_x, b_y: (K,)
@@ -158,7 +160,10 @@ class SBMM_Light:
         # y: (batch_size, K, N)
         dec_row_sum_x = np.einsum('ijk, k->ij', x, b_y) * a_x
         dec_col_sum_y = np.einsum('ijk, j->ik', y, b_x) * a_y
-        return dec_row_sum_x, dec_col_sum_y
+        key_inv = np.array(ntl.FindKeyInvModNonPrime(
+            a_x * a_y, self.mod), dtype=np.uint32)
+        b_factor = np.dot(b_x, b_y)
+        return dec_row_sum_x, dec_col_sum_y, key_inv, b_factor
 
     def __encrypt_tensor(self, tensor, a, b, vertical):
         # tensor: (batch_size, M, K), if horizontal
