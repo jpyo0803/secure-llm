@@ -182,6 +182,12 @@ class SBMM_Light:
         out -= b_factor
         out *= key_inv
         return out
+    
+    def disable_timer(self):
+        self.timer_on = False
+    
+    def enable_timer(self):
+        self.timer_on = True
 
     def __call__(self, x: np.ndarray, y: np.ndarray):
         return self.__run(x, y)
