@@ -4,10 +4,15 @@ import numpy as np
 import random
 import singleton_timer as st
 import torch
-import cipher as cip
 import cupy as cp
 from torch_int._CUDA import bmm_s8t_s8n_s32t, bmm_s8t_s8n_f32t
 import nvtx
+import psutil
+import os
+import cipher_light as cl
+import cipher_unsecure as cu
+# p = psutil.Process(os.getpid())
+# p.cpu_affinity([0])
 
 a = np.random.randint(0, 10, (5, 5, 5), dtype=np.uint32)
 b = np.random.randint(0, 10, (5, 5, 5), dtype=np.uint32)
@@ -84,27 +89,36 @@ class BmmTest(unittest.TestCase):
 
         batch_size = 10
 
+        sbmm_light = cl.SBMM_Light()
+        sbmm_unsecure = cu.SBMM_Unsecure()
+
+        a = torch.randint(-128, 127, (batch_size, 5, 5), dtype=torch.int8)
         for i in range(num_test):
             print("Test #", i + 1)
-            # M = 2**random.randint(4, 12)
+           # M = 2**random.randint(4, 12)
             # # M = random.randint(1, 1)
-            # K = 2**random.randint(4, 12)
-            # N = 2**random.randint(4, 12)
-            M = 2**(8)
+           # K = 2**random.randint(4, 12)
+           # N = 2**random.randint(4, 12)
+            M = 2**(10)
             # M = random.randint(1, 1)
-            K = 2**(8)
-            N = 2**(8)
+            K = 2**(10)
+            N = 2**(10)
 
             print(M, K, N)
             a = torch.randint(-128, 127, (batch_size, M, K), dtype=torch.int8)
-            b = torch.randint(-128, 127, (batch_size, N, K), dtype=torch.int8)
+            b = torch.randint(-128, 127, (batch_size, K, N), dtype=torch.int8)
             x = a.numpy()
             y = b.numpy()
             x2 = a.numpy()
             y2 = b.numpy()
 
-            z2 = cip.BatchUnsecureMatmul(x2, y2, i > 0)
-            z = cip.BatchSecureMatmul(x, y, i > 0)
+            # z = cip.BatchSecureMatmul(x, y, 1, i > 0)
+
+            z2 = sbmm_unsecure(x2, y2)
+            z = sbmm_light(x, y)
+
+          #  z3 = cip.BatchSecureMatmulMineTorch(x3, y3, i > 0)
+          #  z4 = cip.BatchSecureMatmulMineMixed(x4, y4, i > 0)
 
             # t = timer.start(tag='test_bmm_torch htod',
             #                 category='test_bmm_torch htod')
@@ -129,9 +143,10 @@ class BmmTest(unittest.TestCase):
             # nvtx.pop_range()
 
             # timer.end(t)
-            z = torch.tensor(z)
-            z2 = torch.tensor(z2)
-            self.assertTrue(torch.equal(z, z2))
+            self.assertTrue(np.array_equal(z, z2))
+            if i == 0:
+                sbmm_light.enable_timer()
+                # sbmm_unsecure.enable_timer()
             pass_cnt += 1
 
         timer.display_summary()
