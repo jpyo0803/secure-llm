@@ -167,9 +167,12 @@ class SBMM_Light:
         # a: (1,)
         # b: (K,)
 
+        tensor *= a
         if vertical:
-            return tensor * a + b[np.newaxis, :, np.newaxis]
-        return tensor * a + b
+            tensor += b[np.newaxis, :, np.newaxis]
+        else:
+            tensor += b
+        return tensor
 
     def __decrypt_tensor(self, tensor, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor):
         # tensor: (batch_size, M, N)
@@ -177,15 +180,16 @@ class SBMM_Light:
         # dec_row_sum_x: (batch_size, M)
         # dec_col_sum_y: (batch_size, N)
         # b_factor: (1,)
-        out = tensor - dec_row_sum_x[:, :,
-                                     np.newaxis] - dec_col_sum_y[:, np.newaxis, :]
+        out = tensor
+        out -= dec_row_sum_x[:, :, np.newaxis]
+        out -= dec_col_sum_y[:, np.newaxis, :]
         out -= b_factor
         out *= key_inv
         return out
-    
+
     def disable_timer(self):
         self.timer_on = False
-    
+
     def enable_timer(self):
         self.timer_on = True
 
