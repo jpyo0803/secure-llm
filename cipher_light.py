@@ -32,13 +32,19 @@ class SBMM_Light:
             t = timer.start(tag='S8 to S32 (L)',
                             category='S8 to S32 (L)')
 
-        if self.x32_buffer is None and self.y32_buffer is None:
+        if self.x32_buffer is not None and self.x32_buffer.shape != x.shape:
+            self.x32_buffer = None
+        if self.y32_buffer is not None and self.y32_buffer.shape != y.shape:
+            self.y32_buffer = None
+
+        if self.x32_buffer is None:
             self.x32_buffer = np.array(x, dtype=np.int32)
+        else:
+            np.copyto(self.x32_buffer, x)
+
+        if self.y32_buffer is None:
             self.y32_buffer = np.array(y, dtype=np.int32)
         else:
-            assert self.x32_buffer.shape == x.shape
-            assert self.y32_buffer.shape == y.shape
-            np.copyto(self.x32_buffer, x)
             np.copyto(self.y32_buffer, y)
 
         if self.timer_on:
@@ -55,7 +61,8 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='shift inputs (L)',
                             category='shift inputs (L)')
-        shifted_x, shifted_y = self.__shift_inputs(self.x32_buffer, self.y32_buffer)
+        shifted_x, shifted_y = self.__shift_inputs(
+            self.x32_buffer, self.y32_buffer)
         if self.timer_on:
             timer.end(t)
 
@@ -185,11 +192,13 @@ class SBMM_Light:
         # dec_row_sum_x: (batch_size, M)
         # dec_col_sum_y: (batch_size, N)
         # b_factor: (1,)
-        cipher_cpp.DecryptTensorLight(tensor, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
+        cipher_cpp.DecryptTensorLight(
+            tensor, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
         return tensor
 
     def __undo_shift_output(self, tensor, K, shift_row_sum_x, shift_col_sum_y):
-        cipher_cpp.UndoShift_int32(tensor, self.shift_amt, K, shift_row_sum_x, shift_col_sum_y)
+        cipher_cpp.UndoShift_int32(
+            tensor, self.shift_amt, K, shift_row_sum_x, shift_col_sum_y)
         return tensor
 
     def disable_timer(self):
