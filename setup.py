@@ -3,17 +3,21 @@ from pybind11.setup_helpers import Pybind11Extension, build_ext
 
 ext_modules = [
     Pybind11Extension(
-        "cipher_cpp",                               # Name of the module
-        # Correctly list source files
-        ["cipher_cpp/cipher_pybind.cpp", "cipher_cpp/cipher.cpp"],
-        # Update include directory if needed
-        include_dirs=["cipher_cpp"],
-        # Additional flags (like C++ standard)
-        extra_compile_args=['-std=c++17', '-fopenmp', '-O3'],
-        extra_link_args=['-fopenmp']
+        "cipher_cpp",  # Name of the module
+        ["cipher_cpp/cipher_pybind.cpp", "cipher_cpp/cipher.cpp"],  # Source files
+        include_dirs=["cipher_cpp"],  # Include directories
+        extra_compile_args=[
+            '-std=c++17',     # Use C++17 standard
+            '-fopenmp',       # Enable OpenMP for parallelism
+            '-O3',            # Enable high optimization level
+            '-march=native',  # Enable architecture-specific optimizations
+            '-ffast-math',    # Allow aggressive floating-point optimizations
+            '-ftree-vectorize',  # Encourage the compiler to vectorize loops
+            '-funroll-loops'
+        ],
+        extra_link_args=['-fopenmp']  # Link with OpenMP
     )
 ]
-
 
 # Setup function
 setup(

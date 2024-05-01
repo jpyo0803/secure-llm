@@ -92,32 +92,51 @@ void shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> inp
     delete[] in;
 }
 
+
 template <typename T>
 void undo_shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> input,
-                              T amt, T K,
-                              py::array_t<T, py::array::c_style | py::array::forcecast> row_sum_x,
-                              py::array_t<T, py::array::c_style | py::array::forcecast> col_sum_y) {
-    if (input.ndim() != 2 || row_sum_x.ndim() != 1 || col_sum_y.ndim() != 1) {
-        throw std::runtime_error("Input and sums should be 2D and 1D arrays respectively");
+                        T amt, T K,
+                        py::array_t<T, py::array::c_style | py::array::forcecast> row_sum_x,
+                        py::array_t<T, py::array::c_style | py::array::forcecast> col_sum_y) {
+    // Check the input dimensions
+    if (input.ndim() != 3 || row_sum_x.ndim() != 2 || col_sum_y.ndim() != 2) {
+        throw std::runtime_error("Input should be a 3D array and sums should be 2D arrays");
     }
 
-    auto buf = input.template mutable_unchecked<2>(); // Get buffer info for direct access
-    auto r_sum = row_sum_x.template unchecked<1>(); // Direct access to row_sum_x elements
-    auto c_sum = col_sum_y.template unchecked<1>(); // Direct access to col_sum_y elements
-    int M = buf.shape(0);
-    int N = buf.shape(1);
+    auto buf = input.template mutable_unchecked<3>(); // 3D buffer
+    auto r_sum = row_sum_x.template mutable_unchecked<2>(); // 2D row sums
+    auto c_sum = col_sum_y.template mutable_unchecked<2>(); // 2D column sums
+    int B = buf.shape(0);
+    int M = buf.shape(1);
+    int N = buf.shape(2);
 
-    T** in = new T*[M];
-    for (int i = 0; i < M; ++i) {
-        in[i] = &buf(i, 0);
+    // Creating a pointer array to pass to UndoShift
+    T*** in = new T**[B];
+    for (int i = 0; i < B; ++i) {
+        in[i] = new T*[M];
+        for (int j = 0; j < M; ++j) {
+            in[i][j] = &buf(i, j, 0);
+        }
     }
 
-    T* row_sums = row_sum_x.mutable_data();
-    T* col_sums = col_sum_y.mutable_data();
+    // Convert row_sum_x and col_sum_y to T** pointers
+    T** r_sum_ptrs = new T*[B];
+    T** c_sum_ptrs = new T*[B];
+    for (int i = 0; i < B; ++i) {
+        r_sum_ptrs[i] = &r_sum(i, 0);
+        c_sum_ptrs[i] = &c_sum(i, 0);
+    }
 
-    jpyo0803::UndoShift(in, amt, K, row_sums, col_sums, M, N);
+    // Call the function
+    jpyo0803::UndoShift(in, amt, K, r_sum_ptrs, c_sum_ptrs, B, M, N);
 
+    // Cleanup
+    for (int i = 0; i < B; ++i) {
+        delete[] in[i];
+    }
     delete[] in;
+    delete[] r_sum_ptrs;
+    delete[] c_sum_ptrs;
 }
 
 template<typename T>
@@ -138,14 +157,14 @@ template<typename T>
 void bind_shift(py::module_& m, const std::string& typestr) {
     m.def(("Shift_" + typestr).c_str(), &shift_wrapper<T>,
           py::arg("input"), py::arg("amt"),
-          ("Shift elements of a 2D array by a specified amount for type " + typestr).c_str());
+          ("Shift elements of a 3D array by a specified amount for type " + typestr).c_str());
 }
 
 template<typename T>
 void bind_undo_shift(py::module_& m, const std::string& typestr) {
     m.def(("UndoShift_" + typestr).c_str(), &undo_shift_wrapper<T>,
           py::arg("input"), py::arg("amt"), py::arg("K"), py::arg("row_sum_x"), py::arg("col_sum_y"),
-          ("Undo shift operation on a 2D array with control over row and column adjustments for type " + typestr).c_str());
+          ("Undo shift operation on a 3D array with control over row and column adjustments for type " + typestr).c_str());
 }
 
 template<typename T>

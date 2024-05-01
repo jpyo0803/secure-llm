@@ -46,18 +46,16 @@ void Shift(T*** in, T amt, int B, int M, int N) {
 }
 
 template <typename T>
-void UndoShift(T** in, T amt, T K, T* row_sum_x, T* col_sum_y, int M, int N) {
-  #pragma omp parallel for
-  for (int i = 0; i < M; ++i) {
-    for (int j = 0; j < N; ++j) {
-      int64_t tmp = in[i][j]; // always use int64_t
-      tmp -= amt * (row_sum_x[i] + col_sum_y[j] + K * amt);
-      in[i][j] = static_cast<T>(tmp);
+void UndoShift(T*** in, T amt, T K, T** row_sum_x, T** col_sum_y, int B, int M, int N) {
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        in[i][j][k] -= amt * (row_sum_x[i][j] + col_sum_y[i][k] + K * amt);
+      }
     }
   }
 }
-
-
 
 template<typename T>
 std::vector<std::vector<T>> Matmul(const std::vector<std::vector<T>>& X, const std::vector<std::vector<T>>& Y) {

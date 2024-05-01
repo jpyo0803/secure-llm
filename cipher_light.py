@@ -37,7 +37,7 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='gen. shift metadata (L)',
                             category='gen. shift metadata (L)')
-        shift_factor = self.__generate_shift_metedata(
+        shift_row_sum_x, shift_col_sum_y = self.__generate_shift_metedata(
             x, y)
         if self.timer_on:
             timer.end(t)
@@ -123,20 +123,15 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='undo shift (L)',
                             category='undo shift (L)')
-        z -= shift_factor
+        z = self.__undo_shift_output(z, K, shift_row_sum_x, shift_col_sum_y)
         if self.timer_on:
             timer.end(t)
         return z
 
     def __generate_shift_metedata(self, x, y):
-        _, _, K = x.shape
         shift_row_sum_x = np.sum(x, axis=2, dtype=np.int32)
         shift_col_sum_y = np.sum(y, axis=1, dtype=np.int32)
-
-        shift_factor = shift_row_sum_x[:, :, np.newaxis] * self.shift_amt + K * \
-            self.shift_amt**2 + \
-            shift_col_sum_y[:, np.newaxis, :] * self.shift_amt
-        return shift_factor
+        return shift_row_sum_x, shift_col_sum_y
 
     def __shift_inputs(self, x, y):
         cipher_cpp.Shift_int32(x, self.shift_amt)
@@ -191,6 +186,10 @@ class SBMM_Light:
         out -= b_factor
         out *= key_inv
         return out
+
+    def __undo_shift_output(self, tensor, K, shift_row_sum_x, shift_col_sum_y):
+        cipher_cpp.UndoShift_int32(tensor, self.shift_amt, K, shift_row_sum_x, shift_col_sum_y)
+        return tensor
 
     def disable_timer(self):
         self.timer_on = False
