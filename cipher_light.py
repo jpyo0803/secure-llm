@@ -3,6 +3,7 @@ import singleton_timer as st
 import ntl
 import cupy as cp
 import cipher_cpp
+import asyncio
 
 # Secure Batch Matrix Multiplication Light version
 
@@ -16,6 +17,12 @@ class SBMM_Light:
 
         self.x32_buffer = None
         self.y32_buffer = None
+
+        self.x32_shift_buffer = None
+        self.y32_shift_buffer = None
+
+        self.x32_dec_buffer = None
+        self.y32_dec_buffer = None
 
     def __run(self, x: np.ndarray, y: np.ndarray):
         assert x.ndim == 3 and y.ndim == 3
@@ -31,7 +38,6 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='S8 to S32 (L)',
                             category='S8 to S32 (L)')
-
         if self.x32_buffer is not None and self.x32_buffer.shape != x.shape:
             self.x32_buffer = None
         if self.y32_buffer is not None and self.y32_buffer.shape != y.shape:
@@ -46,17 +52,37 @@ class SBMM_Light:
             self.y32_buffer = np.array(y, dtype=np.int32)
         else:
             np.copyto(self.y32_buffer, y)
-
         if self.timer_on:
             timer.end(t)
 
         if self.timer_on:
-            t = timer.start(tag='gen. shift metadata (L)',
-                            category='gen. shift metadata (L)')
-        shift_row_sum_x, shift_col_sum_y = self.__generate_shift_metedata(
-            self.x32_buffer, self.y32_buffer)
+            t = timer.start(tag='shift buffer copy (L)',
+                            category='shift buffer copy (L)')
+        if self.x32_shift_buffer is not None and self.x32_shift_buffer.shape != self.x32_buffer.shape:
+            self.x32_buffer = None
+        if self.y32_shift_buffer is not None and self.y32_shift_buffer.shape != self.y32_buffer.shape:
+            self.y32_buffer = None
+
+        if self.x32_shift_buffer is None:
+            self.x32_shift_buffer = np.array(
+                self.x32_buffer, dtype=np.int32, copy=True)
+        else:
+            np.copyto(self.x32_shift_buffer, self.x32_buffer)
+
+        if self.y32_shift_buffer is None:
+            self.y32_shift_buffer = np.array(
+                self.y32_buffer, dtype=np.int32, copy=True)
+        else:
+            np.copyto(self.y32_shift_buffer, self.y32_buffer)
         if self.timer_on:
             timer.end(t)
+        # if self.timer_on:
+        #     t = timer.start(tag='gen. shift metadata (L)',
+        #                     category='gen. shift metadata (L)')
+        # shift_row_sum_x, shift_col_sum_y = self.__generate_shift_metedata(
+        #     self.x32_buffer, self.y32_buffer)
+        # if self.timer_on:
+        #     timer.end(t)
 
         if self.timer_on:
             t = timer.start(tag='shift inputs (L)',
@@ -84,12 +110,35 @@ class SBMM_Light:
             timer.end(t)
 
         if self.timer_on:
-            t = timer.start(tag='gen. decryption metadata (L)',
-                            category='gen. decryption metadata (L)')
-        dec_row_sum_x, dec_col_sum_y, key_inv, b_factor = self.__generate_decryption_metadata(
-            shifted_x, shifted_y, a_x, a_y, b_x, b_y)
+            t = timer.start(tag='decryption buffer copy (L)',
+                            category='decryption buffer copy (L)')
+        if self.x32_dec_buffer is not None and self.x32_dec_buffer.shape != shifted_x.shape:
+            self.x32_dec_buffer = None
+        if self.y32_dec_buffer is not None and self.y32_dec_buffer.shape != shifted_y.shape:
+            self.y32_dec_buffer = None
+
+        if self.x32_dec_buffer is None:
+            self.x32_dec_buffer = np.array(
+                shifted_x, dtype=np.uint32, copy=True)
+        else:
+            np.copyto(self.x32_dec_buffer, shifted_x)
+
+        if self.y32_dec_buffer is None:
+            self.y32_dec_buffer = np.array(
+                shifted_y, dtype=np.uint32, copy=True)
+        else:
+            np.copyto(self.y32_dec_buffer, shifted_y)
         if self.timer_on:
             timer.end(t)
+
+        # if self.timer_on:
+        #     t = timer.start(tag='gen. decryption metadata (L)',
+        #                     category='gen. decryption metadata (L)')
+        # dec_row_sum_x, dec_col_sum_y, key_inv, b_factor = self.__generate_decryption_metadata(
+        #     shifted_x, shifted_y, a_x, a_y, b_x, b_y)
+
+        # if self.timer_on:
+        #     timer.end(t)
 
         if self.timer_on:
             t = timer.start(tag='encrypt (L)',
@@ -101,26 +150,33 @@ class SBMM_Light:
         if self.timer_on:
             timer.end(t)
 
-        if self.timer_on:
-            t = timer.start(tag='HtoD (L)',
-                            category='HtoD (L)')
+        gpu_result, shift_metadata_result, decryption_metadata_result = asyncio.run(
+            self.__async_main((enc_x, enc_y), (self.x32_shift_buffer, self.y32_shift_buffer), (self.x32_dec_buffer, self.y32_dec_buffer, a_x, a_y, b_x, b_y)))
 
-        enc_x_gpu = cp.asarray(enc_x)
-        enc_y_gpu = cp.asarray(enc_y)
+        enc_z = gpu_result
+        shift_row_sum_x, shift_col_sum_y = shift_metadata_result
+        dec_row_sum_x, dec_col_sum_y, key_inv, b_factor = decryption_metadata_result
 
-        if self.timer_on:
-            timer.end(t)
+        # if self.timer_on:
+        #     t = timer.start(tag='HtoD (L)',
+        #                     category='HtoD (L)')
 
-        if self.timer_on:
-            t = timer.start(tag='gpu comp. (L)', category='gpu comp. (L)')
-        enc_z_gpu = cp.matmul(enc_x_gpu, enc_y_gpu)
-        if self.timer_on:
-            timer.end(t)
-        if self.timer_on:
-            t = timer.start(tag='DtoH (L)', category='DtoH (L)')
-        enc_z = cp.asnumpy(enc_z_gpu)
-        if self.timer_on:
-            timer.end(t)
+        # enc_x_gpu = cp.asarray(enc_x)
+        # enc_y_gpu = cp.asarray(enc_y)
+
+        # if self.timer_on:
+        #     timer.end(t)
+
+        # if self.timer_on:
+        #     t = timer.start(tag='gpu comp. (L)', category='gpu comp. (L)')
+        # enc_z_gpu = cp.matmul(enc_x_gpu, enc_y_gpu)
+        # if self.timer_on:
+        #     timer.end(t)
+        # if self.timer_on:
+        #     t = timer.start(tag='DtoH (L)', category='DtoH (L)')
+        # enc_z = cp.asnumpy(enc_z_gpu)
+        # if self.timer_on:
+        #     timer.end(t)
         if self.timer_on:
             t = timer.start(tag='decrypt (L)',
                             category='decrypt (L)')
@@ -144,6 +200,75 @@ class SBMM_Light:
         if self.timer_on:
             timer.end(t)
         return z
+
+    async def __async_main(self, gpu_args, shift_metadata_args, decryption_metadata_args):
+        gpu_task = asyncio.create_task(self.__gpu_task(gpu_args))
+        shift_metadata_task = asyncio.create_task(
+            self.__generate_shift_metadata_task(shift_metadata_args))
+        decryption_metadata_task = asyncio.create_task(
+            self.__generate_decryption_metadata_task(decryption_metadata_args))
+
+        await gpu_task
+        await shift_metadata_task
+        await decryption_metadata_task
+        return gpu_task.result(), shift_metadata_task.result(), decryption_metadata_task.result()
+
+    async def __generate_shift_metadata_task(self, args):
+        if self.timer_on:
+            timer = st.SingletonTimer()
+
+        if self.timer_on:
+            t = timer.start(tag='gen. shift metadata (L)',
+                            category='gen. shift metadata (L)')
+        x, y = args
+        shift_row_sum_x, shift_col_sum_y = self.__generate_shift_metedata(x, y)
+        if self.timer_on:
+            timer.end(t)
+        return shift_row_sum_x, shift_col_sum_y
+
+    async def __generate_decryption_metadata_task(self, args):
+        if self.timer_on:
+            timer = st.SingletonTimer()
+        if self.timer_on:
+            t = timer.start(tag='gen. decryption metadata (L)',
+                            category='gen. decryption metadata (L)')
+            
+        shifted_x, shifted_y, a_x, a_y, b_x, b_y = args
+        dec_row_sum_x, dec_col_sum_y, key_inv, b_factor = self.__generate_decryption_metadata(
+            shifted_x, shifted_y, a_x, a_y, b_x, b_y)
+        
+        if self.timer_on:
+            timer.end(t)
+            
+        return dec_row_sum_x, dec_col_sum_y, key_inv, b_factor
+
+    async def __gpu_task(self, args):
+        if self.timer_on:
+            timer = st.SingletonTimer()
+
+        if self.timer_on:
+            t = timer.start(tag='HtoD (L)',
+                            category='HtoD (L)')
+        enc_x, enc_y = args
+
+        enc_x_gpu = cp.asarray(enc_x)
+        enc_y_gpu = cp.asarray(enc_y)
+
+        if self.timer_on:
+            timer.end(t)
+
+        if self.timer_on:
+            t = timer.start(tag='gpu comp. (L)', category='gpu comp. (L)')
+        enc_z_gpu = cp.matmul(enc_x_gpu, enc_y_gpu)
+        if self.timer_on:
+            timer.end(t)
+        if self.timer_on:
+            t = timer.start(tag='DtoH (L)', category='DtoH (L)')
+        enc_z = cp.asnumpy(enc_z_gpu)
+        if self.timer_on:
+            timer.end(t)
+
+        return enc_z
 
     def __generate_shift_metedata(self, x, y):
         shift_row_sum_x = np.sum(x, axis=2, dtype=np.int32)
