@@ -52,6 +52,20 @@ std::vector<uint32_t> GenerateKeySetA(uint64_t mod, int n) {
   return key_set;
 }
 
+std::vector<std::vector<std::vector<int32_t>>> AsTypeS8S32(char*** in, int B, int M, int N) {
+  std::vector<std::vector<std::vector<int32_t>>> out(B, std::vector<std::vector<int32_t>>(M, std::vector<int32_t>(N)));
+
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        out[i][j][k] = static_cast<int32_t>(in[i][j][k]);
+      }
+    }
+  }
+  return out;
+}
+
 void EncryptTensorLight(uint32_t*** tensor, uint32_t a, uint32_t* b, bool vertical, int B, int M, int N) {
   /*
     tensor: (B, M, N)
@@ -65,6 +79,28 @@ void EncryptTensorLight(uint32_t*** tensor, uint32_t a, uint32_t* b, bool vertic
       for (int k = 0; k < N; ++k) {
         tensor[i][j][k] *= a;
         tensor[i][j][k] += (vertical ? b[j]: b[k]);
+      }
+    }
+  }
+}
+
+
+void DecryptTensorLight(uint32_t*** tensor, uint32_t key_inv, uint32_t** dec_row_sum_x, uint32_t** dec_col_sum_y, uint32_t b_factor, int B, int M, int N) {
+  // tensor: (batch_size, M, N)
+  // key_inv: (1,)
+  // dec_row_sum_x: (batch-size, M)
+  // dec_col_sum_y: (batch-size, N)
+  // b_factor: (1, )
+
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        uint32_t tmp = tensor[i][j][k];
+        tmp -= dec_row_sum_x[i][j];
+        tmp -= dec_col_sum_y[i][k];
+        tmp -= b_factor;
+        tensor[i][j][k] = tmp * key_inv;
       }
     }
   }

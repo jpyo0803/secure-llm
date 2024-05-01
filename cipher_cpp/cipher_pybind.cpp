@@ -139,6 +139,47 @@ void undo_shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast
     delete[] c_sum_ptrs;
 }
 
+py::list as_type_s8s32_wrapper(py::array_t<char, py::array::c_style | py::array::forcecast> input) {
+    if (input.ndim() != 3) {
+        throw std::runtime_error("Input should be a 3D array");
+    }
+
+    int B = input.shape(0);
+    int M = input.shape(1);
+    int N = input.shape(2);
+
+    auto buf_input = input.mutable_unchecked<3>(); // Access the buffer
+
+    // Create a 3D array pointer to pass to AsTypeS8S32
+    char*** input_ptrs = new char**[B];
+    for (int i = 0; i < B; ++i) {
+        input_ptrs[i] = new char*[M];
+        for (int j = 0; j < M; ++j) {
+            input_ptrs[i][j] = &buf_input(i, j, 0);
+        }
+    }
+
+    // Call AsTypeS8S32
+    std::vector<std::vector<std::vector<int32_t>>> result = jpyo0803::AsTypeS8S32(input_ptrs, B, M, N);
+
+    // Cleanup dynamically allocated memory
+    for (int i = 0; i < B; ++i) {
+        delete[] input_ptrs[i];
+    }
+    delete[] input_ptrs;
+
+    // Convert the result to a Python list of lists
+    py::list py_result;
+    for (const auto& mat : result) {
+        py::list py_mat;
+        for (const auto& row : mat) {
+            py_mat.append(py::cast(row));
+        }
+        py_result.append(py_mat);
+    }
+
+    return py_result;
+}
 
 void encrypt_tensor_light_wrapper(py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tensor,
                                   uint32_t a, py::array_t<uint32_t, py::array::c_style | py::array::forcecast> b,
@@ -178,6 +219,60 @@ void encrypt_tensor_light_wrapper(py::array_t<uint32_t, py::array::c_style | py:
         delete[] tensor_ptrs[i];
     }
     delete[] tensor_ptrs;
+}
+
+void decrypt_tensor_light_wrapper(py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tensor,
+                                  uint32_t key_inv,
+                                  py::array_t<uint32_t, py::array::c_style | py::array::forcecast> dec_row_sum_x,
+                                  py::array_t<uint32_t, py::array::c_style | py::array::forcecast> dec_col_sum_y,
+                                  uint32_t b_factor) {
+    // Ensure tensor is a 3D array and sums are 2D arrays
+    if (tensor.ndim() != 3 || dec_row_sum_x.ndim() != 2 || dec_col_sum_y.ndim() != 2) {
+        throw std::runtime_error("Tensor should be a 3D array and dec_row_sum_x/dec_col_sum_y should be 2D arrays");
+    }
+
+    int B = tensor.shape(0);
+    int M = tensor.shape(1);
+    int N = tensor.shape(2);
+
+    if (dec_row_sum_x.shape(0) != B || dec_row_sum_x.shape(1) != M || dec_col_sum_y.shape(0) != B || dec_col_sum_y.shape(1) != N) {
+        throw std::runtime_error("Incorrect dimensions for dec_row_sum_x or dec_col_sum_y");
+    }
+
+    auto buf_tensor = tensor.mutable_unchecked<3>(); // 3D tensor buffer
+    auto buf_dec_row = dec_row_sum_x.mutable_unchecked<2>(); // 2D dec_row_sum_x buffer
+    auto buf_dec_col = dec_col_sum_y.mutable_unchecked<2>(); // 2D dec_col_sum_y buffer
+
+    // Create pointer arrays to pass to DecryptTensorLight
+    uint32_t*** tensor_ptrs = new uint32_t**[B];
+    for (int i = 0; i < B; ++i) {
+        tensor_ptrs[i] = new uint32_t*[M];
+        for (int j = 0; j < M; ++j) {
+            tensor_ptrs[i][j] = &buf_tensor(i, j, 0);
+        }
+    }
+
+    uint32_t** dec_row_ptrs = new uint32_t*[B];
+    for (int i = 0; i < B; ++i) {
+        dec_row_ptrs[i] = &buf_dec_row(i, 0);
+    }
+
+    uint32_t** dec_col_ptrs = new uint32_t*[B];
+    for (int i = 0; i < B; ++i) {
+        dec_col_ptrs[i] = &buf_dec_col(i, 0);
+    }
+
+    // Call DecryptTensorLight with proper arguments
+    jpyo0803::DecryptTensorLight(tensor_ptrs, key_inv, dec_row_ptrs, dec_col_ptrs, b_factor, B, M, N);
+
+    // Cleanup dynamically allocated memory
+    for (int i = 0; i < B; ++i) {
+        delete[] tensor_ptrs[i];
+    }
+    delete[] tensor_ptrs;
+
+    delete[] dec_row_ptrs;
+    delete[] dec_col_ptrs;
 }
 
 template<typename T>
@@ -266,9 +361,17 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_randint_2d<uint32_t>(m, "uint32");
   bind_randint_2d<uint64_t>(m, "uint64");
 
+  m.def("AsTypeS8S32", &as_type_s8s32_wrapper,
+          py::arg("input"),
+          "Convert a 3D array from char to int32");
+
   m.def("EncryptTensorLight", &encrypt_tensor_light_wrapper,
           py::arg("tensor"), py::arg("a"), py::arg("b"), py::arg("vertical"),
           "Encrypt a tensor using specified parameters");
+
+  m.def("DecryptTensorLight", &decrypt_tensor_light_wrapper,
+          py::arg("tensor"), py::arg("key_inv"), py::arg("dec_row_sum_x"), py::arg("dec_col_sum_y"), py::arg("b_factor"),
+          "Decrypt a tensor using specified parameters");
 
   m.def("EncryptMatrix2D", &jpyo0803::EncryptMatrix2D,
         "EncryptMatrix2D",

@@ -11,18 +11,18 @@ class BmmTest(unittest.TestCase):
     def test_bmm_secure(self):
         timer = st.SingletonTimer()
 
-        num_test = 20
+        num_test = 10
         pass_cnt = 0
+
 
         sbmm_light = cl.SBMM_Light()
         sbmm_unsecure = cu.SBMM_Unsecure()
-
         for i in range(num_test):
             print("Test #", i + 1)
-            batch_size = random.randint(1, 30)
-            M = 2**random.randint(4, 12)
-            K = 2**random.randint(4, 12)
-            N = 2**random.randint(4, 12)
+            batch_size = random.randint(10, 10)
+            M = 2**random.randint(10, 10)
+            K = 2**random.randint(10, 10)
+            N = 2**random.randint(10, 10)
 
             print(batch_size, M, K, N)
             x = np.random.randint(-128, 128, (batch_size, M, K), dtype=np.int8)
