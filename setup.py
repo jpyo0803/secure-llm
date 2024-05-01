@@ -9,7 +9,8 @@ ext_modules = [
         # Update include directory if needed
         include_dirs=["cipher_cpp"],
         # Additional flags (like C++ standard)
-        extra_compile_args=['-std=c++17'],
+        extra_compile_args=['-std=c++17', '-fopenmp', '-O3'],
+        extra_link_args=['-fopenmp']
     )
 ]
 

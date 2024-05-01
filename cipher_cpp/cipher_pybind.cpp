@@ -64,24 +64,31 @@ py::array_t<T> sum_by_col_wrapper(py::array_t<T, py::array::c_style | py::array:
 
 template <typename T>
 void shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> input, T amt) {
-    if (input.ndim() != 2) {
-        throw std::runtime_error("Input should be a 2D array");
+    if (input.ndim() != 3) {
+        throw std::runtime_error("Input should be a 3D array");
     }
 
-    auto buf = input.template mutable_unchecked<2>(); // Get buffer info for direct access
-    int M = buf.shape(0);
-    int N = buf.shape(1);
+    auto buf = input.template mutable_unchecked<3>(); // Get buffer info for direct access
+    int B = buf.shape(0);
+    int M = buf.shape(1);
+    int N = buf.shape(2);
 
-    // Allocate int** for input
-    T** in = new T*[M];
-    for (int i = 0; i < M; ++i) {
-        in[i] = &buf(i, 0);
+    // Allocate T*** for input
+    T*** in = new T**[B];
+    for (int i = 0; i < B; ++i) {
+        in[i] = new T*[M];
+        for (int j = 0; j < M; ++j) {
+            in[i][j] = &buf(i, j, 0);
+        }
     }
 
     // Call the original function
-    jpyo0803::Shift(in, amt, M, N);
+    jpyo0803::Shift(in, amt, B, M, N);
 
     // Clean up
+    for (int i = 0; i < B; ++i) {
+        delete[] in[i];
+    }
     delete[] in;
 }
 

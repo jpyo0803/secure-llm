@@ -2,6 +2,7 @@ import numpy as np
 import singleton_timer as st
 import ntl
 import cupy as cp
+import cipher_cpp
 
 # Secure Batch Matrix Multiplication Light version
 
@@ -138,8 +139,8 @@ class SBMM_Light:
         return shift_factor
 
     def __shift_inputs(self, x, y):
-        x += self.shift_amt
-        y += self.shift_amt
+        cipher_cpp.Shift_int32(x, self.shift_amt)
+        cipher_cpp.Shift_int32(y, self.shift_amt)
         return x, y
 
     def __generate_keys(self, K):
@@ -151,7 +152,7 @@ class SBMM_Light:
             0, self.mod - 1, size=(K), dtype=np.uint32)
         b_y = np.random.randint(
             0, self.mod - 1, size=(K), dtype=np.uint32)
-        return a_x, a_y, b_x, b_y 
+        return a_x, a_y, b_x, b_y
 
     def __generate_decryption_metadata(self, x, y, a_x, a_y, b_x, b_y):
         # a_x, a_y: (1,)

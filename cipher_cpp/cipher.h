@@ -34,11 +34,13 @@ void SumByCol(T** in, T* out, int M, int N) {
 }
 
 template <typename T>
-void Shift(T** in, T amt, int M, int N) {
-  #pragma omp parallel for
-  for (int i = 0; i < M; ++i) {
-    for (int j = 0; j < N; ++j) {
-      in[i][j] += amt;
+void Shift(T*** in, T amt, int B, int M, int N) {
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        in[i][j][k] += amt;
+      }
     }
   }
 }
