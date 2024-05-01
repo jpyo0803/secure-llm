@@ -139,6 +139,47 @@ void undo_shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast
     delete[] c_sum_ptrs;
 }
 
+
+void encrypt_tensor_light_wrapper(py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tensor,
+                                  uint32_t a, py::array_t<uint32_t, py::array::c_style | py::array::forcecast> b,
+                                  bool vertical) {
+    // Ensure tensor is a 3D array
+    if (tensor.ndim() != 3) {
+        throw std::runtime_error("Tensor should be a 3D array");
+    }
+
+    int B = tensor.shape(0);
+    int M = tensor.shape(1);
+    int N = tensor.shape(2);
+
+    // Ensure that the size of `b` is consistent with the direction of encryption
+    if ((vertical && b.size() != M) || (!vertical && b.size() != N)) {
+        throw std::runtime_error("Incorrect size for b array");
+    }
+
+    // Accessing the mutable data pointers directly
+    auto buf_tensor = tensor.mutable_unchecked<3>(); // 3D tensor buffer
+    auto b_data = b.mutable_data(); // Direct access to b data
+
+    // Create a pointer array to pass to EncryptTensorLight
+    uint32_t*** tensor_ptrs = new uint32_t**[B];
+    for (int i = 0; i < B; ++i) {
+        tensor_ptrs[i] = new uint32_t*[M];
+        for (int j = 0; j < M; ++j) {
+            tensor_ptrs[i][j] = &buf_tensor(i, j, 0);
+        }
+    }
+
+    // Call EncryptTensorLight with proper arguments
+    jpyo0803::EncryptTensorLight(tensor_ptrs, a, b_data, vertical, B, M, N);
+
+    // Cleanup dynamically allocated memory
+    for (int i = 0; i < B; ++i) {
+        delete[] tensor_ptrs[i];
+    }
+    delete[] tensor_ptrs;
+}
+
 template<typename T>
 void bind_sum_by_row(py::module_& m, const std::string& typestr) {
     m.def(("SumByRow_" + typestr).c_str(), &sum_by_row_wrapper<T>,
@@ -224,6 +265,10 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_randint_2d<int64_t>(m, "int64");
   bind_randint_2d<uint32_t>(m, "uint32");
   bind_randint_2d<uint64_t>(m, "uint64");
+
+  m.def("EncryptTensorLight", &encrypt_tensor_light_wrapper,
+          py::arg("tensor"), py::arg("a"), py::arg("b"), py::arg("vertical"),
+          "Encrypt a tensor using specified parameters");
 
   m.def("EncryptMatrix2D", &jpyo0803::EncryptMatrix2D,
         "EncryptMatrix2D",

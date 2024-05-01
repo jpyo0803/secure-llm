@@ -166,12 +166,7 @@ class SBMM_Light:
         # tensor: (batch_size, K, N), if vertical
         # a: (1,)
         # b: (K,)
-
-        tensor *= a
-        if vertical:
-            tensor += b[np.newaxis, :, np.newaxis]
-        else:
-            tensor += b
+        cipher_cpp.EncryptTensorLight(tensor, a, b, vertical)
         return tensor
 
     def __decrypt_tensor(self, tensor, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor):

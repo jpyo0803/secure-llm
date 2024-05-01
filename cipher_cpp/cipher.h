@@ -109,6 +109,8 @@ std::vector<uint32_t> GenerateKeySetA(uint64_t mod, int n);
 
 std::vector<std::vector<uint32_t>> FindKeyInvModFull(const std::vector<uint32_t>& a_x, const std::vector<uint32_t>& a_y);
 
+void EncryptTensorLight(uint32_t*** tensor, uint32_t a, uint32_t* b, bool vertical, int B, int M, int N);
+
 void EncryptMatrix2D(std::vector<std::vector<uint32_t>>& in, const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, uint64_t m, bool vertical);
 
 void EncryptMatrix2DFull(std::vector<std::vector<uint32_t>>& in, const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, bool vertical);

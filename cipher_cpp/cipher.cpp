@@ -52,6 +52,24 @@ std::vector<uint32_t> GenerateKeySetA(uint64_t mod, int n) {
   return key_set;
 }
 
+void EncryptTensorLight(uint32_t*** tensor, uint32_t a, uint32_t* b, bool vertical, int B, int M, int N) {
+  /*
+    tensor: (B, M, N)
+    a: (1,)
+    b: (N,) if horizontal
+    b: (M,) if vertical
+  */
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        tensor[i][j][k] *= a;
+        tensor[i][j][k] += (vertical ? b[j]: b[k]);
+      }
+    }
+  }
+}
+
 void EncryptMatrix2D(std::vector<std::vector<uint32_t>>& in, const std::vector<uint32_t>& a, const std::vector<uint32_t>& b, uint64_t m, bool vertical = false) {
   int M = in.size();
   int N = in[0].size();
