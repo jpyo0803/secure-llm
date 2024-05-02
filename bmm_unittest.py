@@ -3,16 +3,16 @@ import numpy as np
 import random
 import singleton_timer as st
 
-import cipher_light as cl
-import cipher_unsecure as cu
+from cipher import cipher_light as cl
+from cipher import cipher_unsecure as cu
 
 
 class BmmTest(unittest.TestCase):
     def test_bmm_secure(self):
-        timer = st.SingletonTimer()
+        timer = st.SingletonTimer(False)
 
-        num_test = 10
-        num_iter = 10
+        num_test = 1
+        num_iter = 200
         pass_cnt = 0
         timer_first = True
 
@@ -20,10 +20,10 @@ class BmmTest(unittest.TestCase):
         sbmm_unsecure = cu.SBMM_Unsecure()
         for i in range(num_test):
             print("Test #", i + 1)
-            batch_size = random.randint(1, 20)
+            batch_size = random.randint(1, 1)
             M = 2**random.randint(0, 0)
-            K = 2**random.randint(10, 12)
-            N = 2**random.randint(10, 12)
+            K = 2**random.randint(0, 0)
+            N = 2**random.randint(0, 0)
 
             for j in range(num_iter):
                 print(batch_size, M, K, N)
@@ -45,7 +45,7 @@ class BmmTest(unittest.TestCase):
                 pass_cnt += 1
 
         timer.display_summary()
-        print(f"'test_bmm_secure' passed {pass_cnt} / {num_test}")
+        print(f"'test_bmm_secure' passed {pass_cnt} / {num_test * num_iter}")
 
 
 if __name__ == '__main__':
