@@ -17,6 +17,20 @@ from torch_int.nn.fused import LayerNormQ
 from transformers.utils import logging
 from torch_int.nn.bmm import BMM_S8T_S8N_S8T, BMM_S8T_S8N_F32T
 
+from enum import Enum
+
+
+class ExecutionMode(Enum):
+    Mode1 = 0  # GPU-only, torch-int
+    Mode2 = 1  # GPU-only, Cupy
+    Mode3 = 2  # CPU-only, Numpy
+    Mode4 = 3  # Mixed, regular torch + torch-int
+    Mode5 = 4  # Mixed, Numpy + Cupy
+    Mode6 = 5  # Mixed, Mine (Secure)
+
+my_exec_mode = ExecutionMode.Mode1
+
+
 logger = logging.get_logger(__name__)
 
 
