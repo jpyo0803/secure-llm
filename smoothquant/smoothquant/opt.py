@@ -1,6 +1,3 @@
-import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-
 import torch
 from torch import nn
 from transformers.models.opt.modeling_opt import (
@@ -20,12 +17,9 @@ from torch_int.nn.fused import LayerNormQ
 from transformers.utils import logging
 from torch_int.nn.bmm import BMM_S8T_S8N_S8T, BMM_S8T_S8N_F32T
 
-import cipher as cip
-import numpy as np
-import time
 logger = logging.get_logger(__name__)
 
-global cnt
+
 class Int8OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -38,15 +32,16 @@ class Int8OPTAttention(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
+
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
+
         self.attention_weight_scale = 1.0
 
         self.qk_bmm = BMM_S8T_S8N_F32T(1.0)
-        print("or is this?")
         self.pv_bmm = BMM_S8T_S8N_S8T(1.0)
 
         self.k_proj = W8A8B8O8Linear(embed_dim, embed_dim)
@@ -64,7 +59,6 @@ class Int8OPTAttention(nn.Module):
         v_output_scale: float,
         out_input_scale: float,
     ):
-        print("From float?")
         int8_module = Int8OPTAttention(module.embed_dim, module.num_heads)
         # Fuse the scaling into the q_proj output scale
         q_output_scale = q_output_scale * module.scaling
@@ -116,30 +110,10 @@ class Int8OPTAttention(nn.Module):
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
-     #   print("[Q Proj.]")
-     #   print(f'Act (input): {hidden_states.dtype}')
-     #   print(f'Wgt (input): {self.q_proj.weight.dtype}')
-     #   print(f'Bias (input): {self.q_proj.bias.dtype}')
-        # print("weight: ", self.q_proj.weight)
-        # print("weight size : ", self.q_proj.weight.size())
-        # print("bias: ", self.q_proj.bias)
-        # print("bias sz: ", self.q_proj.bias.size())
-        # print("hidden sz: ", hidden_states.size())
-
-        print("hidden dev2: ", type(hidden_states.device))
-        assert hidden_states.device == torch.device("cpu")
-        hidden_states = hidden_states.to(torch.device("cuda:0"))
-        assert hidden_states.device == torch.device("cuda:0")
         query_states = self.q_proj(hidden_states)
-        assert query_states.device == cuda0_dev
-        query_states = query_states.to(cpu_dev)
-        assert query_states.device == cpu_dev
-        # query_states = cip.BatchUnsecureMatmul(hidden_states)
-    #    print(f'Output (output): {query_states.dtype}')
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
-            assert False
             key_states = past_key_value[0]
             value_states = past_key_value[1]
         elif is_cross_attention:
@@ -148,68 +122,25 @@ class Int8OPTAttention(nn.Module):
             value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            assert False
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
-            assert False
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-     #   print("[K Proj.]")
-     #   print(f'Act (input): {hidden_states.dtype}')
-     #   print(f'Wgt (input): {self.k_proj.weight.dtype}')
-     #   print(f'Bias (input): {self.k_proj.bias.dtype}')
-     #   print(f'Output (output): {key_states.dtype}')
-
-      #  print("[V Proj.]")
-      #  print(f'Act (input): {hidden_states.dtype}')
-     #   print(f'Wgt (input): {self.v_proj.weight.dtype}')
-      #  print(f'Bias (input): {self.v_proj.bias.dtype}')
-     #   print(f'Output (output): {value_states.dtype}')
 
         past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-    #   print("Q shape before : ", query_states.size())
         query_states = self._shape(
             query_states, tgt_len, bsz).view(*proj_shape)
-     #   print("Q shape after : ", query_states.size())
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-
-    #    print("[QK^T]")
-       # print("batch size : ", bsz)
-       # print(f'Q (input): {query_states.dtype}')
-      #  print(f'K (input): {key_states.dtype}')
-       # print(f'Q size: ', query_states.size())
-       # print(f'K size: ', key_states.size())
-        # query_states_np = query_states.to(torch.device("cpu")).numpy()
-        # key_states_np = key_states.to(
-        #     torch.device("cpu")).numpy()
-        # print(query_states)
-        #query_states2 = query_states.clone().detach().to(torch.device("cuda:0"))
-        query_states = query_states.to(cuda0_dev)
-        key_states = key_states.to(cuda0_dev)
         attn_weights = self.qk_bmm(query_states, key_states)
-        attn_weights = attn_weights.to(cpu_dev)
-
-        # key_states_np = np.moveaxis(key_states_np, -1, -2)
-        # print("type : ", self.qk_bmm.a.item())
-        # attn_weights = torch.tensor(
-        #     cip.BatchSecureMatmul(query_states_np, key_states_np, self.qk_bmm.a.item())).to(torch.float32)
-        # attn_weights *= self.qk_bmm.a.item()
-        # print("attn 1 :", attn_weights)
-        # print("attn 2 :", attn_weights2)
-
-        # attn_weights = attn_weights.to(torch.device("cuda:0"))
-     #   print(f'Output (output): {attn_weights.dtype}')
-        # print(f'Running: {time.time()}')
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -222,7 +153,6 @@ class Int8OPTAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attention_mask = attention_mask.to(cpu_dev)
             attn_weights = (
                 attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
                 + attention_mask
@@ -233,10 +163,7 @@ class Int8OPTAttention(nn.Module):
             attn_weights = attn_weights.view(
                 bsz * self.num_heads, tgt_len, src_len)
 
-   #     print("[Softmax]")
-   #     print(f'Attn wgt (input): {attn_weights.dtype}')
         attn_probs = nn.functional.softmax(attn_weights, dim=-1)
-    #    print(f'Attn prob (output): {attn_probs.dtype}')
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -268,16 +195,7 @@ class Int8OPTAttention(nn.Module):
         attn_probs = attn_probs.to(torch.int8)
 
         value_states = value_states.transpose(1, 2).contiguous()
-     #   print("[V Proj.]")
-    #    print(f'Attn probs (input): {attn_probs.dtype}')
-     #   print(f'Value states (input): {value_states.dtype}')
-        attn_probs = attn_probs.to(cuda0_dev)
-        print(value_states)
-        #value_states = value_states.to(cuda0_dev)
         attn_output = self.pv_bmm(attn_probs, value_states)
-        print(value_states)
-        assert False
-    #    print(f'Attn output (output): {attn_output.dtype}')
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -293,11 +211,7 @@ class Int8OPTAttention(nn.Module):
         # partitioned aross GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(
             bsz, tgt_len, self.embed_dim).contiguous()
-
-      #  print("[O Proj.]")
-     #   print(f'Attn output (input): {attn_output.dtype}')
         attn_output = self.out_proj(attn_output)
-      #  print(f'Attn output (output): {attn_output.dtype}')
 
         return attn_output, attn_probs_reshaped, past_key_value
 
@@ -309,7 +223,7 @@ class Int8OPTDecoderLayer(nn.Module):
         self.self_attn = Int8OPTAttention(
             embed_dim=self.embed_dim, num_heads=num_attention_heads
         )
-   #     print("Int8OPTDecoderLayer init()")
+
         self.self_attn_layer_norm = LayerNormQ(self.embed_dim)
         self.fc1 = W8A8B8O8LinearReLU(self.embed_dim, ffn_dim)
         self.fc2 = W8A8BFP32OFP32Linear(ffn_dim, self.embed_dim)
@@ -380,11 +294,7 @@ class Int8OPTDecoderLayer(nn.Module):
 
         # Self Attention
         residual = hidden_states
-     #   print("[Layer Norm Attn]")
-        # print(f'Input (input): {hidden_states.dtype}')
-        # print("hl : ", hidden_states)
-        hidden_states = self.self_attn_layer_norm(hidden_states) # done in CPU
-        # print(f'Output (output): {hidden_states.dtype}')
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -393,25 +303,14 @@ class Int8OPTDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        # print("after")
-        # assert False
 
         residual.add_(hidden_states.to(residual.dtype))
 
-     #   print("[Layer Norm 2]")
-     #   print(f'Input (input): {residual.dtype}')
         hidden_states = self.final_layer_norm(residual)
-      #  print(f'Output (output): {hidden_states.dtype}')
 
-     #   print("[FC 1]")
-     #   print(f'Input (input): {hidden_states.dtype}')
         hidden_states = self.fc1(hidden_states)
-     #   print(f'Output (output): {hidden_states.dtype}')
 
-     #   print("[FC 2]")
-     #   print(f'Input (input): {hidden_states.dtype}')
         hidden_states = self.fc2(hidden_states)
-     #   print(f'Output (output): {hidden_states.dtype}')
 
         residual.add_(hidden_states.to(residual.dtype))
 
@@ -433,7 +332,6 @@ class Int8OPTDecoder(OPTPreTrainedModel):
     """
 
     def __init__(self, config):
-        #    print("Int8OPTDecoder init()")
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
@@ -540,7 +438,6 @@ class Int8OPTDecoder(OPTPreTrainedModel):
 
 class Int8OPTModel(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):
-      #  print("Int8OPTModel init()")
         super().__init__(config)
         self.decoder = Int8OPTDecoder(config)
         # Initialize weights and apply final processing
@@ -565,7 +462,6 @@ class Int8OPTForCausalLM(OPTPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-     #   print("Int8OPTForCausalLM init()")
         self.model = Int8OPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
@@ -578,7 +474,6 @@ class Int8OPTForCausalLM(OPTPreTrainedModel):
 
     @staticmethod
     def from_float(module, decoder_layer_scales):
-      #  print("Int8OPTForCausalLM from_float()")
         int8_module = Int8OPTForCausalLM(module.config)
         int8_module.model = Int8OPTModel.from_float(
             module.model, decoder_layer_scales)
