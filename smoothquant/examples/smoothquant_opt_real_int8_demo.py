@@ -13,11 +13,6 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 timer = st.SingletonTimer(False)
 
-my_exec_mode = smoothquant.opt.my_exec_mode
-print("My Exec Mode: ", my_exec_mode) # not good way, fix it later
-
-start_gpu = my_exec_mode == (smoothquant.opt.ExecutionMode.Mode1 or smoothquant.opt.ExecutionMode.Mode2)
-print("Start GPU: ", start_gpu)
 
 class Evaluator:
     def __init__(self, dataset, tokenizer):
@@ -54,7 +49,7 @@ class Evaluator:
             start.record()
             iter += 1
             print("Iter: ", iter)
-            t = timer.start(tag='Test', category='Test', exclude = iter <= 1)
+            t = timer.start(tag='Test', category='Test', exclude=iter <= 1)
             outputs = model(input_ids)
             timer.end(t)
             end.record()
@@ -89,9 +84,16 @@ tokenizer = GPT2Tokenizer.from_pretrained('facebook/opt-30b')
 dataset = load_dataset('lambada', split='validation[:50]')
 evaluator = Evaluator(dataset, tokenizer)
 
+Int8OPTForCausalLM.set_exec_mode(smoothquant.opt.ExecutionMode.Mode2)
+
+start_gpu = (smoothquant.opt.my_exec_mode ==
+             smoothquant.opt.ExecutionMode.Mode1) or (smoothquant.opt.my_exec_mode == smoothquant.opt.ExecutionMode.Mode2)
+print("My Exec Mode: ", smoothquant.opt.my_exec_mode)
+print("Start GPU: ", start_gpu)
 
 model_smoothquant = Int8OPTForCausalLM.from_pretrained(
     'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float16, device_map='cuda:0' if start_gpu else 'cpu')
+
 print_model_size(model_smoothquant)
 acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)
 print(

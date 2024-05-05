@@ -17,6 +17,10 @@ from torch_int.nn.fused import LayerNormQ
 from transformers.utils import logging
 from torch_int.nn.bmm import BMM_S8T_S8N_S8T, BMM_S8T_S8N_F32T
 
+import cupy as cp
+import time
+import cipher.tensor_conversion as tc
+
 from enum import Enum
 
 
@@ -28,7 +32,8 @@ class ExecutionMode(Enum):
     Mode5 = 4  # Mixed, Numpy + Cupy
     Mode6 = 5  # Mixed, Mine (Secure)
 
-my_exec_mode = ExecutionMode.Mode1
+
+my_exec_mode = None
 
 
 logger = logging.get_logger(__name__)
@@ -63,6 +68,13 @@ class Int8OPTAttention(nn.Module):
         self.q_proj = W8A8B8O8Linear(embed_dim, embed_dim)
         self.out_proj = W8A8BFP32OFP32Linear(embed_dim, embed_dim)
 
+        self.q_proj_weight_mode2 = None
+        self.k_proj_weight_mode2 = None
+        self.k_proj_bias_mode2 = None
+        self.v_proj_weight_mode2 = None
+        self.v_proj_bias_mode2 = None
+        self.out_proj_weight_mode2 = None
+
     @staticmethod
     @torch.no_grad()
     def from_float(
@@ -78,6 +90,7 @@ class Int8OPTAttention(nn.Module):
         q_output_scale = q_output_scale * module.scaling
         module.q_proj.weight *= module.scaling
         module.q_proj.bias *= module.scaling
+
         int8_module.q_proj = W8A8B8O8Linear.from_float(
             module.q_proj, input_scale, q_output_scale
         )
@@ -116,6 +129,7 @@ class Int8OPTAttention(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        global my_exec_mode
         """Input shape: Batch x Time x Channel"""
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -124,26 +138,75 @@ class Int8OPTAttention(nn.Module):
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states)
+        if my_exec_mode == ExecutionMode.Mode1:
+            query_states = self.q_proj(hidden_states)
+        elif my_exec_mode == ExecutionMode.Mode2:
+            '''
+                GEMM computes C = alpha A * B + beta C, where A, B, and C are matrices.  
+                A is an M-by-K matrix, B is a K-by-N matrix, and C is an M-by-N matrix
+            '''
+            if self.q_proj_weight_mode2 is None:
+                self.q_proj_weight_mode2 = tc.FromTorchToCupy(
+                    self.q_proj.weight.transpose(0, 1).to(torch.int32))
+
+            hidden_states_cp = tc.FromTorchToCupy(
+                hidden_states.to(torch.int32))
+            query_states = cp.matmul(
+                hidden_states_cp, self.q_proj_weight_mode2)
+            query_states = tc.FromCupyToTorch(query_states).to(
+                torch.float32) * float(self.q_proj.a.item())
+            query_states += self.q_proj.bias * float(self.q_proj.b.item())
+            query_states = query_states.to(torch.int8)
+
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
+            assert False
             key_states = past_key_value[0]
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
+            assert False
             key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
             value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
         elif past_key_value is not None:
             # reuse k, v, self_attention
+            assert False
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            if my_exec_mode == ExecutionMode.Mode1:
+                key_states = self.k_proj(hidden_states)
+                value_states = self.v_proj(hidden_states)
+            elif my_exec_mode == ExecutionMode.Mode2:
+                if self.k_proj_weight_mode2 is None:
+                    self.k_proj_weight_mode2 = tc.FromTorchToCupy(
+                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.v_proj_weight_mode2 = tc.FromTorchToCupy(
+                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.k_proj_bias_mode2 = self.k_proj.bias.to(torch.float32)
+                    self.v_proj_bias_mode2 = self.v_proj.bias.to(torch.float32)
+                key_states = cp.matmul(
+                    hidden_states_cp, self.k_proj_weight_mode2)
+                key_states = tc.FromCupyToTorch(key_states).to(
+                    torch.float32) * float(self.k_proj.a.item())
+                key_states += self.k_proj_bias_mode2 * \
+                    float(self.k_proj.b.item())
+                key_states = key_states.to(torch.int8)
+
+                value_states = cp.matmul(
+                    hidden_states_cp, self.v_proj_weight_mode2)
+                value_states = tc.FromCupyToTorch(value_states).to(
+                    torch.float32) * float(self.v_proj.a.item())
+                value_states += self.v_proj_bias_mode2 * \
+                    float(self.v_proj.b.item())
+                value_states = value_states.to(torch.int8)
+
+            key_states = self._shape(key_states, -1, bsz)
+            value_states = self._shape(value_states, -1, bsz)
 
         past_key_value = (key_states, value_states)
 
@@ -154,7 +217,21 @@ class Int8OPTAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-        attn_weights = self.qk_bmm(query_states, key_states)
+        '''
+            QK BMM
+            Input: query_states, key_states are torch.int8
+            Output: attn_weights is torch.float32
+        '''
+        if my_exec_mode == ExecutionMode.Mode1:
+            attn_weights = self.qk_bmm(query_states, key_states)
+        elif my_exec_mode == ExecutionMode.Mode2:
+            query_states_cp = tc.FromTorchToCupy(query_states.to(torch.int32))
+            key_states_cp = tc.FromTorchToCupy(
+                key_states.to(torch.int32)).transpose(0, 2, 1)
+            attn_weights = cp.matmul(query_states_cp, key_states_cp)
+            attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
+            attn_weights *= float(self.qk_bmm.a.item())
+            assert attn_weights.dtype == torch.float32
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -209,7 +286,17 @@ class Int8OPTAttention(nn.Module):
         attn_probs = attn_probs.to(torch.int8)
 
         value_states = value_states.transpose(1, 2).contiguous()
-        attn_output = self.pv_bmm(attn_probs, value_states)
+
+        if my_exec_mode == ExecutionMode.Mode1:
+            attn_output = self.pv_bmm(attn_probs, value_states)
+        elif my_exec_mode == ExecutionMode.Mode2:
+            attn_probs_cp = tc.FromTorchToCupy(attn_probs.to(torch.int32))
+            value_states_cp = tc.FromTorchToCupy(
+                value_states.to(torch.int32)).transpose(0, 2, 1)
+            attn_output = cp.matmul(attn_probs_cp, value_states_cp)
+            attn_output = tc.FromCupyToTorch(attn_output).to(
+                torch.float32) * float(self.pv_bmm.a.item())
+            attn_output = attn_output.to(torch.int8)
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -225,7 +312,19 @@ class Int8OPTAttention(nn.Module):
         # partitioned aross GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(
             bsz, tgt_len, self.embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
+
+        if my_exec_mode == ExecutionMode.Mode1:
+            attn_output = self.out_proj(attn_output)
+        elif my_exec_mode == ExecutionMode.Mode2:
+            if self.out_proj_weight_mode2 is None:
+                self.out_proj_weight_mode2 = tc.FromTorchToCupy(
+                    self.out_proj.weight.transpose(0, 1).to(torch.int32))
+            attn_output_cp = tc.FromTorchToCupy(attn_output.to(torch.int32))
+            attn_output = cp.matmul(attn_output_cp, self.out_proj_weight_mode2)
+            attn_output = tc.FromCupyToTorch(attn_output).to(
+                torch.float32) * float(self.out_proj.a.item())
+            attn_output += self.out_proj.bias
+            assert attn_output.dtype == torch.float32
 
         return attn_output, attn_probs_reshaped, past_key_value
 
@@ -242,6 +341,13 @@ class Int8OPTDecoderLayer(nn.Module):
         self.fc1 = W8A8B8O8LinearReLU(self.embed_dim, ffn_dim)
         self.fc2 = W8A8BFP32OFP32Linear(ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNormQ(self.embed_dim)
+
+        self.fc1_weight_mode2 = None
+        self.fc1_bias_mode2 = None
+        self.fc1_relu = nn.ReLU()
+
+        self.fc2_weight_mode2 = None
+        self.fc2_bias_mode2 = None
 
     @staticmethod
     def from_float(
@@ -322,9 +428,37 @@ class Int8OPTDecoderLayer(nn.Module):
 
         hidden_states = self.final_layer_norm(residual)
 
-        hidden_states = self.fc1(hidden_states)
+        if my_exec_mode == ExecutionMode.Mode1:
+            hidden_states = self.fc1(hidden_states)
+        elif my_exec_mode == ExecutionMode.Mode2:
+            if self.fc1_weight_mode2 is None:
+                self.fc1_weight_mode2 = tc.FromTorchToCupy(
+                    self.fc1.weight.transpose(0, 1).to(torch.int32))
+                self.fc1_bias_mode2 = self.fc1.bias.to(torch.float32)
+            hidden_states_cp = tc.FromTorchToCupy(
+                hidden_states.to(torch.int32))
+            hidden_states_cp = cp.matmul(
+                hidden_states_cp, self.fc1_weight_mode2)
+            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
+                torch.float32) * float(self.fc1.a.item())
+            hidden_states += self.fc1_bias_mode2 * float(self.fc1.b.item())
+            hidden_states = self.fc1_relu(hidden_states)
+            hidden_states = hidden_states.to(torch.int8)
 
-        hidden_states = self.fc2(hidden_states)
+        if my_exec_mode == ExecutionMode.Mode1:
+            hidden_states = self.fc2(hidden_states)
+        elif my_exec_mode == ExecutionMode.Mode2:
+            if self.fc2_weight_mode2 is None:
+                self.fc2_weight_mode2 = tc.FromTorchToCupy(
+                    self.fc2.weight.transpose(0, 1).to(torch.int32))
+                self.fc2_bias_mode2 = self.fc2.bias.to(torch.float32)
+            hidden_states_cp = tc.FromTorchToCupy(
+                hidden_states.to(torch.int32))
+            hidden_states_cp = cp.matmul(
+                hidden_states_cp, self.fc2_weight_mode2)
+            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
+                torch.float32) * float(self.fc2.a.item())
+            hidden_states += self.fc2_bias_mode2
 
         residual.add_(hidden_states.to(residual.dtype))
 
@@ -503,3 +637,8 @@ class Int8OPTForCausalLM(OPTPreTrainedModel):
     forward = OPTForCausalLM.forward
     prepare_inputs_for_generation = OPTForCausalLM.prepare_inputs_for_generation
     _reorder_cache = OPTForCausalLM._reorder_cache
+
+    @staticmethod
+    def set_exec_mode(exec_mode):
+        global my_exec_mode
+        my_exec_mode = exec_mode
