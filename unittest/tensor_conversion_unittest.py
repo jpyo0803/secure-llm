@@ -7,8 +7,8 @@ import random
 import singleton_timer as st
 
 num_test = 13
-M = 2**10
-N = 2**10
+M = 2**13
+N = 2**13
 
 def test_from_numpy_to_cupy():
     timer = st.SingletonTimer()
@@ -90,6 +90,7 @@ def test_from_torch_to_numpy():
         timer.end(t)
 
         pass_cnt += 1
+    print(f"'from_torch_to_numpy' passed {pass_cnt} / {num_test}")
 
 
 def test_from_numpy_to_torch():
@@ -106,6 +107,7 @@ def test_from_numpy_to_torch():
         timer.end(t)
 
         pass_cnt += 1
+    print(f"'from_numpy_to_torch' passed {pass_cnt} / {num_test}")
 
 def test_from_cpu_to_gpu_torch():
     timer = st.SingletonTimer()
@@ -122,6 +124,7 @@ def test_from_cpu_to_gpu_torch():
         timer.end(t)
 
         pass_cnt += 1
+    print(f"'from_cpu_to_gpu_torch' passed {pass_cnt} / {num_test}")
 
 def test_from_gpu_to_cpu_torch():
     timer = st.SingletonTimer()
@@ -138,6 +141,7 @@ def test_from_gpu_to_cpu_torch():
         timer.end(t)
 
         pass_cnt += 1
+    print(f"'from_gpu_to_cpu_torch' passed {pass_cnt} / {num_test}")
 
 
 if __name__ == '__main__':
