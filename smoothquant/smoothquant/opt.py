@@ -68,19 +68,31 @@ class Int8OPTAttention(nn.Module):
         self.q_proj = W8A8B8O8Linear(embed_dim, embed_dim)
         self.out_proj = W8A8BFP32OFP32Linear(embed_dim, embed_dim)
 
-        self.q_proj_weight_mode2 = None
-        self.k_proj_weight_mode2 = None
-        self.k_proj_bias_mode2 = None
-        self.v_proj_weight_mode2 = None
-        self.v_proj_bias_mode2 = None
-        self.out_proj_weight_mode2 = None
+        global my_exec_mode
 
-        self.q_proj_weight_mode3 = None
-        self.k_proj_weight_mode3 = None
-        self.k_proj_bias_mode3 = None
-        self.v_proj_weight_mode3 = None
-        self.v_proj_bias_mode3 = None
-        self.out_proj_weight_mode3 = None
+        if my_exec_mode == ExecutionMode.Mode2:
+            self.q_proj_weight_mode2 = None
+            self.k_proj_weight_mode2 = None
+            self.k_proj_bias_mode2 = None
+            self.v_proj_weight_mode2 = None
+            self.v_proj_bias_mode2 = None
+            self.out_proj_weight_mode2 = None
+        elif my_exec_mode == ExecutionMode.Mode3:
+            self.q_proj_weight_mode3 = None
+            self.k_proj_weight_mode3 = None
+            self.k_proj_bias_mode3 = None
+            self.v_proj_weight_mode3 = None
+            self.v_proj_bias_mode3 = None
+            self.out_proj_weight_mode3 = None
+        elif my_exec_mode == ExecutionMode.Mode4:
+            pass
+        elif my_exec_mode == ExecutionMode.Mode5:
+            self.q_proj_weight_mode5 = None
+            self.k_proj_weight_mode5 = None
+            self.k_proj_bias_mode5 = None
+            self.v_proj_weight_mode5 = None
+            self.v_proj_bias_mode5 = None
+            self.out_proj_weight_mode5 = None
 
     @staticmethod
     @torch.no_grad()
@@ -177,6 +189,29 @@ class Int8OPTAttention(nn.Module):
                 torch.float32) * float(self.q_proj.a.item())
             query_states += self.q_proj.bias * float(self.q_proj.b.item())
             query_states = query_states.to(torch.int8)
+        elif my_exec_mode == ExecutionMode.Mode4:
+            pass
+        elif my_exec_mode == ExecutionMode.Mode5:
+            '''
+                Here what it has to do is similar to the mode 2 but the necessary data must 
+                be transferred from CPU to GPU and the result from GPU to CPU 
+            '''
+            if self.q_proj_weight_mode5 is None:
+                self.q_proj_weight_mode5 = tc.FromNumpyToCupy(
+                    tc.FromTorchToNumpy(self.q_proj.weight.transpose(0, 1))).astype(cp.int32)
+                self.q_proj.bias = tc.FromCpuToGPUTorch(self.q_proj.bias)
+
+            assert hidden_states.device == torch.device('cpu')
+            hidden_states_cp = tc.FromNumpyToCupy(
+                tc.FromTorchToNumpy(hidden_states)).astype(cp.int32)
+            query_states = cp.matmul(
+                hidden_states_cp, self.q_proj_weight_mode5)
+            query_states = tc.FromCupyToTorch(query_states).to(
+                torch.float32) * float(self.q_proj.a.item())
+            query_states += self.q_proj.bias * float(self.q_proj.b.item())
+            query_states = query_states.to(torch.int8)
+            query_states = query_states.to(torch.device('cpu'))
+            assert query_states.device == torch.device('cpu')
 
             # get key, value proj
         if is_cross_attention and past_key_value is not None:
@@ -224,13 +259,13 @@ class Int8OPTAttention(nn.Module):
                         self.k_proj.weight.transpose(0, 1).to(torch.int32))
                     self.v_proj_weight_mode3 = tc.FromTorchToNumpy(
                         self.v_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
-                    self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
+                    # self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
+                    # self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
                 key_states = np.matmul(
                     hidden_states_np, self.k_proj_weight_mode3)
                 key_states = tc.FromNumpyToTorch(key_states).to(
                     torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj_bias_mode3 * \
+                key_states += self.k_proj.bias * \
                     float(self.k_proj.b.item())
                 key_states = key_states.to(torch.int8)
 
@@ -238,9 +273,37 @@ class Int8OPTAttention(nn.Module):
                     hidden_states_np, self.v_proj_weight_mode3)
                 value_states = tc.FromNumpyToTorch(value_states).to(
                     torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj_bias_mode3 * \
+                value_states += self.v_proj.bias * \
                     float(self.v_proj.b.item())
                 value_states = value_states.to(torch.int8)
+
+            elif my_exec_mode == ExecutionMode.Mode4:
+                pass
+            elif my_exec_mode == ExecutionMode.Mode5:
+                if self.k_proj_weight_mode5 is None:
+                    assert False, "Should be reach here"
+                    self.k_proj_weight_mode5 = tc.FromNumpyToCupy(
+                        tc.FromTorchToNumpy(self.k_proj.weight.transpose(0, 1))).astype(cp.int32)
+                    self.v_proj_weight_mode5 = tc.FromNumpyToCupy(
+                        tc.FromTorchToNumpy(self.v_proj.weight.transpose(0, 1))).astype(cp.int32)
+                    self.k_proj.bias = tc.FromCpuToGPUTorch(self.k_proj.bias)
+                    self.v_proj.bias = tc.FromCpuToGPUTorch(self.v_proj.bias)
+
+                key_states = cp.matmul(
+                    hidden_states_cp, self.k_proj_weight_mode5)
+                key_states = tc.FromCupyToTorch(key_states).to(
+                    torch.float32) * float(self.k_proj.a.item())
+                key_states += self.k_proj.bias * float(self.k_proj.b.item())
+                key_states = key_states.to(torch.int8)
+                # key_states = key_states.to(torch.device('cpu'))
+
+                value_states = cp.matmul(
+                    hidden_states_cp, self.v_proj_weight_mode5)
+                value_states = tc.FromCupyToTorch(value_states).to(
+                    torch.float32) * float(self.v_proj.a.item())
+                value_states += self.v_proj.bias * float(self.v_proj.b.item())
+                value_states = value_states.to(torch.int8)
+                # value_states = value_states.to(torch.device('cpu'))
 
             key_states = self._shape(key_states, -1, bsz)
             value_states = self._shape(value_states, -1, bsz)
@@ -280,26 +343,58 @@ class Int8OPTAttention(nn.Module):
                         self.k_proj.weight.transpose(0, 1).to(torch.int32))
                     self.v_proj_weight_mode3 = tc.FromTorchToNumpy(
                         self.v_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
-                    self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
+                    # self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
+                    # self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
                 key_states = np.matmul(
                     hidden_states_np, self.k_proj_weight_mode3)
                 key_states = tc.FromNumpyToTorch(key_states).to(
                     torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj_bias_mode3 * \
+                key_states += self.k_proj.bias * \
                     float(self.k_proj.b.item())
 
                 value_states = np.matmul(
                     hidden_states_np, self.v_proj_weight_mode3)
                 value_states = tc.FromNumpyToTorch(value_states).to(
                     torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj_bias_mode3 * \
+                value_states += self.v_proj.bias * \
                     float(self.v_proj.b.item())
+                value_states = value_states.to(torch.int8)
+            
+            elif my_exec_mode == ExecutionMode.Mode4:
+                pass
+            elif my_exec_mode == ExecutionMode.Mode5:
+                if self.k_proj_weight_mode5 is None:
+                    self.k_proj_weight_mode5 = tc.FromNumpyToCupy(
+                        tc.FromTorchToNumpy(self.k_proj.weight.transpose(0, 1))).astype(cp.int32)
+                    self.v_proj_weight_mode5 = tc.FromNumpyToCupy(
+                        tc.FromTorchToNumpy(self.v_proj.weight.transpose(0, 1))).astype(cp.int32)
+                    self.k_proj.bias = tc.FromCpuToGPUTorch(self.k_proj.bias)
+                    self.v_proj.bias = tc.FromCpuToGPUTorch(self.v_proj.bias)
+
+                key_states = cp.matmul(
+                    hidden_states_cp, self.k_proj_weight_mode5)
+                key_states = tc.FromCupyToTorch(key_states).to(
+                    torch.float32) * float(self.k_proj.a.item())
+                key_states += self.k_proj.bias * float(self.k_proj.b.item())
+                key_states = key_states.to(torch.int8)
+
+                value_states = cp.matmul(
+                    hidden_states_cp, self.v_proj_weight_mode5)
+                value_states = tc.FromCupyToTorch(value_states).to(
+                    torch.float32) * float(self.v_proj.a.item())
+                value_states += self.v_proj.bias * float(self.v_proj.b.item())
                 value_states = value_states.to(torch.int8)
 
             key_states = self._shape(key_states, -1, bsz)
             value_states = self._shape(value_states, -1, bsz)
 
+
+        '''
+            'past_key_value' 
+            Mode2: cuda:0
+            Mode3: cpu
+            Mode5: cuda:0
+        '''
         past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
@@ -332,6 +427,17 @@ class Int8OPTAttention(nn.Module):
             attn_weights = tc.FromNumpyToTorch(attn_weights).to(torch.float32)
             attn_weights *= float(self.qk_bmm.a.item())
             assert attn_weights.dtype == torch.float32
+        elif my_exec_mode == ExecutionMode.Mode4:
+            pass
+        elif my_exec_mode == ExecutionMode.Mode5:
+            query_states_cp = tc.FromTorchToCupy(tc.FromCpuToGPUTorch(query_states)).astype(cp.int32)
+            key_states_cp = tc.FromTorchToCupy(key_states.to(torch.int32)).transpose(0, 2, 1)
+            attn_weights = cp.matmul(query_states_cp, key_states_cp)
+            attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
+            attn_weights *= float(self.qk_bmm.a.item())
+            attn_weights = tc.FromGpuToCpuTorch(attn_weights)
+            assert attn_weights.dtype == torch.float32
+            assert attn_weights.device == torch.device('cpu')
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -405,6 +511,17 @@ class Int8OPTAttention(nn.Module):
             attn_output = tc.FromNumpyToTorch(attn_output).to(
                 torch.float32) * float(self.pv_bmm.a.item())
             attn_output = attn_output.to(torch.int8)
+        elif my_exec_mode == ExecutionMode.Mode4:
+            pass
+        elif my_exec_mode == ExecutionMode.Mode5:
+            attn_probs_cp = tc.FromTorchToCupy(tc.FromCpuToGPUTorch(attn_probs)).astype(cp.int32)
+            value_states_cp = tc.FromTorchToCupy(value_states.to(torch.int32)).transpose(0, 2, 1)
+            attn_output = cp.matmul(attn_probs_cp, value_states_cp)
+            attn_output = tc.FromCupyToTorch(attn_output).to(
+                torch.float32) * float(self.pv_bmm.a.item())
+            attn_output = attn_output.to(torch.int8)
+            attn_output = attn_output.to(torch.device('cpu'))
+            assert attn_output.device == torch.device('cpu')
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -443,6 +560,22 @@ class Int8OPTAttention(nn.Module):
                 torch.float32) * float(self.out_proj.a.item())
             attn_output += self.out_proj.bias
             assert attn_output.dtype == torch.float32
+        elif my_exec_mode == ExecutionMode.Mode4:
+            pass
+        elif my_exec_mode == ExecutionMode.Mode5:
+            if self.out_proj_weight_mode5 is None:
+                self.out_proj_weight_mode5 = tc.FromNumpyToCupy(
+                    tc.FromTorchToNumpy(self.out_proj.weight.transpose(0, 1))).astype(cp.int32)
+                self.out_proj.bias = tc.FromCpuToGPUTorch(self.out_proj.bias)
+
+            attn_output_cp = tc.FromNumpyToCupy(tc.FromTorchToNumpy(attn_output)).astype(cp.int32)
+            attn_output = cp.matmul(attn_output_cp, self.out_proj_weight_mode5)
+            attn_output = tc.FromCupyToTorch(attn_output).to(
+                torch.float32) * float(self.out_proj.a.item())
+            attn_output += self.out_proj.bias
+            attn_output = attn_output.to(torch.device('cpu'))
+            assert attn_output.device == torch.device('cpu')
+            assert attn_output.dtype == torch.float32
 
         return attn_output, attn_probs_reshaped, past_key_value
 
@@ -459,7 +592,7 @@ class Int8OPTDecoderLayer(nn.Module):
         self.fc1 = W8A8B8O8LinearReLU(self.embed_dim, ffn_dim)
         self.fc2 = W8A8BFP32OFP32Linear(ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNormQ(self.embed_dim)
-        
+
         self.fc1_relu = nn.ReLU()
 
         self.fc1_weight_mode2 = None
@@ -471,6 +604,11 @@ class Int8OPTDecoderLayer(nn.Module):
         self.fc1_bias_mode3 = None
         self.fc2_weight_mode3 = None
         self.fc2_bias_mode3 = None
+        
+        self.fc1_weight_mode5 = None
+        self.fc1_bias_mode5 = None
+        self.fc2_weight_mode5 = None
+        self.fc2_bias_mode5 = None
 
     @staticmethod
     def from_float(
@@ -546,7 +684,7 @@ class Int8OPTDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-
+    
         residual.add_(hidden_states.to(residual.dtype))
 
         hidden_states = self.final_layer_norm(residual)
@@ -581,6 +719,26 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states += self.fc1_bias_mode3 * float(self.fc1.b.item())
             hidden_states = self.fc1_relu(hidden_states)
             hidden_states = hidden_states.to(torch.int8)
+        elif my_exec_mode == ExecutionMode.Mode4:
+            pass
+        elif my_exec_mode == ExecutionMode.Mode5:
+            if self.fc1_weight_mode5 is None:
+                self.fc1_weight_mode5 = tc.FromNumpyToCupy(
+                    tc.FromTorchToNumpy(self.fc1.weight.transpose(0, 1))).astype(cp.int32)
+                self.fc1_bias_mode5 = tc.FromCpuToGPUTorch(self.fc1.bias).to(torch.float32)
+
+            assert hidden_states.device == torch.device('cpu')
+            hidden_states_cp = tc.FromNumpyToCupy(
+                tc.FromTorchToNumpy(hidden_states)).astype(cp.int32)
+            hidden_states_cp = cp.matmul(
+                hidden_states_cp, self.fc1_weight_mode5)
+            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
+                torch.float32) * float(self.fc1.a.item())
+            hidden_states += self.fc1_bias_mode5 * float(self.fc1.b.item())
+            hidden_states = self.fc1_relu(hidden_states)
+            hidden_states = hidden_states.to(torch.int8)
+            hidden_states = hidden_states.to(torch.device('cpu'))
+            assert hidden_states.device == torch.device('cpu')
 
         if my_exec_mode == ExecutionMode.Mode1:
             hidden_states = self.fc2(hidden_states)
@@ -608,6 +766,24 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = tc.FromNumpyToTorch(hidden_states_np).to(
                 torch.float32) * float(self.fc2.a.item())
             hidden_states += self.fc2_bias_mode3
+        elif my_exec_mode == ExecutionMode.Mode4:
+            pass
+        elif my_exec_mode == ExecutionMode.Mode5:
+            if self.fc2_weight_mode5 is None:
+                self.fc2_weight_mode5 = tc.FromNumpyToCupy(
+                    tc.FromTorchToNumpy(self.fc2.weight.transpose(0, 1))).astype(cp.int32)
+                self.fc2_bias_mode5 = tc.FromCpuToGPUTorch(self.fc2.bias).to(torch.float32)
+
+            assert hidden_states.device == torch.device('cpu')
+            hidden_states_cp = tc.FromNumpyToCupy(
+                tc.FromTorchToNumpy(hidden_states)).astype(cp.int32)
+            hidden_states_cp = cp.matmul(
+                hidden_states_cp, self.fc2_weight_mode5)
+            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
+                torch.float32) * float(self.fc2.a.item())
+            hidden_states += self.fc2_bias_mode5
+            hidden_states = hidden_states.to(torch.device('cpu'))
+            assert hidden_states.device == torch.device('cpu')
 
         residual.add_(hidden_states.to(residual.dtype))
 
