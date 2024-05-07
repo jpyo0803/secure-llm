@@ -18,6 +18,7 @@ from transformers.utils import logging
 from torch_int.nn.bmm import BMM_S8T_S8N_S8T, BMM_S8T_S8N_F32T
 
 import cupy as cp
+import numpy as np
 import time
 import cipher.tensor_conversion as tc
 
@@ -73,6 +74,13 @@ class Int8OPTAttention(nn.Module):
         self.v_proj_weight_mode2 = None
         self.v_proj_bias_mode2 = None
         self.out_proj_weight_mode2 = None
+
+        self.q_proj_weight_mode3 = None
+        self.k_proj_weight_mode3 = None
+        self.k_proj_bias_mode3 = None
+        self.v_proj_weight_mode3 = None
+        self.v_proj_bias_mode3 = None
+        self.out_proj_weight_mode3 = None
 
     @staticmethod
     @torch.no_grad()
@@ -156,8 +164,21 @@ class Int8OPTAttention(nn.Module):
                 torch.float32) * float(self.q_proj.a.item())
             query_states += self.q_proj.bias * float(self.q_proj.b.item())
             query_states = query_states.to(torch.int8)
+        elif my_exec_mode == ExecutionMode.Mode3:
+            if self.q_proj_weight_mode3 is None:
+                self.q_proj_weight_mode3 = tc.FromTorchToNumpy(
+                    self.q_proj.weight.transpose(0, 1).to(torch.int32))
 
-        # get key, value proj
+            hidden_states_np = tc.FromTorchToNumpy(
+                hidden_states.to(torch.int32))
+            query_states = np.matmul(
+                hidden_states_np, self.q_proj_weight_mode3)
+            query_states = tc.FromNumpyToTorch(query_states).to(
+                torch.float32) * float(self.q_proj.a.item())
+            query_states += self.q_proj.bias * float(self.q_proj.b.item())
+            query_states = query_states.to(torch.int8)
+
+            # get key, value proj
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
             assert False
@@ -197,6 +218,30 @@ class Int8OPTAttention(nn.Module):
                     float(self.v_proj.b.item())
                 value_states = value_states.to(torch.int8)
 
+            elif my_exec_mode == ExecutionMode.Mode3:
+                if self.k_proj_weight_mode3 is None:
+                    self.k_proj_weight_mode3 = tc.FromTorchToNumpy(
+                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.v_proj_weight_mode3 = tc.FromTorchToNumpy(
+                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
+                    self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
+                key_states = np.matmul(
+                    hidden_states_np, self.k_proj_weight_mode3)
+                key_states = tc.FromNumpyToTorch(key_states).to(
+                    torch.float32) * float(self.k_proj.a.item())
+                key_states += self.k_proj_bias_mode3 * \
+                    float(self.k_proj.b.item())
+                key_states = key_states.to(torch.int8)
+
+                value_states = np.matmul(
+                    hidden_states_np, self.v_proj_weight_mode3)
+                value_states = tc.FromNumpyToTorch(value_states).to(
+                    torch.float32) * float(self.v_proj.a.item())
+                value_states += self.v_proj_bias_mode3 * \
+                    float(self.v_proj.b.item())
+                value_states = value_states.to(torch.int8)
+
             key_states = self._shape(key_states, -1, bsz)
             value_states = self._shape(value_states, -1, bsz)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
@@ -229,6 +274,28 @@ class Int8OPTAttention(nn.Module):
                 value_states += self.v_proj_bias_mode2 * \
                     float(self.v_proj.b.item())
                 value_states = value_states.to(torch.int8)
+            elif my_exec_mode == ExecutionMode.Mode3:
+                if self.k_proj_weight_mode3 is None:
+                    self.k_proj_weight_mode3 = tc.FromTorchToNumpy(
+                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.v_proj_weight_mode3 = tc.FromTorchToNumpy(
+                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
+                    self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
+                key_states = np.matmul(
+                    hidden_states_np, self.k_proj_weight_mode3)
+                key_states = tc.FromNumpyToTorch(key_states).to(
+                    torch.float32) * float(self.k_proj.a.item())
+                key_states += self.k_proj_bias_mode3 * \
+                    float(self.k_proj.b.item())
+
+                value_states = np.matmul(
+                    hidden_states_np, self.v_proj_weight_mode3)
+                value_states = tc.FromNumpyToTorch(value_states).to(
+                    torch.float32) * float(self.v_proj.a.item())
+                value_states += self.v_proj_bias_mode3 * \
+                    float(self.v_proj.b.item())
+                value_states = value_states.to(torch.int8)
 
             key_states = self._shape(key_states, -1, bsz)
             value_states = self._shape(value_states, -1, bsz)
@@ -255,6 +322,14 @@ class Int8OPTAttention(nn.Module):
                 key_states.to(torch.int32)).transpose(0, 2, 1)
             attn_weights = cp.matmul(query_states_cp, key_states_cp)
             attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
+            attn_weights *= float(self.qk_bmm.a.item())
+            assert attn_weights.dtype == torch.float32
+        elif my_exec_mode == ExecutionMode.Mode3:
+            query_states_np = tc.FromTorchToNumpy(query_states.to(torch.int32))
+            key_states_np = tc.FromTorchToNumpy(
+                key_states.to(torch.int32)).transpose(0, 2, 1)
+            attn_weights = np.matmul(query_states_np, key_states_np)
+            attn_weights = tc.FromNumpyToTorch(attn_weights).to(torch.float32)
             attn_weights *= float(self.qk_bmm.a.item())
             assert attn_weights.dtype == torch.float32
 
@@ -322,6 +397,14 @@ class Int8OPTAttention(nn.Module):
             attn_output = tc.FromCupyToTorch(attn_output).to(
                 torch.float32) * float(self.pv_bmm.a.item())
             attn_output = attn_output.to(torch.int8)
+        elif my_exec_mode == ExecutionMode.Mode3:
+            attn_probs_np = tc.FromTorchToNumpy(attn_probs.to(torch.int32))
+            value_states_np = tc.FromTorchToNumpy(
+                value_states.to(torch.int32)).transpose(0, 2, 1)
+            attn_output = np.matmul(attn_probs_np, value_states_np)
+            attn_output = tc.FromNumpyToTorch(attn_output).to(
+                torch.float32) * float(self.pv_bmm.a.item())
+            attn_output = attn_output.to(torch.int8)
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -350,6 +433,16 @@ class Int8OPTAttention(nn.Module):
                 torch.float32) * float(self.out_proj.a.item())
             attn_output += self.out_proj.bias
             assert attn_output.dtype == torch.float32
+        elif my_exec_mode == ExecutionMode.Mode3:
+            if self.out_proj_weight_mode3 is None:
+                self.out_proj_weight_mode3 = tc.FromTorchToNumpy(
+                    self.out_proj.weight.transpose(0, 1).to(torch.int32))
+            attn_output_np = tc.FromTorchToNumpy(attn_output.to(torch.int32))
+            attn_output = np.matmul(attn_output_np, self.out_proj_weight_mode3)
+            attn_output = tc.FromNumpyToTorch(attn_output).to(
+                torch.float32) * float(self.out_proj.a.item())
+            attn_output += self.out_proj.bias
+            assert attn_output.dtype == torch.float32
 
         return attn_output, attn_probs_reshaped, past_key_value
 
@@ -366,13 +459,18 @@ class Int8OPTDecoderLayer(nn.Module):
         self.fc1 = W8A8B8O8LinearReLU(self.embed_dim, ffn_dim)
         self.fc2 = W8A8BFP32OFP32Linear(ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNormQ(self.embed_dim)
+        
+        self.fc1_relu = nn.ReLU()
 
         self.fc1_weight_mode2 = None
         self.fc1_bias_mode2 = None
-        self.fc1_relu = nn.ReLU()
-
         self.fc2_weight_mode2 = None
         self.fc2_bias_mode2 = None
+
+        self.fc1_weight_mode3 = None
+        self.fc1_bias_mode3 = None
+        self.fc2_weight_mode3 = None
+        self.fc2_bias_mode3 = None
 
     @staticmethod
     def from_float(
@@ -469,6 +567,20 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states += self.fc1_bias_mode2 * float(self.fc1.b.item())
             hidden_states = self.fc1_relu(hidden_states)
             hidden_states = hidden_states.to(torch.int8)
+        elif my_exec_mode == ExecutionMode.Mode3:
+            if self.fc1_weight_mode3 is None:
+                self.fc1_weight_mode3 = tc.FromTorchToNumpy(
+                    self.fc1.weight.transpose(0, 1).to(torch.int32))
+                self.fc1_bias_mode3 = self.fc1.bias.to(torch.float32)
+            hidden_states_np = tc.FromTorchToNumpy(
+                hidden_states.to(torch.int32))
+            hidden_states_np = np.matmul(
+                hidden_states_np, self.fc1_weight_mode3)
+            hidden_states = tc.FromNumpyToTorch(hidden_states_np).to(
+                torch.float32) * float(self.fc1.a.item())
+            hidden_states += self.fc1_bias_mode3 * float(self.fc1.b.item())
+            hidden_states = self.fc1_relu(hidden_states)
+            hidden_states = hidden_states.to(torch.int8)
 
         if my_exec_mode == ExecutionMode.Mode1:
             hidden_states = self.fc2(hidden_states)
@@ -484,6 +596,18 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
                 torch.float32) * float(self.fc2.a.item())
             hidden_states += self.fc2_bias_mode2
+        elif my_exec_mode == ExecutionMode.Mode3:
+            if self.fc2_weight_mode3 is None:
+                self.fc2_weight_mode3 = tc.FromTorchToNumpy(
+                    self.fc2.weight.transpose(0, 1).to(torch.int32))
+                self.fc2_bias_mode3 = self.fc2.bias.to(torch.float32)
+            hidden_states_np = tc.FromTorchToNumpy(
+                hidden_states.to(torch.int32))
+            hidden_states_np = np.matmul(
+                hidden_states_np, self.fc2_weight_mode3)
+            hidden_states = tc.FromNumpyToTorch(hidden_states_np).to(
+                torch.float32) * float(self.fc2.a.item())
+            hidden_states += self.fc2_bias_mode3
 
         residual.add_(hidden_states.to(residual.dtype))
 

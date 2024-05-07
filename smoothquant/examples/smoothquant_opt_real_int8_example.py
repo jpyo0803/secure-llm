@@ -5,6 +5,7 @@ from smoothquant.opt import Int8OPTForCausalLM
 import smoothquant.opt
 import os
 from torch.nn.functional import pad
+import time
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
@@ -30,7 +31,9 @@ model_inputs = tokenizer([prompt], return_tensors='pt').to(
 
 model_smoothquant.to('cuda:0' if start_gpu else 'cpu')
 
-
+start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
     **model_inputs, max_new_tokens=128, do_sample=False)
+end_time = time.perf_counter_ns()
+print((end_time - start_time)/1e9)
 print(tokenizer.batch_decode(generated_ids)[0])
