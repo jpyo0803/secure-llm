@@ -35,7 +35,6 @@ class ExecutionMode(Enum):
 
 my_exec_mode = None
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -142,7 +141,7 @@ class Int8OPTAttention(nn.Module):
             query_states = self.q_proj(hidden_states)
         elif my_exec_mode == ExecutionMode.Mode2:
             '''
-                GEMM computes C = alpha A * B + beta C, where A, B, and C are matrices.  
+                GEMM computes C = alpha A * B + beta C, where A, B, and C are matrices.
                 A is an M-by-K matrix, B is a K-by-N matrix, and C is an M-by-N matrix
             '''
             if self.q_proj_weight_mode2 is None:
@@ -171,9 +170,35 @@ class Int8OPTAttention(nn.Module):
             value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            assert False
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            if my_exec_mode == ExecutionMode.Mode1:
+                key_states = self.k_proj(hidden_states, -1, bsz)
+                value_states = self.v_proj(hidden_states, -1, bsz)
+            elif my_exec_mode == ExecutionMode.Mode2:
+                if self.k_proj_weight_mode2 is None:
+                    self.k_proj_weight_mode2 = tc.FromTorchToCupy(
+                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.v_proj_weight_mode2 = tc.FromTorchToCupy(
+                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
+                    self.k_proj_bias_mode2 = self.k_proj.bias.to(torch.float32)
+                    self.v_proj_bias_mode2 = self.v_proj.bias.to(torch.float32)
+                key_states = cp.matmul(
+                    hidden_states_cp, self.k_proj_weight_mode2)
+                key_states = tc.FromCupyToTorch(key_states).to(
+                    torch.float32) * float(self.k_proj.a.item())
+                key_states += self.k_proj_bias_mode2 * \
+                    float(self.k_proj.b.item())
+                key_states = key_states.to(torch.int8)
+
+                value_states = cp.matmul(
+                    hidden_states_cp, self.v_proj_weight_mode2)
+                value_states = tc.FromCupyToTorch(value_states).to(
+                    torch.float32) * float(self.v_proj.a.item())
+                value_states += self.v_proj_bias_mode2 * \
+                    float(self.v_proj.b.item())
+                value_states = value_states.to(torch.int8)
+
+            key_states = self._shape(key_states, -1, bsz)
+            value_states = self._shape(value_states, -1, bsz)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
@@ -558,15 +583,22 @@ class Int8OPTDecoder(OPTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> BaseModelOutputWithPast:
         # pad the input to the multiple of 16
+
         input_len = input_ids.shape[1]
         from torch.nn.functional import pad
 
         if input_len % 16 != 0:
+            pass
             # <pad> is 1
+            '''
             padding_len = 16 - input_len % 16
             input_ids = pad(input_ids, (0, padding_len), value=1)
+            print("atten mask before : ", attention_mask.size(), input_len)
             if attention_mask is not None:
                 attention_mask = pad(attention_mask, (0, padding_len), value=0)
+            print("atten mask after : ", attention_mask.size(), input_len)
+            '''
+
         output = self.old_forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -581,6 +613,7 @@ class Int8OPTDecoder(OPTPreTrainedModel):
         if input_len % 16 != 0:
             output.last_hidden_state = output.last_hidden_state[:,
                                                                 :input_len, :]
+
         return output
 
 
