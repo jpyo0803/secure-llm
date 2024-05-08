@@ -6,10 +6,14 @@ import smoothquant.opt
 import os
 from torch.nn.functional import pad
 import time
+import singleton_timer as st
+import csv
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-Int8OPTForCausalLM.set_exec_mode(smoothquant.opt.ExecutionMode.Mode2)
+Int8OPTForCausalLM.set_exec_mode(smoothquant.opt.ExecutionMode.Mode3)
+
+timer = st.SingletonTimer(False)
 
 start_gpu = (smoothquant.opt.my_exec_mode ==
              smoothquant.opt.ExecutionMode.Mode1) or (smoothquant.opt.my_exec_mode == smoothquant.opt.ExecutionMode.Mode2)
@@ -31,9 +35,51 @@ model_inputs = tokenizer([prompt], return_tensors='pt').to(
 
 model_smoothquant.to('cuda:0' if start_gpu else 'cpu')
 
+timer.disable()
+dummy = model_smoothquant.generate(
+    **model_inputs, max_new_tokens=1, do_sample=False)
+
+timer.enable()
 start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
     **model_inputs, max_new_tokens=128, do_sample=False)
 end_time = time.perf_counter_ns()
-print((end_time - start_time)/1e9)
+print(f"End-to-end Latency: {(end_time - start_time)/1e9:0.6f} s")
 print(tokenizer.batch_decode(generated_ids)[0])
+
+raw_data = timer.display_summary()
+
+data = []
+
+partial_data = ['Data']
+partial_data.append(raw_data['1st layer norm (Prefill)'])
+partial_data.append(raw_data['Q Proj (Prefill)'])
+partial_data.append(raw_data['K, V Proj (Prefill)'])
+partial_data.append(raw_data['QK^T (Prefill)'])
+partial_data.append(raw_data['Attn Mask & Softmax (Prefill)'])
+partial_data.append(raw_data['PV (Prefill)'])
+partial_data.append(raw_data['Out Proj (Prefill)'])
+partial_data.append(raw_data['1st residual add (Prefill)'])
+partial_data.append(raw_data['2nd layer norm (Prefill)'])
+partial_data.append(raw_data['FFN1 + Relu (Prefill)'])
+partial_data.append(raw_data['FFN2 (Prefill)'])
+partial_data.append(raw_data['2nd residual add (Prefill)'])
+partial_data.append(raw_data['1st layer norm (Decode)'])
+partial_data.append(raw_data['Q Proj (Decode)'])
+partial_data.append(raw_data['K, V Proj (Decode)'])
+partial_data.append(raw_data['QK^T (Decode)'])
+partial_data.append(raw_data['Attn Mask & Softmax (Decode)'])
+partial_data.append(raw_data['PV (Decode)'])
+partial_data.append(raw_data['Out Proj (Decode)'])
+partial_data.append(raw_data['1st residual add (Decode)'])
+partial_data.append(raw_data['2nd layer norm (Decode)'])
+partial_data.append(raw_data['FFN1 + Relu (Decode)'])
+partial_data.append(raw_data['FFN2 (Decode)'])
+partial_data.append(raw_data['2nd residual add (Decode)'])
+
+data.append(partial_data)
+
+f = open(f'end_to_end_cpu.csv', 'w')
+writer = csv.writer(f)
+writer.writerows(data)
+f.close()

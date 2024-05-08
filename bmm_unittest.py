@@ -12,7 +12,7 @@ class BmmTest(unittest.TestCase):
         timer = st.SingletonTimer(False)
 
         num_test = 1
-        num_iter = 200
+        num_iter = 10
         pass_cnt = 0
         timer_first = True
 
@@ -21,9 +21,9 @@ class BmmTest(unittest.TestCase):
         for i in range(num_test):
             print("Test #", i + 1)
             batch_size = random.randint(1, 1)
-            M = 2**random.randint(0, 0)
-            K = 2**random.randint(0, 0)
-            N = 2**random.randint(0, 0)
+            M = 2**random.randint(10, 10)
+            K = 2**random.randint(10, 10)
+            N = 2**random.randint(10, 10)
 
             for j in range(num_iter):
                 print(batch_size, M, K, N)
@@ -40,7 +40,7 @@ class BmmTest(unittest.TestCase):
                 self.assertTrue(np.array_equal(z, z2))
                 if timer_first:
                     sbmm_light.enable_timer()
-                    # sbmm_unsecure.enable_timer()
+                    sbmm_unsecure.enable_timer()
                     timer_first = False
                 pass_cnt += 1
 

@@ -139,6 +139,44 @@ void undo_shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast
     delete[] c_sum_ptrs;
 }
 
+template <typename T>
+void tensor_add_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> input1,
+                        py::array_t<T, py::array::c_style | py::array::forcecast> input2) {
+    // Check the input dimensions
+    if (input1.ndim() != 3 || input2.ndim() != 3) {
+        throw std::runtime_error("Both inputs should be 3D arrays");
+    }
+
+    auto buf1 = input1.template mutable_unchecked<3>(); // 3D buffer for input1
+    auto buf2 = input2.template mutable_unchecked<3>(); // 3D buffer for input2
+    int B = buf1.shape(0);
+    int M = buf1.shape(1);
+    int N = buf1.shape(2);
+
+    // Creating pointer arrays for both inputs
+    T*** in1 = new T**[B];
+    T*** in2 = new T**[B];
+    for (int i = 0; i < B; ++i) {
+        in1[i] = new T*[M];
+        in2[i] = new T*[M];
+        for (int j = 0; j < M; ++j) {
+            in1[i][j] = &buf1(i, j, 0);
+            in2[i][j] = &buf2(i, j, 0);
+        }
+    }
+
+    // Call the TensorAdd function
+    jpyo0803::TensorAdd(in1, in2, B, M, N);
+
+    // Cleanup
+    for (int i = 0; i < B; ++i) {
+        delete[] in1[i];
+        delete[] in2[i];
+    }
+    delete[] in1;
+    delete[] in2;
+}
+
 py::list as_type_s8s32_wrapper(py::array_t<char, py::array::c_style | py::array::forcecast> input) {
     if (input.ndim() != 3) {
         throw std::runtime_error("Input should be a 3D array");
@@ -324,6 +362,13 @@ void bind_randint_2d(py::module_& m, const std::string& typestr) {
           ("Generate 2D random number array within a specified range for type " + typestr).c_str());
 }
 
+template<typename T>
+void bind_tensor_add(py::module_& m, const std::string& typestr) {
+    m.def(("TensorAdd_" + typestr).c_str(), &tensor_add_wrapper<T>,
+          py::arg("input1"), py::arg("input2"),
+          ("Add two 3D tensors element-wise for type " + typestr).c_str());
+}
+
 PYBIND11_MODULE(cipher_cpp, m) {
   m.doc() = "Test";
   bind_sum_by_row<int32_t>(m, "int32");
@@ -360,6 +405,11 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_randint_2d<int64_t>(m, "int64");
   bind_randint_2d<uint32_t>(m, "uint32");
   bind_randint_2d<uint64_t>(m, "uint64");
+
+  bind_tensor_add<int32_t>(m, "int32");
+  bind_tensor_add<uint32_t>(m, "uint32");
+  bind_tensor_add<int64_t>(m, "int64");
+  bind_tensor_add<uint64_t>(m, "uint64");
 
   m.def("AsTypeS8S32", &as_type_s8s32_wrapper,
           py::arg("input"),

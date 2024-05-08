@@ -57,6 +57,54 @@ void UndoShift(T*** in, T amt, T K, T** row_sum_x, T** col_sum_y, int B, int M, 
   }
 }
 
+template <typename T>
+void TensorAdd(T*** in1, T*** in2, int B, int M, int N) {
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        in1[i][j][k] += in2[i][j][k];
+      }
+    }
+  }
+}
+
+template <typename T>
+void TensorScalarAdd(T*** in1, T scalar, int B, int M, int N) {
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        in1[i][j][k] += scalar;
+      }
+    }
+  }
+}
+
+template <typename T>
+void TensorSub(T*** in1, T*** in2, int B, int M, int N) {
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        in1[i][j][k] -= in2[i][j][k];
+      }
+    }
+  }
+}
+
+template <typename T>
+void TensorScalarSub(T*** in1, T scalar, int B, int M, int N) {
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        in1[i][j][k] -= scalar;
+      }
+    }
+  }
+}
+
 template<typename T>
 std::vector<std::vector<T>> Matmul(const std::vector<std::vector<T>>& X, const std::vector<std::vector<T>>& Y) {
     assert(!X.empty() && !Y.empty());

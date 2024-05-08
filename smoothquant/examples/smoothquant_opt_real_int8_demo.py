@@ -49,9 +49,9 @@ class Evaluator:
             start.record()
             iter += 1
             print("Iter: ", iter)
-            t = timer.start(tag='Test', category='Test', exclude=iter <= 1)
+            # t = timer.start(tag='Test', category='Test', exclude=iter <= 1)
             outputs = model(input_ids)
-            timer.end(t)
+            # timer.end(t)
             end.record()
             torch.cuda.synchronize()
             if iter > 1:
@@ -80,11 +80,11 @@ def print_model_size(model):
     print('Model size: {:.3f}MB'.format(size_all_mb))
 
 
-tokenizer = GPT2Tokenizer.from_pretrained('facebook/opt-30b')
+tokenizer = GPT2Tokenizer.from_pretrained('facebook/opt-125m')
 dataset = load_dataset('lambada', split='validation[:50]')
 evaluator = Evaluator(dataset, tokenizer)
 
-Int8OPTForCausalLM.set_exec_mode(smoothquant.opt.ExecutionMode.Mode2)
+Int8OPTForCausalLM.set_exec_mode(smoothquant.opt.ExecutionMode.Mode3)
 
 start_gpu = (smoothquant.opt.my_exec_mode ==
              smoothquant.opt.ExecutionMode.Mode1) or (smoothquant.opt.my_exec_mode == smoothquant.opt.ExecutionMode.Mode2)
@@ -92,7 +92,7 @@ print("My Exec Mode: ", smoothquant.opt.my_exec_mode)
 print("Start GPU: ", start_gpu)
 
 model_smoothquant = Int8OPTForCausalLM.from_pretrained(
-    'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float16, device_map='cuda:0' if start_gpu else 'cpu')
+    'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float32, device_map='cuda:0' if start_gpu else 'cpu')
 
 print_model_size(model_smoothquant)
 acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)

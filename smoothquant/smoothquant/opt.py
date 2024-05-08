@@ -21,7 +21,9 @@ import cupy as cp
 import numpy as np
 import time
 import cipher.tensor_conversion as tc
-import cipher.cipher_slalom as cs
+import cipher.cipher_light as cl
+import cipher.cipher_linear as cl
+import singleton_timer as st
 
 from enum import Enum
 
@@ -38,6 +40,8 @@ class ExecutionMode(Enum):
 my_exec_mode = None
 
 logger = logging.get_logger(__name__)
+
+is_prefill = True
 
 
 class Int8OPTAttention(nn.Module):
@@ -71,78 +75,10 @@ class Int8OPTAttention(nn.Module):
 
         global my_exec_mode
 
-        if my_exec_mode == ExecutionMode.Mode2:
-            self.q_proj_weight_mode2 = None
-            self.k_proj_weight_mode2 = None
-            self.k_proj_bias_mode2 = None
-            self.v_proj_weight_mode2 = None
-            self.v_proj_bias_mode2 = None
-            self.out_proj_weight_mode2 = None
-        elif my_exec_mode == ExecutionMode.Mode3:
-            self.q_proj_weight_mode3 = None
-            self.k_proj_weight_mode3 = None
-            self.k_proj_bias_mode3 = None
-            self.v_proj_weight_mode3 = None
-            self.v_proj_bias_mode3 = None
-            self.out_proj_weight_mode3 = None
-        elif my_exec_mode == ExecutionMode.Mode4:
-            pass
-        elif my_exec_mode == ExecutionMode.Mode5:
-            self.q_proj_weight_mode5 = None
-            self.k_proj_weight_mode5 = None
-            self.k_proj_bias_mode5 = None
-            self.v_proj_weight_mode5 = None
-            self.v_proj_bias_mode5 = None
-            self.out_proj_weight_mode5 = None
-        elif my_exec_mode == ExecutionMode.Mode6:
-            self.q_proj_weight_mode6 = None
-            self.k_proj_weight_mode6 = None
-            self.k_proj_bias_mode6 = None
-            self.v_proj_weight_mode6 = None
-            self.v_proj_bias_mode6 = None
-            self.out_proj_weight_mode6 = None
-
-            self.q_proj_slalom = cs.SlalomLinear()
-            self.k_proj_slalom = cs.SlalomLinear()
-            self.v_proj_slalom = cs.SlalomLinear()
-            self.out_proj_slalom = cs.SlalomLinear()
-
-    @staticmethod
-    @torch.no_grad()
-    def from_float(
-        module: OPTAttention,
-        input_scale: float,
-        q_output_scale: float,
-        k_output_scale: float,
-        v_output_scale: float,
-        out_input_scale: float,
-    ):
-        int8_module = Int8OPTAttention(module.embed_dim, module.num_heads)
-        # Fuse the scaling into the q_proj output scale
-        q_output_scale = q_output_scale * module.scaling
-        module.q_proj.weight *= module.scaling
-        module.q_proj.bias *= module.scaling
-
-        int8_module.q_proj = W8A8B8O8Linear.from_float(
-            module.q_proj, input_scale, q_output_scale
-        )
-        int8_module.k_proj = W8A8B8O8Linear.from_float(
-            module.k_proj, input_scale, k_output_scale
-        )
-        int8_module.v_proj = W8A8B8O8Linear.from_float(
-            module.v_proj, input_scale, v_output_scale
-        )
-        int8_module.out_proj = W8A8BFP32OFP32Linear.from_float(
-            module.out_proj, out_input_scale
-        )
-        int8_module.qk_bmm = BMM_S8T_S8N_F32T.from_scale(
-            q_output_scale, k_output_scale)
-
-        # alpha = s_prob * s_v / s_out, where s_prob = 1 / 127
-        int8_module.pv_bmm = BMM_S8T_S8N_S8T.from_scale(
-            1.0 / 127, v_output_scale, out_input_scale
-        )
-        return int8_module
+        self.my_q_proj = None
+        self.my_k_proj = None
+        self.my_v_proj = None
+        self.my_out_proj = None
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return (
@@ -161,7 +97,9 @@ class Int8OPTAttention(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        global my_exec_mode
+        global my_exec_mode, is_prefill
+
+        timer = st.SingletonTimer(False)
         """Input shape: Batch x Time x Channel"""
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -171,37 +109,32 @@ class Int8OPTAttention(nn.Module):
 
         # get query proj
         if my_exec_mode == ExecutionMode.Mode1:
+            t = timer.start(tag=f'Q Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Q Proj ({"Prefill" if is_prefill else "Decode"})')
             query_states = self.q_proj(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode2:
             '''
                 GEMM computes C = alpha A * B + beta C, where A, B, and C are matrices.
                 A is an M-by-K matrix, B is a K-by-N matrix, and C is an M-by-N matrix
             '''
-            if self.q_proj_weight_mode2 is None:
-                self.q_proj_weight_mode2 = tc.FromTorchToCupy(
-                    self.q_proj.weight.transpose(0, 1).to(torch.int32))
+            if self.my_q_proj is None:
+                self.my_q_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Gpu(
+                    self.q_proj)
 
-            hidden_states_cp = tc.FromTorchToCupy(
-                hidden_states.to(torch.int32))
-            query_states = cp.matmul(
-                hidden_states_cp, self.q_proj_weight_mode2)
-            query_states = tc.FromCupyToTorch(query_states).to(
-                torch.float32) * float(self.q_proj.a.item())
-            query_states += self.q_proj.bias * float(self.q_proj.b.item())
-            query_states = query_states.to(torch.int8)
+            t = timer.start(tag=f'Q Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Q Proj ({"Prefill" if is_prefill else "Decode"})')
+            query_states = self.my_q_proj(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode3:
-            if self.q_proj_weight_mode3 is None:
-                self.q_proj_weight_mode3 = tc.FromTorchToNumpy(
-                    self.q_proj.weight.transpose(0, 1).to(torch.int32))
+            if self.my_q_proj is None:
+                self.my_q_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Cpu(
+                    self.q_proj)
 
-            hidden_states_np = tc.FromTorchToNumpy(
-                hidden_states.to(torch.int32))
-            query_states = np.matmul(
-                hidden_states_np, self.q_proj_weight_mode3)
-            query_states = tc.FromNumpyToTorch(query_states).to(
-                torch.float32) * float(self.q_proj.a.item())
-            query_states += self.q_proj.bias * float(self.q_proj.b.item())
-            query_states = query_states.to(torch.int8)
+            t = timer.start(tag=f'Q Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Q Proj ({"Prefill" if is_prefill else "Decode"})')
+            query_states = self.my_q_proj(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode4:
             pass
         elif my_exec_mode == ExecutionMode.Mode5:
@@ -209,31 +142,33 @@ class Int8OPTAttention(nn.Module):
                 Here what it has to do is similar to the mode 2 but the necessary data must 
                 be transferred from CPU to GPU and the result from GPU to CPU 
             '''
-            if self.q_proj_weight_mode5 is None:
-                self.q_proj_weight_mode5 = tc.FromNumpyToCupy(
-                    tc.FromTorchToNumpy(self.q_proj.weight.transpose(0, 1))).astype(cp.int32)
-                self.q_proj.bias = tc.FromCpuToGPUTorch(self.q_proj.bias)
-
+            if self.my_q_proj is None:
+                self.my_q_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Gpu(
+                    self.q_proj)
             assert hidden_states.device == torch.device('cpu')
-            hidden_states_cp = tc.FromNumpyToCupy(
-                tc.FromTorchToNumpy(hidden_states)).astype(cp.int32)
-            query_states = cp.matmul(
-                hidden_states_cp, self.q_proj_weight_mode5)
-            query_states = tc.FromCupyToTorch(query_states).to(
-                torch.float32) * float(self.q_proj.a.item())
-            query_states += self.q_proj.bias * float(self.q_proj.b.item())
-            query_states = query_states.to(torch.int8)
+            t = timer.start(tag=f'Q Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Q Proj ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = hidden_states.to(torch.device('cuda:0'))
+            query_states = self.my_q_proj(hidden_states)
             query_states = query_states.to(torch.device('cpu'))
-            assert query_states.device == torch.device('cpu')
+            timer.end(t)
+
         elif my_exec_mode == ExecutionMode.Mode6:
             hidden_states_i32 = hidden_states.to(torch.int32)
-            query_states = self.q_proj_slalom(
-                hidden_states_i32, self.q_proj.weight, self.q_proj.bias, self.q_proj.a.item(), self.q_proj.b.item())
+
+            if self.my_q_proj is None:
+                self.my_q_proj = cl.Linear_S8W_S8A_S8B_S8O_Slalom(self.q_proj)
+
+            t = timer.start(tag=f'Q Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Q Proj ({"Prefill" if is_prefill else "Decode"})')
+            query_states = self.my_q_proj(hidden_states_i32)
+            timer.end(t)
+
             assert query_states.device == torch.device('cpu')
         else:
             assert False
-
             # get key, value proj
+
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
             assert False
@@ -247,97 +182,45 @@ class Int8OPTAttention(nn.Module):
         elif past_key_value is not None:
             # reuse k, v, self_attention
             if my_exec_mode == ExecutionMode.Mode1:
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
                 key_states = self.k_proj(hidden_states, -1, bsz)
                 value_states = self.v_proj(hidden_states, -1, bsz)
+                timer.end(t)
             elif my_exec_mode == ExecutionMode.Mode2:
-                if self.k_proj_weight_mode2 is None:
-                    self.k_proj_weight_mode2 = tc.FromTorchToCupy(
-                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.v_proj_weight_mode2 = tc.FromTorchToCupy(
-                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.k_proj_bias_mode2 = self.k_proj.bias.to(torch.float32)
-                    self.v_proj_bias_mode2 = self.v_proj.bias.to(torch.float32)
-                key_states = cp.matmul(
-                    hidden_states_cp, self.k_proj_weight_mode2)
-                key_states = tc.FromCupyToTorch(key_states).to(
-                    torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj_bias_mode2 * \
-                    float(self.k_proj.b.item())
-                key_states = key_states.to(torch.int8)
 
-                value_states = cp.matmul(
-                    hidden_states_cp, self.v_proj_weight_mode2)
-                value_states = tc.FromCupyToTorch(value_states).to(
-                    torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj_bias_mode2 * \
-                    float(self.v_proj.b.item())
-                value_states = value_states.to(torch.int8)
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                key_states = self.my_k_proj(hidden_states)
+                value_states = self.my_v_proj(hidden_states)
+                timer.end(t)
 
             elif my_exec_mode == ExecutionMode.Mode3:
-                if self.k_proj_weight_mode3 is None:
-                    self.k_proj_weight_mode3 = tc.FromTorchToNumpy(
-                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.v_proj_weight_mode3 = tc.FromTorchToNumpy(
-                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
-                    # self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
-                    # self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
-                key_states = np.matmul(
-                    hidden_states_np, self.k_proj_weight_mode3)
-                key_states = tc.FromNumpyToTorch(key_states).to(
-                    torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj.bias * \
-                    float(self.k_proj.b.item())
-                key_states = key_states.to(torch.int8)
 
-                value_states = np.matmul(
-                    hidden_states_np, self.v_proj_weight_mode3)
-                value_states = tc.FromNumpyToTorch(value_states).to(
-                    torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj.bias * \
-                    float(self.v_proj.b.item())
-                value_states = value_states.to(torch.int8)
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                key_states = self.my_k_proj(hidden_states)
+                value_states = self.my_v_proj(hidden_states)
+                timer.end(t)
 
             elif my_exec_mode == ExecutionMode.Mode4:
                 pass
             elif my_exec_mode == ExecutionMode.Mode5:
-                if self.k_proj_weight_mode5 is None:
-                    assert False, "Should be reach here"
-                    self.k_proj_weight_mode5 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.k_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.v_proj_weight_mode5 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.v_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.k_proj.bias = tc.FromCpuToGPUTorch(self.k_proj.bias)
-                    self.v_proj.bias = tc.FromCpuToGPUTorch(self.v_proj.bias)
-
-                key_states = cp.matmul(
-                    hidden_states_cp, self.k_proj_weight_mode5)
-                key_states = tc.FromCupyToTorch(key_states).to(
-                    torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj.bias * float(self.k_proj.b.item())
-                key_states = key_states.to(torch.int8)
-                # key_states = key_states.to(torch.device('cpu'))
-
-                value_states = cp.matmul(
-                    hidden_states_cp, self.v_proj_weight_mode5)
-                value_states = tc.FromCupyToTorch(value_states).to(
-                    torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj.bias * float(self.v_proj.b.item())
-                value_states = value_states.to(torch.int8)
-                # value_states = value_states.to(torch.device('cpu'))
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                assert hidden_states.device == torch.device('cuda:0')
+                key_states = self.my_k_proj(hidden_states)
+                value_states = self.my_v_proj(hidden_states)
+                timer.end(t)
+                # New KV cache stays in GPU
             elif my_exec_mode == ExecutionMode.Mode6:
-                if self.k_proj_weight_mode6 is None:
-                    assert False, "Should be reach here"
-                    self.k_proj_weight_mode6 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.k_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.v_proj_weight_mode6 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.v_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.k_proj.bias = tc.FromCpuToGPUTorch(self.k_proj.bias)
-                    self.v_proj.bias = tc.FromCpuToGPUTorch(self.v_proj.bias)
 
-                key_states = self.k_proj_slalom(
-                    hidden_states_i32, self.k_proj.weight, self.k_proj.bias, self.k_proj.a.item(), self.k_proj.b.item())
-                value_states = self.v_proj_slalom(
-                    hidden_states_i32, self.v_proj.weight, self.v_proj.bias, self.v_proj.a.item(), self.v_proj.b.item())
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                key_states = self.my_k_proj(hidden_states_i32)
+                value_states = self.my_v_proj(hidden_states_i32)
+                timer.end(t)
+
                 assert key_states.device == torch.device('cpu')
                 assert value_states.device == torch.device('cpu')
 
@@ -348,91 +231,66 @@ class Int8OPTAttention(nn.Module):
         else:
             # self_attention
             if my_exec_mode == ExecutionMode.Mode1:
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
                 key_states = self.k_proj(hidden_states)
                 value_states = self.v_proj(hidden_states)
+                timer.end(t)
             elif my_exec_mode == ExecutionMode.Mode2:
-                if self.k_proj_weight_mode2 is None:
-                    self.k_proj_weight_mode2 = tc.FromTorchToCupy(
-                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.v_proj_weight_mode2 = tc.FromTorchToCupy(
-                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.k_proj_bias_mode2 = self.k_proj.bias.to(torch.float32)
-                    self.v_proj_bias_mode2 = self.v_proj.bias.to(torch.float32)
-                key_states = cp.matmul(
-                    hidden_states_cp, self.k_proj_weight_mode2)
-                key_states = tc.FromCupyToTorch(key_states).to(
-                    torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj_bias_mode2 * \
-                    float(self.k_proj.b.item())
-                key_states = key_states.to(torch.int8)
+                if self.my_k_proj is None:
+                    self.my_k_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Gpu(
+                        self.k_proj)
+                    self.my_v_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Gpu(
+                        self.v_proj)
 
-                value_states = cp.matmul(
-                    hidden_states_cp, self.v_proj_weight_mode2)
-                value_states = tc.FromCupyToTorch(value_states).to(
-                    torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj_bias_mode2 * \
-                    float(self.v_proj.b.item())
-                value_states = value_states.to(torch.int8)
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                key_states = self.my_k_proj(hidden_states)
+                value_states = self.my_v_proj(hidden_states)
+                timer.end(t)
             elif my_exec_mode == ExecutionMode.Mode3:
-                if self.k_proj_weight_mode3 is None:
-                    self.k_proj_weight_mode3 = tc.FromTorchToNumpy(
-                        self.k_proj.weight.transpose(0, 1).to(torch.int32))
-                    self.v_proj_weight_mode3 = tc.FromTorchToNumpy(
-                        self.v_proj.weight.transpose(0, 1).to(torch.int32))
-                    # self.k_proj_bias_mode3 = self.k_proj.bias.to(torch.float32)
-                    # self.v_proj_bias_mode3 = self.v_proj.bias.to(torch.float32)
-                key_states = np.matmul(
-                    hidden_states_np, self.k_proj_weight_mode3)
-                key_states = tc.FromNumpyToTorch(key_states).to(
-                    torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj.bias * \
-                    float(self.k_proj.b.item())
+                if self.my_k_proj is None:
+                    self.my_k_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Cpu(
+                        self.k_proj)
+                    self.my_v_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Cpu(
+                        self.v_proj)
 
-                value_states = np.matmul(
-                    hidden_states_np, self.v_proj_weight_mode3)
-                value_states = tc.FromNumpyToTorch(value_states).to(
-                    torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj.bias * \
-                    float(self.v_proj.b.item())
-                value_states = value_states.to(torch.int8)
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                key_states = self.my_k_proj(hidden_states)
+                value_states = self.my_v_proj(hidden_states)
+                timer.end(t)
 
             elif my_exec_mode == ExecutionMode.Mode4:
                 pass
             elif my_exec_mode == ExecutionMode.Mode5:
-                if self.k_proj_weight_mode5 is None:
-                    self.k_proj_weight_mode5 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.k_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.v_proj_weight_mode5 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.v_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.k_proj.bias = tc.FromCpuToGPUTorch(self.k_proj.bias)
-                    self.v_proj.bias = tc.FromCpuToGPUTorch(self.v_proj.bias)
+                if self.my_k_proj is None:
+                    self.my_k_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Gpu(
+                        self.k_proj)
+                    self.my_v_proj = cl.Linear_S8W_S8A_S8B_S8O_Unsecure_Gpu(
+                        self.v_proj)
 
-                key_states = cp.matmul(
-                    hidden_states_cp, self.k_proj_weight_mode5)
-                key_states = tc.FromCupyToTorch(key_states).to(
-                    torch.float32) * float(self.k_proj.a.item())
-                key_states += self.k_proj.bias * float(self.k_proj.b.item())
-                key_states = key_states.to(torch.int8)
-
-                value_states = cp.matmul(
-                    hidden_states_cp, self.v_proj_weight_mode5)
-                value_states = tc.FromCupyToTorch(value_states).to(
-                    torch.float32) * float(self.v_proj.a.item())
-                value_states += self.v_proj.bias * float(self.v_proj.b.item())
-                value_states = value_states.to(torch.int8)
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                assert hidden_states.device == torch.device('cuda:0')
+                # hidden states was moved to cuda for q proj
+                key_states = self.my_k_proj(hidden_states)
+                value_states = self.my_v_proj(hidden_states)
+                timer.end(t)
+                # Keep k, v states in GPU as KV cache
             elif my_exec_mode == ExecutionMode.Mode6:
-                if self.k_proj_weight_mode6 is None:
-                    self.k_proj_weight_mode6 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.k_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.v_proj_weight_mode6 = tc.FromNumpyToCupy(
-                        tc.FromTorchToNumpy(self.v_proj.weight.transpose(0, 1))).astype(cp.int32)
-                    self.k_proj.bias = tc.FromCpuToGPUTorch(self.k_proj.bias)
-                    self.v_proj.bias = tc.FromCpuToGPUTorch(self.v_proj.bias)
+                if self.my_k_proj is None:
+                    self.my_k_proj = cl.Linear_S8W_S8A_S8B_S8O_Slalom(
+                        self.k_proj)
+                    self.my_v_proj = cl.Linear_S8W_S8A_S8B_S8O_Slalom(
+                        self.v_proj)
 
-                key_states = self.k_proj_slalom(
-                    hidden_states_i32, self.k_proj.weight, self.k_proj.bias, self.k_proj.a.item(), self.k_proj.b.item())
-                value_states = self.v_proj_slalom(
-                    hidden_states_i32, self.v_proj.weight, self.v_proj.bias, self.v_proj.a.item(), self.v_proj.b.item())
+                t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
+                                category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
+                key_states = self.my_k_proj(hidden_states_i32)
+                value_states = self.my_v_proj(hidden_states_i32)
+                timer.end(t)
+
                 assert key_states.device == torch.device('cpu')
                 assert value_states.device == torch.device('cpu')
 
@@ -445,6 +303,9 @@ class Int8OPTAttention(nn.Module):
             Mode3: cpu
             Mode5: cuda:0
         '''
+
+        t = timer.start(tag=f'Q, K, V reshape ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'Q, K, V reshape ({"Prefill" if is_prefill else "Decode"})')
         past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
@@ -454,11 +315,16 @@ class Int8OPTAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
+
+        timer.end(t)
         '''
             QK BMM
             Input: query_states, key_states are torch.int8
             Output: attn_weights is torch.float32
         '''
+
+        t = timer.start(tag=f'QK^T ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'QK^T ({"Prefill" if is_prefill else "Decode"})')
         if my_exec_mode == ExecutionMode.Mode1:
             attn_weights = self.qk_bmm(query_states, key_states)
         elif my_exec_mode == ExecutionMode.Mode2:
@@ -491,17 +357,34 @@ class Int8OPTAttention(nn.Module):
             assert attn_weights.dtype == torch.float32
             assert attn_weights.device == torch.device('cpu')
         elif my_exec_mode == ExecutionMode.Mode6:
+            # t = timer.start(tag='Pre', category='Pre')
+            # query_states_np = tc.FromTorchToNumpy(query_states)
+            # key_states_np = tc.FromTorchToNumpy(
+            #     key_states.transpose(1, 2))
             query_states_cp = tc.FromTorchToCupy(
                 tc.FromCpuToGPUTorch(query_states)).astype(cp.int32)
             key_states_cp = tc.FromNumpyToCupy(
                 tc.FromTorchToNumpy(key_states.transpose(1, 2)))
+            # timer.end(t)
+            # t = timer.start(tag='Comp', category='Comp')
+            # print("query shape: ", query_states_np.shape)
+            # print("key shape: ", key_states_np.shape)
+            # attn_weights = self.secure_qk_bmm(query_states_np, key_states_np)
             attn_weights = cp.matmul(query_states_cp, key_states_cp)
-            attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
-            attn_weights *= float(self.qk_bmm.a.item())
-            attn_weights = tc.FromGpuToCpuTorch(attn_weights)
+            # timer.end(t)
+            # t = timer.start(tag='Post', category='Post')
+            # attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
+            attn_weights = tc.FromNumpyToTorch(
+                tc.FromCupyToNumpy(attn_weights)).to(torch.float32)
+            attn_weights *= float(self.qk_bmm.a.item())  # done in CPU
+            # attn_weights = tc.FromGpuToCpuTorch(attn_weights)
+            # timer.end(t)
             assert attn_weights.dtype == torch.float32
             assert attn_weights.device == torch.device('cpu')
+        timer.end(t)
 
+        t = timer.start(tag=f'Attn Mask & Softmax ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'Attn Mask & Softmax ({"Prefill" if is_prefill else "Decode"})')
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
@@ -556,6 +439,10 @@ class Int8OPTAttention(nn.Module):
 
         value_states = value_states.transpose(1, 2).contiguous()
 
+        timer.end(t)
+
+        t = timer.start(tag=f'PV ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'PV ({"Prefill" if is_prefill else "Decode"})')
         if my_exec_mode == ExecutionMode.Mode1:
             attn_output = self.pv_bmm(attn_probs, value_states)
         elif my_exec_mode == ExecutionMode.Mode2:
@@ -598,7 +485,10 @@ class Int8OPTAttention(nn.Module):
             attn_output = attn_output.to(torch.int8)
             attn_output = attn_output.to(torch.device('cpu'))
             assert attn_output.device == torch.device('cpu')
+        timer.end(t)
 
+        t = timer.start(tag=f'Attn shape ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'Attn shape ({"Prefill" if is_prefill else "Decode"})')
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
@@ -614,48 +504,59 @@ class Int8OPTAttention(nn.Module):
         attn_output = attn_output.reshape(
             bsz, tgt_len, self.embed_dim).contiguous()
 
+        timer.end(t)
+
         if my_exec_mode == ExecutionMode.Mode1:
+            t = timer.start(tag=f'Out Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Out Proj ({"Prefill" if is_prefill else "Decode"})')
             attn_output = self.out_proj(attn_output)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode2:
-            if self.out_proj_weight_mode2 is None:
-                self.out_proj_weight_mode2 = tc.FromTorchToCupy(
-                    self.out_proj.weight.transpose(0, 1).to(torch.int32))
-            attn_output_cp = tc.FromTorchToCupy(attn_output.to(torch.int32))
-            attn_output = cp.matmul(attn_output_cp, self.out_proj_weight_mode2)
-            attn_output = tc.FromCupyToTorch(attn_output).to(
-                torch.float32) * float(self.out_proj.a.item())
-            attn_output += self.out_proj.bias
+            if self.my_out_proj is None:
+                self.my_out_proj = cl.Linear_S8W_S8A_F32B_F32O_Unsecure_Gpu(
+                    self.out_proj)
+
+            t = timer.start(tag=f'Out Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Out Proj ({"Prefill" if is_prefill else "Decode"})')
+            attn_output = self.my_out_proj(attn_output)
+            timer.end(t)
             assert attn_output.dtype == torch.float32
         elif my_exec_mode == ExecutionMode.Mode3:
-            if self.out_proj_weight_mode3 is None:
-                self.out_proj_weight_mode3 = tc.FromTorchToNumpy(
-                    self.out_proj.weight.transpose(0, 1).to(torch.int32))
-            attn_output_np = tc.FromTorchToNumpy(attn_output.to(torch.int32))
-            attn_output = np.matmul(attn_output_np, self.out_proj_weight_mode3)
-            attn_output = tc.FromNumpyToTorch(attn_output).to(
-                torch.float32) * float(self.out_proj.a.item())
-            attn_output += self.out_proj.bias
+            if self.my_out_proj is None:
+                self.my_out_proj = cl.Linear_S8W_S8A_F32B_F32O_Unsecure_Cpu(
+                    self.out_proj)
+
+            t = timer.start(tag=f'Out Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Out Proj ({"Prefill" if is_prefill else "Decode"})')
+            attn_output = self.my_out_proj(attn_output)
+            timer.end(t)
             assert attn_output.dtype == torch.float32
         elif my_exec_mode == ExecutionMode.Mode4:
             pass
         elif my_exec_mode == ExecutionMode.Mode5:
-            if self.out_proj_weight_mode5 is None:
-                self.out_proj_weight_mode5 = tc.FromNumpyToCupy(
-                    tc.FromTorchToNumpy(self.out_proj.weight.transpose(0, 1))).astype(cp.int32)
-                self.out_proj.bias = tc.FromCpuToGPUTorch(self.out_proj.bias)
+            if self.my_out_proj is None:
+                self.my_out_proj = cl.Linear_S8W_S8A_F32B_F32O_Unsecure_Gpu(
+                    self.out_proj)
 
-            attn_output_cp = tc.FromNumpyToCupy(
-                tc.FromTorchToNumpy(attn_output)).astype(cp.int32)
-            attn_output = cp.matmul(attn_output_cp, self.out_proj_weight_mode5)
-            attn_output = tc.FromCupyToTorch(attn_output).to(
-                torch.float32) * float(self.out_proj.a.item())
-            attn_output += self.out_proj.bias
-            attn_output = attn_output.to(torch.device('cpu'))
             assert attn_output.device == torch.device('cpu')
+            t = timer.start(tag=f'Out Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Out Proj ({"Prefill" if is_prefill else "Decode"})')
+            attn_output = attn_output.to(torch.device('cuda:0'))
+            attn_output = self.my_out_proj(attn_output)
+            attn_output = attn_output.to(torch.device('cpu'))
+            timer.end(t)
             assert attn_output.dtype == torch.float32
+            assert attn_output.device == torch.device('cpu')
+
         elif my_exec_mode == ExecutionMode.Mode6:
-            attn_output = self.out_proj_slalom(
-                attn_output, self.out_proj.weight, self.out_proj.bias, self.out_proj.a.item(), 1.0)
+            if self.my_out_proj is None:
+                self.my_out_proj = cl.Linear_S8W_S8A_F32B_F32O_Slalom(
+                    self.out_proj)
+
+            t = timer.start(tag=f'Out Proj ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'Out Proj ({"Prefill" if is_prefill else "Decode"})')
+            attn_output = self.my_out_proj(attn_output)
+            timer.end(t)
 
             assert attn_output.device == torch.device('cpu')
             assert attn_output.dtype == torch.float32
@@ -670,6 +571,7 @@ class Int8OPTDecoderLayer(nn.Module):
         self.self_attn = Int8OPTAttention(
             embed_dim=self.embed_dim, num_heads=num_attention_heads
         )
+        global my_exec_mode
 
         self.self_attn_layer_norm = LayerNormQ(self.embed_dim)
         self.fc1 = W8A8B8O8LinearReLU(self.embed_dim, ffn_dim)
@@ -678,63 +580,8 @@ class Int8OPTDecoderLayer(nn.Module):
 
         self.fc1_relu = nn.ReLU()
 
-        self.fc1_weight_mode2 = None
-        self.fc1_bias_mode2 = None
-        self.fc2_weight_mode2 = None
-        self.fc2_bias_mode2 = None
-
-        self.fc1_weight_mode3 = None
-        self.fc1_bias_mode3 = None
-        self.fc2_weight_mode3 = None
-        self.fc2_bias_mode3 = None
-
-        self.fc1_weight_mode5 = None
-        self.fc1_bias_mode5 = None
-        self.fc2_weight_mode5 = None
-        self.fc2_bias_mode5 = None
-
-        self.fc1_weight_mode6 = None
-        self.fc1_bias_mode6 = None
-        self.fc2_weight_mode6 = None
-        self.fc2_bias_mode6 = None
-
-        self.fc1_slalom = cs.SlalomLinear()
-        self.fc2_slalom = cs.SlalomLinear()
-
-    @staticmethod
-    def from_float(
-        module: OPTDecoderLayer,
-        attn_input_scale: float,
-        q_output_scale: float,
-        k_output_scale: float,
-        v_output_scale: float,
-        out_input_scale: float,
-        fc1_input_scale: float,
-        fc2_input_scale: float,
-    ):
-        int8_module = Int8OPTDecoderLayer(
-            module.embed_dim, module.self_attn.num_heads, module.fc1.out_features
-        )
-        int8_module.self_attn_layer_norm = LayerNormQ.from_float(
-            module.self_attn_layer_norm, attn_input_scale
-        )
-        int8_module.self_attn = Int8OPTAttention.from_float(
-            module.self_attn,
-            attn_input_scale,
-            q_output_scale,
-            k_output_scale,
-            v_output_scale,
-            out_input_scale,
-        )
-        int8_module.final_layer_norm = LayerNormQ.from_float(
-            module.final_layer_norm, fc1_input_scale
-        )
-        int8_module.fc1 = W8A8B8O8LinearReLU.from_float(
-            module.fc1, fc1_input_scale, fc2_input_scale
-        )
-        int8_module.fc2 = W8A8BFP32OFP32Linear.from_float(
-            module.fc2, fc2_input_scale)
-        return int8_module
+        self.my_fc1 = None
+        self.my_fc2 = None
 
     def forward(
         self,
@@ -765,8 +612,17 @@ class Int8OPTDecoderLayer(nn.Module):
         """
 
         # Self Attention
+        timer = st.SingletonTimer()
+        global is_prefill
+        if is_prefill:
+            if past_key_value is not None:
+                is_prefill = False
+
+        t = timer.start(tag=f'1st layer norm ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'1st layer norm ({"Prefill" if is_prefill else "Decode"})')
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
+        timer.end(t)
 
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -776,117 +632,120 @@ class Int8OPTDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
+        t = timer.start(tag=f'1st residual add ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'1st residual add ({"Prefill" if is_prefill else "Decode"})')
         residual.add_(hidden_states.to(residual.dtype))
+        timer.end(t)
 
+        t = timer.start(tag=f'2nd layer norm ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'2nd layer norm ({"Prefill" if is_prefill else "Decode"})')
         hidden_states = self.final_layer_norm(residual)
+        timer.end(t)
 
         if my_exec_mode == ExecutionMode.Mode1:
+            t = timer.start(tag=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})')
             hidden_states = self.fc1(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode2:
-            if self.fc1_weight_mode2 is None:
-                self.fc1_weight_mode2 = tc.FromTorchToCupy(
-                    self.fc1.weight.transpose(0, 1).to(torch.int32))
-                self.fc1_bias_mode2 = self.fc1.bias.to(torch.float32)
-            hidden_states_cp = tc.FromTorchToCupy(
-                hidden_states.to(torch.int32))
-            hidden_states_cp = cp.matmul(
-                hidden_states_cp, self.fc1_weight_mode2)
-            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
-                torch.float32) * float(self.fc1.a.item())
-            hidden_states += self.fc1_bias_mode2 * float(self.fc1.b.item())
-            hidden_states = self.fc1_relu(hidden_states)
-            hidden_states = hidden_states.to(torch.int8)
+            if self.my_fc1 is None:
+                self.my_fc1 = cl.Linear_S8W_S8A_S8B_S8O_Relu_Unsecure_Gpu(
+                    self.fc1)
+
+            t = timer.start(tag=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = self.my_fc1(hidden_states)
+            timer.end(t)
+
         elif my_exec_mode == ExecutionMode.Mode3:
-            if self.fc1_weight_mode3 is None:
-                self.fc1_weight_mode3 = tc.FromTorchToNumpy(
-                    self.fc1.weight.transpose(0, 1).to(torch.int32))
-                self.fc1_bias_mode3 = self.fc1.bias.to(torch.float32)
-            hidden_states_np = tc.FromTorchToNumpy(
-                hidden_states.to(torch.int32))
-            hidden_states_np = np.matmul(
-                hidden_states_np, self.fc1_weight_mode3)
-            hidden_states = tc.FromNumpyToTorch(hidden_states_np).to(
-                torch.float32) * float(self.fc1.a.item())
-            hidden_states += self.fc1_bias_mode3 * float(self.fc1.b.item())
-            hidden_states = self.fc1_relu(hidden_states)
-            hidden_states = hidden_states.to(torch.int8)
+            if self.my_fc1 is None:
+                self.my_fc1 = cl.Linear_S8W_S8A_S8B_S8O_Relu_Unsecure_Cpu(
+                    self.fc1)
+
+            t = timer.start(tag=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = self.my_fc1(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode4:
             pass
         elif my_exec_mode == ExecutionMode.Mode5:
-            if self.fc1_weight_mode5 is None:
-                self.fc1_weight_mode5 = tc.FromNumpyToCupy(
-                    tc.FromTorchToNumpy(self.fc1.weight.transpose(0, 1))).astype(cp.int32)
-                self.fc1_bias_mode5 = tc.FromCpuToGPUTorch(
-                    self.fc1.bias).to(torch.float32)
+            if self.my_fc1 is None:
+                self.my_fc1 = cl.Linear_S8W_S8A_S8B_S8O_Relu_Unsecure_Gpu(
+                    self.fc1)
 
             assert hidden_states.device == torch.device('cpu')
-            hidden_states_cp = tc.FromNumpyToCupy(
-                tc.FromTorchToNumpy(hidden_states)).astype(cp.int32)
-            hidden_states_cp = cp.matmul(
-                hidden_states_cp, self.fc1_weight_mode5)
-            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
-                torch.float32) * float(self.fc1.a.item())
-            hidden_states += self.fc1_bias_mode5 * float(self.fc1.b.item())
-            hidden_states = self.fc1_relu(hidden_states)
-            hidden_states = hidden_states.to(torch.int8)
+            t = timer.start(tag=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = hidden_states.to(torch.device('cuda:0'))
+            hidden_states = self.my_fc1(hidden_states)
             hidden_states = hidden_states.to(torch.device('cpu'))
+            timer.end(t)
+
             assert hidden_states.device == torch.device('cpu')
         elif my_exec_mode == ExecutionMode.Mode6:
-            hidden_states = self.fc1_slalom(
-                hidden_states, self.fc1.weight, self.fc1.bias, self.fc1.a.item(), self.fc1.b.item())
+            if self.my_fc1 is None:
+                self.my_fc1 = cl.Linear_S8W_S8A_S8B_S8O_Relu_Slalom(
+                    self.fc1)
+
+            t = timer.start(tag=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = self.my_fc1(hidden_states)
+            timer.end(t)
             assert hidden_states.device == torch.device('cpu')
 
         if my_exec_mode == ExecutionMode.Mode1:
+            t = timer.start(tag=f'FFN2 ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN2 ({"Prefill" if is_prefill else "Decode"})')
             hidden_states = self.fc2(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode2:
-            if self.fc2_weight_mode2 is None:
-                self.fc2_weight_mode2 = tc.FromTorchToCupy(
-                    self.fc2.weight.transpose(0, 1).to(torch.int32))
-                self.fc2_bias_mode2 = self.fc2.bias.to(torch.float32)
-            hidden_states_cp = tc.FromTorchToCupy(
-                hidden_states.to(torch.int32))
-            hidden_states_cp = cp.matmul(
-                hidden_states_cp, self.fc2_weight_mode2)
-            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
-                torch.float32) * float(self.fc2.a.item())
-            hidden_states += self.fc2_bias_mode2
+            if self.my_fc2 is None:
+                self.my_fc2 = cl.Linear_S8W_S8A_F32B_F32O_Unsecure_Gpu(
+                    self.fc2)
+
+            t = timer.start(tag=f'FFN2 ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN2 ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = self.my_fc2(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode3:
-            if self.fc2_weight_mode3 is None:
-                self.fc2_weight_mode3 = tc.FromTorchToNumpy(
-                    self.fc2.weight.transpose(0, 1).to(torch.int32))
-                self.fc2_bias_mode3 = self.fc2.bias.to(torch.float32)
-            hidden_states_np = tc.FromTorchToNumpy(
-                hidden_states.to(torch.int32))
-            hidden_states_np = np.matmul(
-                hidden_states_np, self.fc2_weight_mode3)
-            hidden_states = tc.FromNumpyToTorch(hidden_states_np).to(
-                torch.float32) * float(self.fc2.a.item())
-            hidden_states += self.fc2_bias_mode3
+            if self.my_fc2 is None:
+                self.my_fc2 = cl.Linear_S8W_S8A_F32B_F32O_Unsecure_Cpu(
+                    self.fc2)
+            t = timer.start(tag=f'FFN2 ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN2 ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = self.my_fc2(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode4:
             pass
         elif my_exec_mode == ExecutionMode.Mode5:
-            if self.fc2_weight_mode5 is None:
-                self.fc2_weight_mode5 = tc.FromNumpyToCupy(
-                    tc.FromTorchToNumpy(self.fc2.weight.transpose(0, 1))).astype(cp.int32)
-                self.fc2_bias_mode5 = tc.FromCpuToGPUTorch(
-                    self.fc2.bias).to(torch.float32)
+            if self.my_fc2 is None:
+                self.my_fc2 = cl.Linear_S8W_S8A_F32B_F32O_Unsecure_Gpu(
+                    self.fc2)
 
             assert hidden_states.device == torch.device('cpu')
-            hidden_states_cp = tc.FromNumpyToCupy(
-                tc.FromTorchToNumpy(hidden_states)).astype(cp.int32)
-            hidden_states_cp = cp.matmul(
-                hidden_states_cp, self.fc2_weight_mode5)
-            hidden_states = tc.FromCupyToTorch(hidden_states_cp).to(
-                torch.float32) * float(self.fc2.a.item())
-            hidden_states += self.fc2_bias_mode5
+            t = timer.start(tag=f'FFN2 ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN2 ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = hidden_states.to(torch.device('cuda:0'))
+            hidden_states = self.my_fc2(hidden_states)
             hidden_states = hidden_states.to(torch.device('cpu'))
+            timer.end(t)
+
             assert hidden_states.device == torch.device('cpu')
         elif my_exec_mode == ExecutionMode.Mode6:
-            hidden_states = self.fc2_slalom(
-                hidden_states, self.fc2.weight, self.fc2.bias, self.fc2.a.item(), 1.0)
+            if self.my_fc2 is None:
+                self.my_fc2 = cl.Linear_S8W_S8A_F32B_F32O_Slalom(
+                    self.fc2)
+
+            t = timer.start(tag=f'FFN2 ({"Prefill" if is_prefill else "Decode"})',
+                            category=f'FFN2 ({"Prefill" if is_prefill else "Decode"})')
+            hidden_states = self.my_fc2(hidden_states)
+            timer.end(t)
             assert hidden_states.device == torch.device('cpu')
 
+        t = timer.start(tag=f'2nd residual add ({"Prefill" if is_prefill else "Decode"})',
+                        category=f'2nd residual add ({"Prefill" if is_prefill else "Decode"})')
         residual.add_(hidden_states.to(residual.dtype))
+        timer.end(t)
 
         outputs = (residual,)
 
