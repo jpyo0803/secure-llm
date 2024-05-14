@@ -94,6 +94,29 @@ void shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> inp
 
 
 template <typename T>
+void shift_wrapper_test(py::array_t<T, py::array::c_style | py::array::forcecast> input, T amt) {
+    if (input.ndim() != 3) {
+        throw std::runtime_error("Input should be a 3D array");
+    }
+
+    auto buf = input.template mutable_unchecked<3>(); // Direct buffer access with 3D unchecked proxy
+    int B = buf.shape(0);
+    int M = buf.shape(1);
+    int N = buf.shape(2);
+
+    // Parallelize the outer two loops with OpenMP
+    #pragma omp parallel for collapse(3)
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            for (int k = 0; k < N; ++k) {
+                // Modify the data directly
+                buf(i, j, k) += amt; // Or apply any other modification as needed
+            }
+        }
+    }
+}
+
+template <typename T>
 void undo_shift_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast> input,
                         T amt, T K,
                         py::array_t<T, py::array::c_style | py::array::forcecast> row_sum_x,
@@ -175,6 +198,103 @@ void tensor_add_wrapper(py::array_t<T, py::array::c_style | py::array::forcecast
     }
     delete[] in1;
     delete[] in2;
+}
+
+void softmax_tensor_3d_wrapper(py::array_t<float, py::array::c_style | py::array::forcecast> input) {
+    if (input.ndim() != 3) {
+        throw std::runtime_error("Input should be a 3D array");
+    }
+
+    auto buf = input.mutable_unchecked<3>(); // Access the buffer
+    int B = buf.shape(0);
+    int M = buf.shape(1);
+    int N = buf.shape(2);
+
+    // Parallelize the outer two loops with OpenMP
+    #pragma omp parallel for collapse(2)
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            float sum_exp = 0;
+            for (int k = 0; k < N; ++k) {
+                sum_exp += std::exp(buf(i, j, k));
+            }
+
+            for (int k = 0; k < N; ++k) {
+                buf(i, j, k) = std::exp(buf(i, j, k)) / sum_exp;
+            }
+        }
+    }
+}
+
+void relu_tensor_3d_wrapper(py::array_t<float, py::array::c_style | py::array::forcecast> input) {
+    if (input.ndim() != 3) {
+        throw std::runtime_error("Input should be a 3D array");
+    }
+
+    auto buf = input.mutable_unchecked<3>(); // Access the buffer
+    int B = buf.shape(0);
+    int M = buf.shape(1);
+    int N = buf.shape(2);
+
+    // Parallelize the outer two loops with OpenMP
+    #pragma omp parallel for collapse(3)
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            for (int k = 0; k < N; ++k) {
+                // Apply the ReLU operation
+                if (buf(i, j, k) < 0) {
+                    buf(i, j, k) = 0;
+                }
+            }
+        }
+    }
+}
+
+void layer_norm_tensor_3d_wrapper(py::array_t<float, py::array::c_style | py::array::forcecast> in,
+                                  py::array_t<float> weight,
+                                  py::array_t<float> bias,
+                                  float eps) {
+    if (in.ndim() != 3 || weight.ndim() != 1 || bias.ndim() != 1) {
+        throw std::runtime_error("Input should be a 3D array and weight, bias should be 1D arrays.");
+    }
+
+    auto buf = in.mutable_unchecked<3>(); // Access the input buffer
+    auto weight_buf = weight.unchecked<1>();
+    auto bias_buf = bias.unchecked<1>();
+
+    int B = buf.shape(0);
+    int M = buf.shape(1);
+    int N = buf.shape(2);
+
+    if (N != weight_buf.shape(0) || N != bias_buf.shape(0)) {
+        throw std::runtime_error("Dimensions of weight and bias must match the third dimension of input.");
+    }
+
+    // Parallelize the outer two loops with OpenMP
+    // #pragma omp parallel for collapse(2)
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            double sum = 0;
+            for (int k = 0; k < N; ++k) {
+                double tmp = buf(i, j, k);
+                sum += tmp;
+            }
+            double avg = sum / N;
+
+            double sum_sqr = 0;
+            for (int k = 0; k < N; ++k) {
+                double tmp = buf(i, j, k);
+                tmp -= avg;
+                sum_sqr += tmp * tmp;
+            }
+            double var = sum_sqr / N;
+
+            for (int k = 0; k < N; ++k) {
+                double tmp = buf(i, j, k);
+                buf(i, j, k) = (tmp - avg) / std::sqrt(var + (double)eps) * (double)weight_buf(k) + (double)bias_buf(k);
+            }
+        }
+    }
 }
 
 py::list as_type_s8s32_wrapper(py::array_t<char, py::array::c_style | py::array::forcecast> input) {
@@ -411,6 +531,18 @@ PYBIND11_MODULE(cipher_cpp, m) {
   bind_tensor_add<int64_t>(m, "int64");
   bind_tensor_add<uint64_t>(m, "uint64");
 
+  m.def("SoftmaxTensor3D", &softmax_tensor_3d_wrapper,
+          py::arg("input"),
+          "Apply softmax operation to a 3D array");
+
+  m.def("ReluTensor3D", &relu_tensor_3d_wrapper,
+          py::arg("input"),
+          "Apply ReLU operation to a 3D array");
+
+  m.def("LayerNormTensor3D", &layer_norm_tensor_3d_wrapper,
+          py::arg("input"), py::arg("weight"), py::arg("bias"), py::arg("eps"),
+          "Apply layer normalization to a 3D tensor (B, M, N). The weight and bias arrays should match the N dimension.");
+
   m.def("AsTypeS8S32", &as_type_s8s32_wrapper,
           py::arg("input"),
           "Convert a 3D array from char to int32");
@@ -447,4 +579,9 @@ PYBIND11_MODULE(cipher_cpp, m) {
         "FindKeyInvModFull",
      py::arg("a_x"), py::arg("a_y"));
 
+  m.def("VersionTest", &jpyo0803::VersionTest,
+        "VersionTest");
+
+  m.def("TensorShift_int32", &shift_wrapper_test<int32_t>, "A function that shifts elements of a 3D array.");
+  m.def("TensorShift_uint32", &shift_wrapper_test<uint32_t>, "A function that shifts elements of a 3D array.");
 }

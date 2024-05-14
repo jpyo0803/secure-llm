@@ -6,6 +6,7 @@ from functools import partial
 @torch.no_grad()
 def quantize_weight_per_channel_absmax(w, n_bits=8):
     # w: (out_features, in_features)
+    assert False
     scales = w.abs().max(dim=-1, keepdim=True)[0]
     q_max = 2 ** (n_bits - 1) - 1
     scales.clamp_(min=1e-5).div_(q_max)
@@ -16,6 +17,7 @@ def quantize_weight_per_channel_absmax(w, n_bits=8):
 @torch.no_grad()
 def quantize_weight_per_tensor_absmax(w, n_bits=8):
     # w: (out_features, in_features)
+    assert False
     scales = w.abs().max()
     q_max = 2 ** (n_bits - 1) - 1
     scales.clamp_(min=1e-5).div_(q_max)
@@ -25,6 +27,7 @@ def quantize_weight_per_tensor_absmax(w, n_bits=8):
 
 @torch.no_grad()
 def quantize_activation_per_token_absmax(t, n_bits=8):
+    assert False
     t_shape = t.shape
     t.view(-1, t_shape[-1])
     scales = t.abs().max(dim=-1, keepdim=True)[0]
@@ -36,6 +39,7 @@ def quantize_activation_per_token_absmax(t, n_bits=8):
 
 @torch.no_grad()
 def quantize_activation_per_tensor_absmax(t, n_bits=8):
+    assert False
     t_shape = t.shape
     t.view(-1, t_shape[-1])
     scales = t.abs().max()
@@ -54,6 +58,7 @@ class W8A8Linear(nn.Module):
         act_quant="per_token",
         quantize_output=False,
     ):
+        assert False
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -111,6 +116,7 @@ class W8A8Linear(nn.Module):
     def from_float(
         module, weight_quant="per_channel", act_quant="per_token", quantize_output=False
     ):
+        assert False
         assert isinstance(module, torch.nn.Linear)
         new_module = W8A8Linear(
             module.in_features,
@@ -145,7 +151,7 @@ def quantize_opt(
         OPTAttention,
         OPTDecoderLayer,
     )
-
+    assert False
     for name, m in model.model.named_modules():
         if isinstance(m, OPTDecoderLayer):
             m.fc1 = W8A8Linear.from_float(

@@ -21,9 +21,10 @@ import cupy as cp
 import numpy as np
 import time
 import cipher.tensor_conversion as tc
-import cipher.cipher_light as cl
+import cipher.cipher_light as cipher
 import cipher.cipher_linear as cl
 import singleton_timer as st
+import cipher_cpp
 
 from enum import Enum
 
@@ -79,6 +80,10 @@ class Int8OPTAttention(nn.Module):
         self.my_k_proj = None
         self.my_v_proj = None
         self.my_out_proj = None
+
+        if my_exec_mode == ExecutionMode.Mode6:
+            self.secure_qk_bmm = cipher.SBMM_Light_Experimental()
+            self.secure_pv_bmm = cipher.SBMM_Light_Experimental()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return (
@@ -210,8 +215,12 @@ class Int8OPTAttention(nn.Module):
                                 category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
                 assert hidden_states.device == torch.device('cuda:0')
                 key_states = self.my_k_proj(hidden_states)
+                key_states = key_states.to(torch.device('cpu'))
                 value_states = self.my_v_proj(hidden_states)
+                value_states = value_states.to(torch.device('cpu'))
                 timer.end(t)
+                assert key_states.device == torch.device('cpu')
+                assert value_states.device == torch.device('cpu')
                 # New KV cache stays in GPU
             elif my_exec_mode == ExecutionMode.Mode6:
 
@@ -275,9 +284,14 @@ class Int8OPTAttention(nn.Module):
                 assert hidden_states.device == torch.device('cuda:0')
                 # hidden states was moved to cuda for q proj
                 key_states = self.my_k_proj(hidden_states)
+                key_states = key_states.to(torch.device('cpu'))
                 value_states = self.my_v_proj(hidden_states)
+                value_states = value_states.to(torch.device('cpu'))
                 timer.end(t)
-                # Keep k, v states in GPU as KV cache
+                assert key_states.device == torch.device('cpu')
+                assert value_states.device == torch.device('cpu')
+
+                # k, v states stay in CPU
             elif my_exec_mode == ExecutionMode.Mode6:
                 if self.my_k_proj is None:
                     self.my_k_proj = cl.Linear_S8W_S8A_S8B_S8O_Slalom(
@@ -333,7 +347,8 @@ class Int8OPTAttention(nn.Module):
                 key_states.to(torch.int32)).transpose(0, 2, 1)
             attn_weights = cp.matmul(query_states_cp, key_states_cp)
             attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
-            attn_weights *= float(self.qk_bmm.a.item())
+            attn_weights *= torch.tensor(self.qk_bmm.a.item(),
+                                         dtype=torch.float32)
             assert attn_weights.dtype == torch.float32
         elif my_exec_mode == ExecutionMode.Mode3:
             query_states_np = tc.FromTorchToNumpy(query_states.to(torch.int32))
@@ -341,44 +356,47 @@ class Int8OPTAttention(nn.Module):
                 key_states.to(torch.int32)).transpose(0, 2, 1)
             attn_weights = np.matmul(query_states_np, key_states_np)
             attn_weights = tc.FromNumpyToTorch(attn_weights).to(torch.float32)
-            attn_weights *= float(self.qk_bmm.a.item())
+            attn_weights *= torch.tensor(self.qk_bmm.a.item(),
+                                         dtype=torch.float32)
             assert attn_weights.dtype == torch.float32
         elif my_exec_mode == ExecutionMode.Mode4:
             pass
         elif my_exec_mode == ExecutionMode.Mode5:
             query_states_cp = tc.FromTorchToCupy(
                 tc.FromCpuToGPUTorch(query_states)).astype(cp.int32)
-            key_states_cp = tc.FromTorchToCupy(
-                key_states.to(torch.int32)).transpose(0, 2, 1)
+            key_states_cp = tc.FromTorchToCupy(tc.FromCpuToGPUTorch(
+                key_states).to(torch.int32)).transpose(0, 2, 1)
             attn_weights = cp.matmul(query_states_cp, key_states_cp)
             attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
-            attn_weights *= float(self.qk_bmm.a.item())
+            attn_weights *= torch.tensor(self.qk_bmm.a.item(),
+                                         dtype=torch.float32)
             attn_weights = tc.FromGpuToCpuTorch(attn_weights)
             assert attn_weights.dtype == torch.float32
             assert attn_weights.device == torch.device('cpu')
         elif my_exec_mode == ExecutionMode.Mode6:
-            # t = timer.start(tag='Pre', category='Pre')
-            # query_states_np = tc.FromTorchToNumpy(query_states)
-            # key_states_np = tc.FromTorchToNumpy(
-            #     key_states.transpose(1, 2))
-            query_states_cp = tc.FromTorchToCupy(
-                tc.FromCpuToGPUTorch(query_states)).astype(cp.int32)
-            key_states_cp = tc.FromNumpyToCupy(
-                tc.FromTorchToNumpy(key_states.transpose(1, 2)))
-            # timer.end(t)
-            # t = timer.start(tag='Comp', category='Comp')
-            # print("query shape: ", query_states_np.shape)
-            # print("key shape: ", key_states_np.shape)
-            # attn_weights = self.secure_qk_bmm(query_states_np, key_states_np)
-            attn_weights = cp.matmul(query_states_cp, key_states_cp)
-            # timer.end(t)
-            # t = timer.start(tag='Post', category='Post')
-            # attn_weights = tc.FromCupyToTorch(attn_weights).to(torch.float32)
-            attn_weights = tc.FromNumpyToTorch(
-                tc.FromCupyToNumpy(attn_weights)).to(torch.float32)
-            attn_weights *= float(self.qk_bmm.a.item())  # done in CPU
-            # attn_weights = tc.FromGpuToCpuTorch(attn_weights)
-            # timer.end(t)
+            query_states_np = query_states.numpy()
+            key_states_np = key_states.transpose(1, 2).numpy()
+            assert query_states_np.dtype == np.int8
+            assert key_states_np.dtype == np.int8
+
+            attn_weights = self.secure_qk_bmm(query_states_np, key_states_np)
+
+            attn_weights = tc.FromNumpyToTorch(attn_weights).to(torch.float32)
+            # done in CPU
+            attn_weights *= torch.tensor(self.qk_bmm.a.item(),
+                                         dtype=torch.float32)
+           # query_states_cp = tc.FromTorchToCupy(
+            #    tc.FromCpuToGPUTorch(query_states)).astype(cp.int32)
+            # key_states_cp = tc.FromTorchToCupy(tc.FromCpuToGPUTorch(
+            #    key_states).to(torch.int32)).transpose(0, 2, 1)
+            # attn_weights2 = cp.matmul(query_states_cp, key_states_cp)
+            # attn_weights2 = tc.FromCupyToTorch(attn_weights2).to(torch.float32)
+            # attn_weights2 *= torch.tensor(self.qk_bmm.a.item(),
+            #                              dtype=torch.float32)
+            # attn_weights2 = tc.FromGpuToCpuTorch(attn_weights2)
+            # print(attn_weights)
+            # print(attn_weights2)
+            # assert torch.allclose(attn_weights, attn_weights2, atol=1e-3)
             assert attn_weights.dtype == torch.float32
             assert attn_weights.device == torch.device('cpu')
         timer.end(t)
@@ -406,7 +424,12 @@ class Int8OPTAttention(nn.Module):
             attn_weights = attn_weights.view(
                 bsz * self.num_heads, tgt_len, src_len)
 
-        attn_probs = nn.functional.softmax(attn_weights, dim=-1) # Calc attention score (SGX)
+        #print("my softmax")
+        attn_weights_np = attn_weights.numpy()
+        cipher_cpp.SoftmaxTensor3D(attn_weights_np)
+        attn_probs = torch.from_numpy(attn_weights_np)
+
+        #attn_probs = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -451,7 +474,7 @@ class Int8OPTAttention(nn.Module):
                 value_states.to(torch.int32)).transpose(0, 2, 1)
             attn_output = cp.matmul(attn_probs_cp, value_states_cp)
             attn_output = tc.FromCupyToTorch(attn_output).to(
-                torch.float32) * float(self.pv_bmm.a.item())
+                torch.float32) * torch.tensor(self.pv_bmm.a.item(), dtype=torch.float32)
             attn_output = attn_output.to(torch.int8)
         elif my_exec_mode == ExecutionMode.Mode3:
             attn_probs_np = tc.FromTorchToNumpy(attn_probs.to(torch.int32))
@@ -459,32 +482,52 @@ class Int8OPTAttention(nn.Module):
                 value_states.to(torch.int32)).transpose(0, 2, 1)
             attn_output = np.matmul(attn_probs_np, value_states_np)
             attn_output = tc.FromNumpyToTorch(attn_output).to(
-                torch.float32) * float(self.pv_bmm.a.item())
+                torch.float32) * torch.tensor(self.pv_bmm.a.item(), dtype=torch.float32)
             attn_output = attn_output.to(torch.int8)
         elif my_exec_mode == ExecutionMode.Mode4:
             pass
         elif my_exec_mode == ExecutionMode.Mode5:
             attn_probs_cp = tc.FromTorchToCupy(
                 tc.FromCpuToGPUTorch(attn_probs)).astype(cp.int32)
-            value_states_cp = tc.FromTorchToCupy(
-                value_states.to(torch.int32)).transpose(0, 2, 1)
+            value_states_cp = tc.FromTorchToCupy(tc.FromCpuToGPUTorch(
+                value_states).to(torch.int32)).transpose(0, 2, 1)
             attn_output = cp.matmul(attn_probs_cp, value_states_cp)
             attn_output = tc.FromCupyToTorch(attn_output).to(
-                torch.float32) * float(self.pv_bmm.a.item())
+                torch.float32) * torch.tensor(self.pv_bmm.a.item(), dtype=torch.float32)
             attn_output = attn_output.to(torch.int8)
             attn_output = attn_output.to(torch.device('cpu'))
             assert attn_output.device == torch.device('cpu')
         elif my_exec_mode == ExecutionMode.Mode6:
-            attn_probs_cp = tc.FromTorchToCupy(
-                tc.FromCpuToGPUTorch(attn_probs)).astype(cp.int32)
-            value_states_cp = tc.FromNumpyToCupy(
-                tc.FromTorchToNumpy(value_states.transpose(1, 2)))
-            attn_output = cp.matmul(attn_probs_cp, value_states_cp)
-            attn_output = tc.FromCupyToTorch(attn_output).to(
-                torch.float32) * float(self.pv_bmm.a.item())
-            attn_output = attn_output.to(torch.int8)
-            attn_output = attn_output.to(torch.device('cpu'))
-            assert attn_output.device == torch.device('cpu')
+            attn_probs_np = attn_probs.numpy()
+            value_states_np = value_states.transpose(1, 2).numpy()
+
+            attn_output = self.secure_pv_bmm(attn_probs_np, value_states_np)
+            attn_output = tc.FromNumpyToTorch(attn_output).to(
+                torch.float32)
+            attn_output *= torch.tensor(self.pv_bmm.a.item(),
+                                        dtype=torch.float32)
+
+           # attn_probs_cp = tc.FromTorchToCupy(
+           #     tc.FromCpuToGPUTorch(attn_probs)).astype(cp.int32)
+           # value_states_cp = tc.FromTorchToCupy(tc.FromCpuToGPUTorch(
+           #     value_states).to(torch.int32)).transpose(0, 2, 1)
+          #  attn_output = cp.matmul(attn_probs_cp, value_states_cp)
+           # attn_output = tc.FromCupyToTorch(attn_output).to(
+           #     torch.float32) * torch.tensor(self.pv_bmm.a.item(), dtype=torch.float32)
+          #  attn_output = attn_output.to(torch.int8)
+           # attn_output = attn_output.to(torch.device('cpu'))
+          #  assert attn_output.device == torch.device('cpu')
+            # attn_probs_np = tc.FromTorchToNumpy(attn_probs)
+            # value_states_np = tc.FromTorchToNumpy(
+            #     value_states.transpose(1, 2))
+
+            # attn_output = self.secure_pv_bmm(attn_probs_np, value_states_np)
+            # attn_output = tc.FromNumpyToTorch(attn_output).to(
+            #     torch.float32) * torch.tensor(self.pv_bmm.a.item(), dtype=torch.float32)
+
+            # attn_output = attn_output.to(torch.int8)
+            # attn_output = attn_output.to(torch.device('cpu'))
+            # assert attn_output.device == torch.device('cpu')
         timer.end(t)
 
         t = timer.start(tag=f'Attn shape ({"Prefill" if is_prefill else "Decode"})',
@@ -621,8 +664,38 @@ class Int8OPTDecoderLayer(nn.Module):
         t = timer.start(tag=f'1st layer norm ({"Prefill" if is_prefill else "Decode"})',
                         category=f'1st layer norm ({"Prefill" if is_prefill else "Decode"})')
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states) # Laynorm (SGX)
+
+       # print(f'hidden_states: {hidden_states.shape}, {hidden_states.dtype}')
+       # print(f'weight shape: {self.self_attn_layer_norm.weight.shape}')
+        # print(f'bias shape: {self.self_attn_layer_norm.bias.shape}')
+        # print(f'eps : {self.self_attn_layer_norm.eps}')
+
+        #hidden_states = self.self_attn_layer_norm(
+        #    hidden_states)  # shape = 3, torch, float16
+        hidden_states2 = self.self_attn_layer_norm(
+            hidden_states)  # shape = 3, torch, float16
+        #hidden_states = hidden_states.to(
+        #    self.self_attn_layer_norm.weight.dtype)
+        hidden_states_np = hidden_states.numpy()
+        # print("my later norm")
+        cipher_cpp.LayerNormTensor3D(
+            hidden_states_np, self.self_attn_layer_norm.weight, self.self_attn_layer_norm.bias, self.self_attn_layer_norm.eps)
+        hidden_states = torch.from_numpy(hidden_states_np)
+        hidden_states_copy = hidden_states.clone().detach()
+        hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         timer.end(t)
+
+        print(hidden_states)
+        print(hidden_states2)
+        is_eq = torch.equal(hidden_states, hidden_states2)
+        mask = (hidden_states != hidden_states2)
+        print(hidden_states_copy[mask])
+
+        print(hidden_states[mask])
+        print(hidden_states2[mask])
+        print("is eq :" , is_eq)
+        # assert is_eq
+        # assert False
 
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -639,7 +712,9 @@ class Int8OPTDecoderLayer(nn.Module):
 
         t = timer.start(tag=f'2nd layer norm ({"Prefill" if is_prefill else "Decode"})',
                         category=f'2nd layer norm ({"Prefill" if is_prefill else "Decode"})')
-        hidden_states = self.final_layer_norm(residual) # layernorm 2 (SGX)
+
+        hidden_states = self.final_layer_norm(
+            residual)  # shape = (1, 512, 768)
         timer.end(t)
 
         if my_exec_mode == ExecutionMode.Mode1:

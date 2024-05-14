@@ -7,6 +7,7 @@
 #include <omp.h>
 #include <random>
 #include <numeric>
+#include <iostream>
 
 namespace jpyo0803 {
 
@@ -153,6 +154,12 @@ std::vector<std::vector<T>> RandInt2D(T low, T high, int M, int N) {
   return ret;
 }
 
+void SoftmaxTensor3D(float*** in, int B, int M, int N);
+
+void LayerNormTensor3D(float*** in, float* weight, float* bias, float eps, int B, int M, int N);
+
+void ReluTensor3D(float*** in, int B, int M, int N);
+
 std::vector<uint32_t> GenerateKeySetA(uint64_t mod, int n);
 
 std::vector<std::vector<uint32_t>> FindKeyInvModFull(const std::vector<uint32_t>& a_x, const std::vector<uint32_t>& a_y);
@@ -170,6 +177,9 @@ void EncryptMatrix2DFull(std::vector<std::vector<uint32_t>>& in, const std::vect
 void DecryptMatrix2D(std::vector<std::vector<uint32_t>>& in, uint32_t K, const std::vector<uint32_t> a1, const std::vector<uint32_t> b1, const std::vector<uint32_t> a2, const std::vector<uint32_t> b2, uint64_t m, const std::vector<uint32_t> row_sum_x, const std::vector<uint32_t> col_sum_y);
 
 void DecryptMatrix2DFull(std::vector<std::vector<uint32_t>>& in, const std::vector<std::vector<uint32_t>>& key_inv, const std::vector<uint32_t>& dec_row_sum_x, const std::vector<uint32_t>& dec_col_sum_y, uint32_t b_factor);
+
+void VersionTest();
 }
+
 
 #endif

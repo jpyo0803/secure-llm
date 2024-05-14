@@ -38,6 +38,56 @@ uint64_t FindKeyInvModNonPrime(uint64_t key, uint64_t mod) {
 
 namespace jpyo0803 {
 
+void SoftmaxTensor3D(float*** in, int B, int M, int N) {
+  #pragma omp parallel for collapse(2)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      float sum = 0;
+      for (int k = 0; k < N; ++k) {
+        in[i][j][k] = std::exp(in[i][j][k]);
+        sum += in[i][j][k];
+      }
+      for (int k = 0; k < N; ++k) {
+        in[i][j][k] /= sum;
+      }
+    }
+  }
+}
+
+void LayerNormTensor3D(float*** in, float* weight, float* bias, float eps, int B, int M, int N){
+  for (int i = 0 ; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      float sum = 0;
+      float sum_sqr = 0;
+      for (int k = 0; k < N; ++k) {
+        float tmp = in[i][j][k];
+        sum += tmp;
+        sum_sqr += tmp * tmp;
+      }
+
+      float avg = sum / N;
+      float var = sum_sqr / N - avg * avg;
+      
+      for (int k = 0; k < N; ++k) {
+        in[i][j][k] = (in[i][j][k] - avg) / std::sqrt(var + eps) * weight[k] + bias[k];
+      }
+    }
+  }
+}
+
+
+void ReluTensor3D(float*** in, int B, int M, int N) {
+  #pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        in[i][j][k] = std::max(0.0f, in[i][j][k]);
+      }
+    }
+  }
+}
+
+
 std::vector<uint32_t> GenerateKeySetA(uint64_t mod, int n) {
   std::vector<uint32_t> key_set(n);
   for (int i = 0; i < n; ++i) {
@@ -192,6 +242,10 @@ void DecryptMatrix2DFull(std::vector<std::vector<uint32_t>>& in, const std::vect
       in[i][j] = static_cast<uint32_t>(tmp);
     }
   }
+}
+
+void VersionTest() {
+  std::cout << "Version 123d4" << std::endl;
 }
 
 

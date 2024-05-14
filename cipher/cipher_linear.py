@@ -1,9 +1,10 @@
+import cipher.cipher
 import torch
 import numpy
 import cupy
 import time
 from torch_int.nn.linear import W8A8B8O8LinearReLU, W8A8B8O8Linear, W8A8B32O32Linear, W8A8BFP32OFP32Linear
-
+import cipher_cpp
 
 '''
     GEMM
@@ -66,7 +67,7 @@ class Linear_S8W_S8A_S8B_S8O_Slalom:
         # print(x.shape, self.weight.shape)
 
         y = cupy.matmul(x, self.weight)
-        cupy.cuda.Stream.null.synchronize()
+        #cupy.cuda.Stream.null.synchronize()
         # et =  time.perf_counter_ns()
         # print(f"matmul: {(et - st) / 1e9}")
         # st =  time.perf_counter_ns()
@@ -309,7 +310,12 @@ class Linear_S8W_S8A_S8B_S8O_Relu_Unsecure_Gpu:
         y = y.to(torch.float32)
         y *= self.alpha
         y += self.beta * self.bias
-        y = self.relu(y)
+        #y = self.relu(y)
+        y_np = y.cpu().numpy()
+        cipher_cpp.ReluTensor3D(y_np)
+        y = torch.from_numpy(y_np)  
+        # y before :  torch.Size([1, 512, 3072]) torch.float32
+        # y after :  torch.Size([1, 512, 3072]) torch.float32
         y = y.to(torch.int8)
         return y
 

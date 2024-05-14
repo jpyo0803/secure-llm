@@ -13,6 +13,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 Int8OPTForCausalLM.set_exec_mode(smoothquant.opt.ExecutionMode.Mode3)
 
+print("Mode: ", smoothquant.opt.my_exec_mode)
+
 timer = st.SingletonTimer(False)
 
 start_gpu = (smoothquant.opt.my_exec_mode ==

@@ -16,7 +16,7 @@ class BmmTest(unittest.TestCase):
         pass_cnt = 0
         timer_first = True
 
-        sbmm_light = cl.SBMM_Light()
+        sbmm_light = cl.SBMM_Light_Experimental()
         sbmm_unsecure = cu.SBMM_Unsecure()
         for i in range(num_test):
             print("Test #", i + 1)

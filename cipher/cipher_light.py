@@ -5,6 +5,8 @@ import cupy as cp
 import cipher_cpp
 
 # Secure Batch Matrix Multiplication Light version
+
+
 class SBMM_Light_Experimental:
     def __init__(self):
         self.B = 8
@@ -14,11 +16,13 @@ class SBMM_Light_Experimental:
         self.x32_buffer = None
         self.y32_buffer = None
 
-    def __run(self, x: np.ndarray, y: np.ndarray, y_cache: cp.ndarray):
+    def __run(self, x: np.ndarray, y: np.ndarray):
         assert x.ndim == 3 and y.ndim == 3
         assert x.shape[0] == y.shape[0]
         assert x.shape[2] == y.shape[1]
         assert x.dtype == np.int8 and y.dtype == np.int8
+
+        y = np.ascontiguousarray(y)
 
         _, _, K = x.shape
 
@@ -43,10 +47,8 @@ class SBMM_Light_Experimental:
         shifted_x, shifted_y = self.__shift_inputs(
             self.x32_buffer, self.y32_buffer)
 
-
         shifted_x = shifted_x.view(np.uint32)
         shifted_y = shifted_y.view(np.uint32)
-
 
         a_x, a_y, b_x, b_y = self.__generate_keys(K)
 
@@ -55,20 +57,15 @@ class SBMM_Light_Experimental:
         dec_row_sum_x, dec_col_sum_y, key_inv, b_factor = self.__generate_decryption_metadata(
             shifted_x, shifted_y, a_x, a_y, b_x, b_y)
 
-
         enc_x = self.__encrypt_tensor(shifted_x, a_x, b_x, False)
         enc_y = self.__encrypt_tensor(shifted_y, a_y, b_y, True)
-
-
 
         enc_x_gpu = cp.asarray(enc_x)
         enc_y_gpu = cp.asarray(enc_y)
 
-
         enc_z_gpu = cp.matmul(enc_x_gpu, enc_y_gpu)
 
         enc_z = cp.asnumpy(enc_z_gpu)
-
 
         z = self.__decrypt_tensor(
             enc_z, key_inv, dec_row_sum_x, dec_col_sum_y, b_factor)
@@ -144,7 +141,6 @@ class SBMM_Light_Experimental:
         return self.__run(x, y)
 
 
-
 class SBMM_Light:
     def __init__(self, timer_on: bool = False):
         self.B = 8
@@ -160,6 +156,8 @@ class SBMM_Light:
         assert x.shape[0] == y.shape[0]
         assert x.shape[2] == y.shape[1]
         assert x.dtype == np.int8 and y.dtype == np.int8
+
+        y = np.ascontiguousarray(y)
 
         if self.timer_on:
             timer = st.SingletonTimer()
@@ -216,8 +214,6 @@ class SBMM_Light:
             t = timer.start(tag='gen. keys (L)',
                                 category='gen. keys (L)')
         a_x, a_y, b_x, b_y = self.__generate_keys(K)
-
-        # assert (a_x *a_y * key_inv % self.mod) == 1
         if self.timer_on:
             timer.end(t)
 
@@ -229,13 +225,13 @@ class SBMM_Light:
         if self.timer_on:
             timer.end(t)
 
+        # assert (a_x * a_y * key_inv % self.mod) == 1
+
         if self.timer_on:
             t = timer.start(tag='encrypt (L)',
                             category='encrypt (L)')
-
         enc_x = self.__encrypt_tensor(shifted_x, a_x, b_x, False)
         enc_y = self.__encrypt_tensor(shifted_y, a_y, b_y, True)
-
         if self.timer_on:
             timer.end(t)
 
@@ -252,6 +248,7 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='gpu comp. (L)', category='gpu comp. (L)')
         enc_z_gpu = cp.matmul(enc_x_gpu, enc_y_gpu)
+        # You need sync here to properly measure computation time
         if self.timer_on:
             timer.end(t)
         if self.timer_on:
@@ -278,9 +275,11 @@ class SBMM_Light:
         if self.timer_on:
             t = timer.start(tag='undo shift (L)',
                             category='undo shift (L)')
+
         z = self.__undo_shift_output(z, K, shift_row_sum_x, shift_col_sum_y)
         if self.timer_on:
             timer.end(t)
+
         return z
 
     def __generate_shift_metedata(self, x, y):
