@@ -111,7 +111,7 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecutionMode.Mode1:
             t = timer.start(tag=f'Q Proj ({"Prefill" if is_prefill else "Decode"})',
                             category=f'Q Proj ({"Prefill" if is_prefill else "Decode"})')
-            query_states = self.q_proj(hidden_states)
+            query_states = self.q_proj(hidden_states) # WQ
             timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode2:
             '''
@@ -184,8 +184,8 @@ class Int8OPTAttention(nn.Module):
             if my_exec_mode == ExecutionMode.Mode1:
                 t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
                                 category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
-                key_states = self.k_proj(hidden_states, -1, bsz)
-                value_states = self.v_proj(hidden_states, -1, bsz)
+                key_states = self.k_proj(hidden_states, -1, bsz) # WK
+                value_states = self.v_proj(hidden_states, -1, bsz) # WV
                 timer.end(t)
             elif my_exec_mode == ExecutionMode.Mode2:
 
@@ -229,7 +229,7 @@ class Int8OPTAttention(nn.Module):
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
-            # self_attention
+            # Prefill phase
             if my_exec_mode == ExecutionMode.Mode1:
                 t = timer.start(tag=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})',
                                 category=f'K, V Proj ({"Prefill" if is_prefill else "Decode"})')
@@ -326,7 +326,7 @@ class Int8OPTAttention(nn.Module):
         t = timer.start(tag=f'QK^T ({"Prefill" if is_prefill else "Decode"})',
                         category=f'QK^T ({"Prefill" if is_prefill else "Decode"})')
         if my_exec_mode == ExecutionMode.Mode1:
-            attn_weights = self.qk_bmm(query_states, key_states)
+            attn_weights = self.qk_bmm(query_states, key_states) # QKT
         elif my_exec_mode == ExecutionMode.Mode2:
             query_states_cp = tc.FromTorchToCupy(query_states.to(torch.int32))
             key_states_cp = tc.FromTorchToCupy(
@@ -406,7 +406,7 @@ class Int8OPTAttention(nn.Module):
             attn_weights = attn_weights.view(
                 bsz * self.num_heads, tgt_len, src_len)
 
-        attn_probs = nn.functional.softmax(attn_weights, dim=-1)
+        attn_probs = nn.functional.softmax(attn_weights, dim=-1) # Calc attention score (SGX)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -444,7 +444,7 @@ class Int8OPTAttention(nn.Module):
         t = timer.start(tag=f'PV ({"Prefill" if is_prefill else "Decode"})',
                         category=f'PV ({"Prefill" if is_prefill else "Decode"})')
         if my_exec_mode == ExecutionMode.Mode1:
-            attn_output = self.pv_bmm(attn_probs, value_states)
+            attn_output = self.pv_bmm(attn_probs, value_states) # PV
         elif my_exec_mode == ExecutionMode.Mode2:
             attn_probs_cp = tc.FromTorchToCupy(attn_probs.to(torch.int32))
             value_states_cp = tc.FromTorchToCupy(
@@ -509,7 +509,7 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecutionMode.Mode1:
             t = timer.start(tag=f'Out Proj ({"Prefill" if is_prefill else "Decode"})',
                             category=f'Out Proj ({"Prefill" if is_prefill else "Decode"})')
-            attn_output = self.out_proj(attn_output)
+            attn_output = self.out_proj(attn_output) # WO
             timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode2:
             if self.my_out_proj is None:
@@ -621,7 +621,7 @@ class Int8OPTDecoderLayer(nn.Module):
         t = timer.start(tag=f'1st layer norm ({"Prefill" if is_prefill else "Decode"})',
                         category=f'1st layer norm ({"Prefill" if is_prefill else "Decode"})')
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states) # Laynorm (SGX)
         timer.end(t)
 
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -634,18 +634,18 @@ class Int8OPTDecoderLayer(nn.Module):
 
         t = timer.start(tag=f'1st residual add ({"Prefill" if is_prefill else "Decode"})',
                         category=f'1st residual add ({"Prefill" if is_prefill else "Decode"})')
-        residual.add_(hidden_states.to(residual.dtype))
+        residual.add_(hidden_states.to(residual.dtype)) # residual 1 (SGX)
         timer.end(t)
 
         t = timer.start(tag=f'2nd layer norm ({"Prefill" if is_prefill else "Decode"})',
                         category=f'2nd layer norm ({"Prefill" if is_prefill else "Decode"})')
-        hidden_states = self.final_layer_norm(residual)
+        hidden_states = self.final_layer_norm(residual) # layernorm 2 (SGX)
         timer.end(t)
 
         if my_exec_mode == ExecutionMode.Mode1:
             t = timer.start(tag=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})',
                             category=f'FFN1 + Relu ({"Prefill" if is_prefill else "Decode"})')
-            hidden_states = self.fc1(hidden_states)
+            hidden_states = self.fc1(hidden_states) # FC1 + RELU (SGX)
             timer.end(t)
         elif my_exec_mode == ExecutionMode.Mode2:
             if self.my_fc1 is None:
@@ -744,7 +744,7 @@ class Int8OPTDecoderLayer(nn.Module):
 
         t = timer.start(tag=f'2nd residual add ({"Prefill" if is_prefill else "Decode"})',
                         category=f'2nd residual add ({"Prefill" if is_prefill else "Decode"})')
-        residual.add_(hidden_states.to(residual.dtype))
+        residual.add_(hidden_states.to(residual.dtype)) # Last residual (SGX)
         timer.end(t)
 
         outputs = (residual,)
@@ -802,9 +802,9 @@ class Int8OPTDecoder(OPTPreTrainedModel):
         self.layers = nn.ModuleList(
             [
                 Int8OPTDecoderLayer(
-                    config.hidden_size, config.num_attention_heads, config.ffn_dim
+                    config.hiden_size, config.num_attention_heads, config.ffn_dim
                 )
-                for _ in range(config.num_hidden_layers)
+                for _ in range(config.num_hdidden_layers)
             ]
         )
 
