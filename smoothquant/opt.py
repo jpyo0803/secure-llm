@@ -31,9 +31,7 @@ from ctypes import *
 
 class ExecMode(Enum):
     Mode1 = 1  # Smoothquant original (GPU only)
-    Mode2 = 2  # Smoothquant + Cupy (GPU only)
-    Mode3 = 3  # Smoothquant + Numpy (CPU) + Cupy (GPU), Unsecure
-    Mode4 = 4  # Smoothquant + Numpy (CPU) + Cupy (GPU), Secure, Ours
+    Mode2 = 2  # 
 
 
 my_exec_mode = None
@@ -118,28 +116,7 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             query_states = self.q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode2:
-            if self.my_q_proj is None:
-                # Happen only once
-                self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                    self.q_proj)
-
-            query_states = self.my_q_proj(hidden_states)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.my_q_proj is None:
-                # Happen only once
-                self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                    self.q_proj)
-
-            hidden_states = hidden_states.to(torch.device("cuda:0"))
-            query_states = self.my_q_proj(hidden_states)
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.my_q_proj is None:
-                # Happen only once
-                self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                    self.q_proj)
-            hidden_states = hidden_states.to(torch.device("cuda:0"))
-            query_states = self.my_q_proj(hidden_states)
-
+            query_states = self.q_proj(hidden_states)
         else:
             assert False
 
@@ -170,30 +147,11 @@ class Int8OPTAttention(nn.Module):
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
             elif my_exec_mode == ExecMode.Mode2:
-                key_states = self._shape(
-                    self.my_k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(
-                    self.my_v_proj(hidden_states), -1, bsz)
+                key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+                value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
-            elif my_exec_mode == ExecMode.Mode3:                  
-                key_states = self._shape(
-                    self.my_k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(
-                    self.my_v_proj(hidden_states), -1, bsz)
-                key_states = torch.cat([past_key_value[0], key_states], dim=2)
-                value_states = torch.cat(
-                    [past_key_value[1], value_states], dim=2)
-            elif my_exec_mode == ExecMode.Mode4:
-                key_states = self._shape(
-                    self.my_k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(
-                    self.my_v_proj(hidden_states), -1, bsz)
-                key_states = torch.cat([past_key_value[0], key_states], dim=2)
-                value_states = torch.cat(
-                    [past_key_value[1], value_states], dim=2)
-                
             else:
                 assert False
         else:
@@ -207,38 +165,8 @@ class Int8OPTAttention(nn.Module):
                 key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
                 value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             elif my_exec_mode == ExecMode.Mode2:
-                if self.my_k_proj is None:
-                    # Happen only once
-                    self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                        self.k_proj)
-                    self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                        self.v_proj)
-                key_states = self._shape(
-                    self.my_k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(
-                    self.my_v_proj(hidden_states), -1, bsz)
-            elif my_exec_mode == ExecMode.Mode3:
-                if self.my_k_proj is None:
-                    # Happen only once
-                    self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                        self.k_proj)
-                    self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                        self.v_proj)
-                key_states = self._shape(
-                    self.my_k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(
-                    self.my_v_proj(hidden_states), -1, bsz)
-            elif my_exec_mode == ExecMode.Mode4:
-                if self.my_k_proj is None:
-                    # Happen only once
-                    self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                        self.k_proj)
-                    self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_GPU(
-                        self.v_proj)
-                key_states = self._shape(
-                    self.my_k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(
-                    self.my_v_proj(hidden_states), -1, bsz)
+                key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+                value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             else:
                 assert False
 
@@ -259,22 +187,7 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_weights = self.qk_bmm(query_states, key_states)
         elif my_exec_mode == ExecMode.Mode2:
-            if self.my_qk_bmm is None:
-                # Happen only once
-                self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_GPU(self.qk_bmm)
-            attn_weights = self.my_qk_bmm(query_states, key_states)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.my_qk_bmm is None:
-                # Happen only once
-                self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_GPU(self.qk_bmm)
-            attn_weights = self.my_qk_bmm(query_states, key_states)
-            attn_weights = attn_weights.to(torch.device("cpu"))
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.my_qk_bmm is None:
-                # Happen only once
-                self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_GPU(self.qk_bmm)
-            attn_weights = self.my_qk_bmm(query_states, key_states)
-            attn_weights = attn_weights.to(torch.device("cpu"))
+            attn_weights = self.qk_bmm(query_states, key_states)
         else:
             assert False
 
@@ -310,22 +223,7 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         elif my_exec_mode == ExecMode.Mode2:
-            attn_weights_cp = cp.from_dlpack(attn_weights)
-            attn_probs_cp = cupyx.scipy.special.softmax(
-                attn_weights_cp, axis=-1)
-            attn_probs = torch.from_dlpack(attn_probs_cp)
-        elif my_exec_mode == ExecMode.Mode3:
-            attn_probs = attn_weights.clone().detach().to(
-                torch.device("cpu"))
-            layer_cpp_lib.Softmax(
-                cast(attn_probs.data_ptr(), POINTER(c_float)), attn_weights.shape[0], attn_weights.shape[1], attn_weights.shape[2])
-            attn_probs = attn_probs.to(torch.device("cuda:0"))
-        elif my_exec_mode == ExecMode.Mode4:
-            attn_probs = attn_weights.clone().detach().to(
-                torch.device("cpu"))
-            layer_cpp_lib.Softmax(
-                cast(attn_probs.data_ptr(), POINTER(c_float)), attn_weights.shape[0], attn_weights.shape[1], attn_weights.shape[2])
-            attn_probs = attn_probs.to(torch.device("cuda:0"))
+            attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         else:
             assert False
 
@@ -371,20 +269,7 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.pv_bmm(attn_probs, value_states)
         elif my_exec_mode == ExecMode.Mode2:
-            if self.my_pv_bmm is None:
-                # Happen only once
-                self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_GPU(self.pv_bmm)
-            attn_output = self.my_pv_bmm(attn_probs, value_states)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.my_pv_bmm is None:
-                # Happen only once
-                self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_GPU(self.pv_bmm)
-            attn_output = self.my_pv_bmm(attn_probs, value_states)
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.my_pv_bmm is None:
-                # Happen only once
-                self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_GPU(self.pv_bmm)
-            attn_output = self.my_pv_bmm(attn_probs, value_states)
+            attn_output = self.pv_bmm(attn_probs, value_states)
         else:
             assert False
 
@@ -411,28 +296,7 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode2:
-            if self.my_out_proj is None:
-                # Happen only once
-                self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_GPU(
-                    self.out_proj)
-            # Not implemented yet
-            attn_output = self.my_out_proj(attn_output)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.my_out_proj is None:
-                # Happen only once
-                self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_GPU(
-                    self.out_proj)
-            # Not implemented yet
-            attn_output = self.my_out_proj(attn_output)
-            attn_output = attn_output.to(torch.device("cpu"))
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.my_out_proj is None:
-                # Happen only once
-                self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_GPU(
-                    self.out_proj)
-            # Not implemented yet
-            attn_output = self.my_out_proj(attn_output)
-            attn_output = attn_output.to(torch.device("cpu"))
+            attn_output = self.out_proj(attn_output)
         else:
             assert False
 
@@ -505,81 +369,7 @@ class Int8OPTDecoderLayer(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode2:
-            hidden_states = hidden_states.to(
-                self.self_attn_layer_norm.weight.dtype)
-            hidden_states_cp = cp.from_dlpack(hidden_states)
-            mean = cp.mean(hidden_states_cp, axis=2, keepdims=True)
-            var = cp.var(hidden_states_cp, axis=2, keepdims=True)
-            div = cp.sqrt(var + self.self_attn_layer_norm.eps)
-            hidden_states_cp = (hidden_states_cp - mean) / div
-            hidden_states = torch.from_dlpack(hidden_states_cp)
-            hidden_states *= self.self_attn_layer_norm.weight
-            hidden_states += self.self_attn_layer_norm.bias
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.self_attn_layer_norm.weight.device != torch.device("cuda:0"):
-                self.self_attn_layer_norm = self.self_attn_layer_norm.to(
-                    torch.device("cuda:0"))
-
-            hidden_states = hidden_states.to(
-                torch.device("cuda:0"))
-            hidden_states = hidden_states.to(
-                self.self_attn_layer_norm.weight.dtype)
-            hidden_states_cp = cp.from_dlpack(hidden_states)
-            mean = cp.mean(hidden_states_cp, axis=2, keepdims=True)
-            var = cp.var(hidden_states_cp, axis=2, keepdims=True)
-            div = cp.sqrt(var + self.self_attn_layer_norm.eps)
-            hidden_states_cp = (hidden_states_cp - mean) / div
-            hidden_states = torch.from_dlpack(hidden_states_cp)
-            hidden_states *= self.self_attn_layer_norm.weight
-            hidden_states += self.self_attn_layer_norm.bias
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-            hidden_states = hidden_states.to(torch.device("cpu"))
-
-            # hidden_states = hidden_states.to(
-            #     self.self_attn_layer_norm.weight.dtype)
-            # layer_cpp_lib.LayerNorm(
-            #     cast(hidden_states.data_ptr(), POINTER(c_float)),
-            #     cast(self.self_attn_layer_norm.weight.data_ptr(), POINTER(c_float)),
-            #     cast(self.self_attn_layer_norm.bias.data_ptr(), POINTER(c_float)),
-            #     self.self_attn_layer_norm.eps,
-            #     hidden_states.shape[0],
-            #     hidden_states.shape[1],
-            #     hidden_states.shape[2]
-            # )
-            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.self_attn_layer_norm.weight.device != torch.device("cuda:0"):
-                self.self_attn_layer_norm = self.self_attn_layer_norm.to(
-                    torch.device("cuda:0"))
-
-            hidden_states = hidden_states.to(
-                torch.device("cuda:0"))
-            hidden_states = hidden_states.to(
-                self.self_attn_layer_norm.weight.dtype)
-            hidden_states_cp = cp.from_dlpack(hidden_states)
-            mean = cp.mean(hidden_states_cp, axis=2, keepdims=True)
-            var = cp.var(hidden_states_cp, axis=2, keepdims=True)
-            div = cp.sqrt(var + self.self_attn_layer_norm.eps)
-            hidden_states_cp = (hidden_states_cp - mean) / div
-            hidden_states = torch.from_dlpack(hidden_states_cp)
-            hidden_states *= self.self_attn_layer_norm.weight
-            hidden_states += self.self_attn_layer_norm.bias
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-            hidden_states = hidden_states.to(torch.device("cpu"))
-
-            # hidden_states = hidden_states.to(
-            #     self.self_attn_layer_norm.weight.dtype)
-            # layer_cpp_lib.LayerNorm(
-            #     cast(hidden_states.data_ptr(), POINTER(c_float)),
-            #     cast(self.self_attn_layer_norm.weight.data_ptr(), POINTER(c_float)),
-            #     cast(self.self_attn_layer_norm.bias.data_ptr(), POINTER(c_float)),
-            #     self.self_attn_layer_norm.eps,
-            #     hidden_states.shape[0],
-            #     hidden_states.shape[1],
-            #     hidden_states.shape[2]
-            # )
-            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+            hidden_states = self.self_attn_layer_norm(hidden_states)
         else:
             assert False
 
@@ -608,80 +398,7 @@ class Int8OPTDecoderLayer(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.final_layer_norm(residual)
         elif my_exec_mode == ExecMode.Mode2:
-            hidden_states = residual.to(self.final_layer_norm.weight.dtype)
-            hidden_states_cp = cp.from_dlpack(hidden_states)
-            mean = cp.mean(hidden_states_cp, axis=2, keepdims=True)
-            var = cp.var(hidden_states_cp, axis=2, keepdims=True)
-            div = cp.sqrt(var + self.final_layer_norm.eps)
-            hidden_states_cp = (hidden_states_cp - mean) / div
-            hidden_states = torch.from_dlpack(hidden_states_cp)
-            hidden_states *= self.final_layer_norm.weight
-            hidden_states += self.final_layer_norm.bias
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.final_layer_norm.weight.device != torch.device("cuda:0"):
-                self.final_layer_norm = self.final_layer_norm.to(
-                    torch.device("cuda:0"))
-
-            hidden_states = residual.to(self.final_layer_norm.weight.dtype)
-            hidden_states = hidden_states.to(torch.device("cuda:0"))
-            hidden_states_cp = cp.from_dlpack(hidden_states)
-            mean = cp.mean(hidden_states_cp, axis=2, keepdims=True)
-            var = cp.var(hidden_states_cp, axis=2, keepdims=True)
-            div = cp.sqrt(var + self.final_layer_norm.eps)
-            hidden_states_cp = (hidden_states_cp - mean) / div
-            hidden_states = torch.from_dlpack(hidden_states_cp)
-            hidden_states *= self.final_layer_norm.weight
-            hidden_states += self.final_layer_norm.bias
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-            # if self.final_layer_norm.weight.device != torch.device("cpu"):
-            #     self.final_layer_norm = self.final_layer_norm.to(
-            #         torch.device("cpu"))
-
-            # hidden_states = residual.clone().detach().to(torch.device("cpu"))
-            # hidden_states = hidden_states.to(
-            #     self.final_layer_norm.weight.dtype)
-            # layer_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)),
-            #                         cast(
-            #                             self.final_layer_norm.weight.data_ptr(), POINTER(c_float)),
-            #                         cast(
-            #                             self.final_layer_norm.bias.data_ptr(), POINTER(c_float)),
-            #                         self.final_layer_norm.eps,
-            #                         hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2])
-            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-            # hidden_states = hidden_states.to(torch.device("cuda:0"))
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.final_layer_norm.weight.device != torch.device("cuda:0"):
-                self.final_layer_norm = self.final_layer_norm.to(
-                    torch.device("cuda:0"))
-
-            hidden_states = residual.to(self.final_layer_norm.weight.dtype)
-            hidden_states = hidden_states.to(torch.device("cuda:0"))
-            hidden_states_cp = cp.from_dlpack(hidden_states)
-            mean = cp.mean(hidden_states_cp, axis=2, keepdims=True)
-            var = cp.var(hidden_states_cp, axis=2, keepdims=True)
-            div = cp.sqrt(var + self.final_layer_norm.eps)
-            hidden_states_cp = (hidden_states_cp - mean) / div
-            hidden_states = torch.from_dlpack(hidden_states_cp)
-            hidden_states *= self.final_layer_norm.weight
-            hidden_states += self.final_layer_norm.bias
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-            # if self.final_layer_norm.weight.device != torch.device("cpu"):
-            #     self.final_layer_norm = self.final_layer_norm.to(
-            #         torch.device("cpu"))
-
-            # hidden_states = residual.clone().detach().to(torch.device("cpu"))
-            # hidden_states = hidden_states.to(
-            #     self.final_layer_norm.weight.dtype)
-            # layer_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)),
-            #                         cast(
-            #                             self.final_layer_norm.weight.data_ptr(), POINTER(c_float)),
-            #                         cast(
-            #                             self.final_layer_norm.bias.data_ptr(), POINTER(c_float)),
-            #                         self.final_layer_norm.eps,
-            #                         hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2])
-            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
-            # hidden_states = hidden_states.to(torch.device("cuda:0"))
+            hidden_states = self.final_layer_norm(residual)
         else:
             assert False
 
@@ -697,37 +414,7 @@ class Int8OPTDecoderLayer(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc1(hidden_states)
         elif my_exec_mode == ExecMode.Mode2:
-            if self.my_fc1 is None:
-                # Happen only once
-                self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_GPU(self.fc1)
-
-            hidden_states = self.my_fc1(hidden_states)
-            hidden_states = self.my_fc1_relu(hidden_states)
-            hidden_states = hidden_states.to(torch.int8)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.my_fc1 is None:
-                # Happen only once
-                self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_GPU(self.fc1)
-
-            hidden_states = self.my_fc1(hidden_states)
-            hidden_states = hidden_states.to(torch.device("cpu"))
-            layer_cpp_lib.ReLU(
-                cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2])
-            hidden_states = hidden_states.to(torch.int8)
-            hidden_states = hidden_states.to(torch.device("cuda:0"))
-
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.my_fc1 is None:
-                # Happen only once
-                self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_GPU(self.fc1)
-
-            hidden_states = self.my_fc1(hidden_states)
-            hidden_states = hidden_states.to(torch.device("cpu"))
-            layer_cpp_lib.ReLU(
-                cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2])
-            hidden_states = hidden_states.to(torch.int8)
-            hidden_states = hidden_states.to(torch.device("cuda:0"))
-
+            hidden_states = self.fc1(hidden_states)
         else:
             assert False
 
@@ -741,25 +428,7 @@ class Int8OPTDecoderLayer(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode2:
-            if self.my_fc2 is None:
-                # Happen only once
-                self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_GPU(
-                    self.fc2)
-            hidden_states = self.my_fc2(hidden_states)
-        elif my_exec_mode == ExecMode.Mode3:
-            if self.my_fc2 is None:
-                # Happen only once
-                self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_GPU(
-                    self.fc2)
-            hidden_states = self.my_fc2(hidden_states)
-            hidden_states = hidden_states.to(torch.device("cpu"))
-        elif my_exec_mode == ExecMode.Mode4:
-            if self.my_fc2 is None:
-                # Happen only once
-                self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_GPU(
-                    self.fc2)
-            hidden_states = self.my_fc2(hidden_states)
-            hidden_states = hidden_states.to(torch.device("cpu"))
+            hidden_states = self.fc2(hidden_states)
         else:
             assert False
 
