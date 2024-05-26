@@ -14,11 +14,13 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     NOTE(jpyo0803): Set execution mode
 
     Mode1 = Smoothquant original (GPU only)
-    Mode2 = Smoothquant + Cupy (GPU only)
-    Mode3 = Smoothquant + Numpy (CPU) + Cupy (GPU), Unsecure
-    Mode4 = Smoothquant + Numpy (CPU) + Cupy (GPU), Secure, Ours
+    Mode2 = GPU Only (Unsecure)
+    Mode3 = CPU + GPU (Unsecure), Flexgen style
+    Mode4 = CPU + GPU (Simulation with SGX), Flexgen style
+    Mode5 = SGX + GPU (Secure), Flexgen style
 '''
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode2
+
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode3
 
 start_gpu = True if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode2 else False
 
@@ -90,8 +92,13 @@ evaluator = Evaluator(dataset, tokenizer)
 print("Execution Mode: ", smoothquant.opt.my_exec_mode)
 print("Start Device: ", "CUDA" if start_gpu else "CPU")
 
+'''
+    NOTE(jpyo0803): We use torch.float32 instead of torch.float16 
+    because CPU cannot handle torch.float16.
+'''
 model_smoothquant = Int8OPTForCausalLM.from_pretrained(
     'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float32, device_map='cuda:0' if start_gpu else 'cpu')
+
 print_model_size(model_smoothquant)
 acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)
 print(

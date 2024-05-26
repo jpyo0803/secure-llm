@@ -30,9 +30,21 @@ from ctypes import *
 
 
 class ExecMode(Enum):
-    Mode1 = 1  # Smoothquant original (GPU only)
-    Mode2 = 2  # 
+    Mode1 = 1
+    Mode2 = 2
+    Mode3 = 3
+    Mode4 = 4
+    Mode5 = 5
 
+'''
+    NOTE(jpyo0803): Set execution mode
+
+    Mode1 = Smoothquant original (GPU only)
+    Mode2 = GPU Only (Unsecure)
+    Mode3 = CPU + GPU (Unsecure), Flexgen style
+    Mode4 = CPU + GPU (Half Secure), Flexgen style
+    Mode5 = SGX + GPU (Secure), Flexgen style
+'''
 
 my_exec_mode = None
 
@@ -107,6 +119,9 @@ class Int8OPTAttention(nn.Module):
 
         bsz, tgt_len, _ = hidden_states.size()
 
+        device_cuda = torch.device("cuda:0")
+        device_cpu = torch.device("cpu")
+
         '''
             NOTE(jpyo0803): Pass hidden_states to Q projection.
             Matmul should be done on Untrusted GPU side
@@ -115,8 +130,12 @@ class Int8OPTAttention(nn.Module):
         # get query proj
         if my_exec_mode == ExecMode.Mode1:
             query_states = self.q_proj(hidden_states)
-        elif my_exec_mode == ExecMode.Mode2:
-            query_states = self.q_proj(hidden_states)
+        elif my_exec_mode == ExecMode.Mode3:
+            if self.my_q_proj is None:
+                # Happening only once
+                self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.q_proj)
+
+            query_states = self.my_q_proj(hidden_states)
         else:
             assert False
 
@@ -146,9 +165,9 @@ class Int8OPTAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
-            elif my_exec_mode == ExecMode.Mode2:
-                key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            elif my_exec_mode == ExecMode.Mode3:
+                key_states = self._shape(self.my_k_proj(hidden_states), -1, bsz)
+                value_states = self._shape(self.my_v_proj(hidden_states), -1, bsz)
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
@@ -164,9 +183,18 @@ class Int8OPTAttention(nn.Module):
             if my_exec_mode == ExecMode.Mode1:
                 key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
                 value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            elif my_exec_mode == ExecMode.Mode2:
-                key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            elif my_exec_mode == ExecMode.Mode3:
+                if self.my_k_proj is None:
+                    self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
+                        self.k_proj)
+                    self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
+                        self.v_proj)
+
+                key_states = self._shape(self.my_k_proj(hidden_states), -1, bsz)
+                key_states = key_states.to(device_cpu)
+
+                value_states = self._shape(self.my_v_proj(hidden_states), -1, bsz)
+                value_states = value_states.to(device_cpu)
             else:
                 assert False
 
@@ -186,8 +214,11 @@ class Int8OPTAttention(nn.Module):
         '''
         if my_exec_mode == ExecMode.Mode1:
             attn_weights = self.qk_bmm(query_states, key_states)
-        elif my_exec_mode == ExecMode.Mode2:
-            attn_weights = self.qk_bmm(query_states, key_states)
+        elif my_exec_mode == ExecMode.Mode3:
+            if self.my_qk_bmm is None:
+                self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(self.qk_bmm)
+
+            attn_weights = self.my_qk_bmm(query_states, key_states)
         else:
             assert False
 
@@ -220,9 +251,10 @@ class Int8OPTAttention(nn.Module):
             NOTE(jpyo0803): Softmax on attn_weights.
             Should be done in CPU side SGX, O(N^2)
         '''
+
         if my_exec_mode == ExecMode.Mode1:
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
-        elif my_exec_mode == ExecMode.Mode2:
+        elif my_exec_mode == ExecMode.Mode3:
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         else:
             assert False
@@ -268,8 +300,11 @@ class Int8OPTAttention(nn.Module):
 
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.pv_bmm(attn_probs, value_states)
-        elif my_exec_mode == ExecMode.Mode2:
-            attn_output = self.pv_bmm(attn_probs, value_states)
+        elif my_exec_mode == ExecMode.Mode3:
+            if self.my_pv_bmm is None:
+                self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm)
+
+            attn_output = self.my_pv_bmm(attn_probs, value_states)
         else:
             assert False
 
@@ -295,8 +330,10 @@ class Int8OPTAttention(nn.Module):
         '''
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.out_proj(attn_output)
-        elif my_exec_mode == ExecMode.Mode2:
-            attn_output = self.out_proj(attn_output)
+        elif my_exec_mode == ExecMode.Mode3:
+            if self.my_out_proj is None:
+                self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.out_proj)
+            attn_output = self.my_out_proj(attn_output)
         else:
             assert False
 
@@ -368,7 +405,7 @@ class Int8OPTDecoderLayer(nn.Module):
 
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.self_attn_layer_norm(hidden_states)
-        elif my_exec_mode == ExecMode.Mode2:
+        elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         else:
             assert False
@@ -388,7 +425,6 @@ class Int8OPTDecoderLayer(nn.Module):
             NOTE(jpyo0803): Add residual to hidden_states.
             Should be done in CPU side SGX, O(N^2)
         '''
-
         residual.add_(hidden_states.to(residual.dtype))
 
         '''
@@ -397,7 +433,7 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.final_layer_norm(residual)
-        elif my_exec_mode == ExecMode.Mode2:
+        elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.final_layer_norm(residual)
         else:
             assert False
@@ -413,8 +449,14 @@ class Int8OPTDecoderLayer(nn.Module):
 
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc1(hidden_states)
-        elif my_exec_mode == ExecMode.Mode2:
-            hidden_states = self.fc1(hidden_states)
+        elif my_exec_mode == ExecMode.Mode3:
+            if self.my_fc1 is None:
+                self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1)
+
+            hidden_states = self.my_fc1(hidden_states)
+            assert hidden_states.dtype == torch.float32
+            hidden_states = self.my_fc1_relu(hidden_states)
+            hidden_states = hidden_states.to(torch.int8)
         else:
             assert False
 
@@ -427,8 +469,11 @@ class Int8OPTDecoderLayer(nn.Module):
 
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc2(hidden_states)
-        elif my_exec_mode == ExecMode.Mode2:
-            hidden_states = self.fc2(hidden_states)
+        elif my_exec_mode == ExecMode.Mode3:
+            if self.my_fc2 is None:
+                self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2)
+
+            hidden_states = self.my_fc2(hidden_states)
         else:
             assert False
 
