@@ -9,7 +9,7 @@ import csv
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode3
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
 
 print("Mode: ", smoothquant.opt.my_exec_mode)
 
@@ -48,7 +48,7 @@ prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: W
 model_inputs = tokenizer([prompt], return_tensors='pt').to(
     'cuda:0' if start_gpu else 'cpu')
 
-target_input_token_len = 128
+target_input_token_len = 512
 
 pad_len = target_input_token_len - model_inputs['input_ids'].shape[1]
 
@@ -63,7 +63,7 @@ assert model_inputs['input_ids'].shape[1] == target_input_token_len
 smoothquant.opt.is_prefill = True
 smoothquant.opt.time_stats.on()
 
-target_output_token_len = 256
+target_output_token_len = 1024
 start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
     **model_inputs, min_length=target_output_token_len, max_length=target_output_token_len, do_sample=False)
