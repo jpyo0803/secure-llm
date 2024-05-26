@@ -79,6 +79,9 @@ class TimeStats:
         self.total_prefill = 0.0
         self.total_generation = 0.0
 
+        self.prefill_samples = 0
+        self.generation_samples = 0
+
         self.prefill_resi_copy1 = 0.0
         self.prefill_ln1 = 0.0
         self.prefill_attn = 0.0
@@ -102,31 +105,38 @@ class TimeStats:
         self.generation_post = 0.0
 
     def print_summary(self):
+        print("[Overall Statistics]")
         print("Total Latency: ", self.total)
+
         print("Total Latency (Prefill): ", self.total_prefill)
         print("Total Latency (Generation): ", self.total_generation)
 
-        print("Prefill Residual Copy 1: ", self.prefill_resi_copy1)
-        print("Prefill LayerNorm 1: ", self.prefill_ln1)
-        print("Prefill Attention: ", self.prefill_attn)
-        print("Prefill Residual Add 1: ", self.prefill_resi_add1)
-        print("Prefill Residual Copy 2: ", self.prefill_resi_copy2)
-        print("Prefill LayerNorm 2: ", self.prefill_ln2)
-        print("Prefill FC1 ReLU: ", self.prefill_fc1_relu)
-        print("Prefill FC2: ", self.prefill_fc2)
-        print("Prefill Residual Add 2: ", self.prefill_resi_add2)
-        print("Prefill Post: ", self.prefill_post)
+        print("[Prefill Statistics]")
+        print("Samples: ", self.prefill_samples)
+        print(f'Residual Copy 1 (total, avg, percent): {self.prefill_resi_copy1:0.6f}, {self.prefill_resi_copy1 / self.prefill_samples:0.6f}, {self.prefill_resi_copy1 / self.total_prefill:0.6f}')
+        print(f'LayerNorm 1 (total, avg, percent): {self.prefill_ln1:0.6f}, {self.prefill_ln1 / self.prefill_samples:0.6f}, {self.prefill_ln1 / self.total_prefill:0.6f}')
+        print(f'Attention (total, avg, percent): {self.prefill_attn:0.6f}, {self.prefill_attn / self.prefill_samples:0.6f}, {self.prefill_attn / self.total_prefill:0.6f}')
+        print(f'Residual Add 1 (total, avg, percent): {self.prefill_resi_add1:0.6f}, {self.prefill_resi_add1 / self.prefill_samples:0.6f}, {self.prefill_resi_add1 / self.total_prefill:0.6f}')
+        print(f'Residual Copy 2 (total, avg, percent): {self.prefill_resi_copy2:0.6f}, {self.prefill_resi_copy2 / self.prefill_samples:0.6f}, {self.prefill_resi_copy2 / self.total_prefill:0.6f}')
+        print(f'LayerNorm 2 (total, avg, percent): {self.prefill_ln2:0.6f}, {self.prefill_ln2 / self.prefill_samples:0.6f}, {self.prefill_ln2 / self.total_prefill:0.6f}')
+        print(f'FC1 ReLU (total, avg, percent): {self.prefill_fc1_relu:0.6f}, {self.prefill_fc1_relu / self.prefill_samples:0.6f}, {self.prefill_fc1_relu / self.total_prefill:0.6f}')
+        print(f'FC2 (total, avg, percent): {self.prefill_fc2:0.6f}, {self.prefill_fc2 / self.prefill_samples:0.6f}, {self.prefill_fc2 / self.total_prefill:0.6f}')
+        print(f'Residual Add 2 (total, avg, percent): {self.prefill_resi_add2:0.6f}, {self.prefill_resi_add2 / self.prefill_samples:0.6f}, {self.prefill_resi_add2 / self.total_prefill:0.6f}')
+        print(f'Post (total, avg, percent): {self.prefill_post:0.6f}, {self.prefill_post / self.prefill_samples:0.6f}, {self.prefill_post / self.total_prefill:0.6f}')
 
-        print("Generation Residual Copy 1: ", self.generation_resi_copy1)
-        print("Generation LayerNorm 1: ", self.generation_ln1)
-        print("Generation Attention: ", self.generation_attn)
-        print("Generation Residual Add 1: ", self.generation_resi_add1)
-        print("Generation Residual Copy 2: ", self.generation_resi_copy2)
-        print("Generation LayerNorm 2: ", self.generation_ln2)
-        print("Generation FC1 ReLU: ", self.generation_fc1_relu)
-        print("Generation FC2: ", self.generation_fc2)
-        print("Generation Residual Add 2: ", self.generation_resi_add2)
-        print("Generation Post: ", self.generation_post)
+        print("[Generation Statistics]")
+        print("Samples: ", self.generation_samples)
+        print(f'Residual Copy 1 (total, avg, percent): {self.generation_resi_copy1:0.6f}, {self.generation_resi_copy1 / self.generation_samples:0.6f}, {self.generation_resi_copy1 / self.total_generation:0.6f}')
+        print(f'LayerNorm 1 (total, avg, percent): {self.generation_ln1:0.6f}, {self.generation_ln1 / self.generation_samples:0.6f}, {self.generation_ln1 / self.total_generation:0.6f}')
+        print(f'Attention (total, avg, percent): {self.generation_attn:0.6f}, {self.generation_attn / self.generation_samples:0.6f}, {self.generation_attn / self.total_generation:0.6f}')
+        print(f'Residual Add 1 (total, avg, percent): {self.generation_resi_add1:0.6f}, {self.generation_resi_add1 / self.generation_samples:0.6f}, {self.generation_resi_add1 / self.total_generation:0.6f}')
+        print(f'Residual Copy 2 (total, avg, percent): {self.generation_resi_copy2:0.6f}, {self.generation_resi_copy2 / self.generation_samples:0.6f}, {self.generation_resi_copy2 / self.total_generation:0.6f}')
+        print(f'LayerNorm 2 (total, avg, percent): {self.generation_ln2:0.6f}, {self.generation_ln2 / self.generation_samples:0.6f}, {self.generation_ln2 / self.total_generation:0.6f}')
+        print(f'FC1 ReLU (total, avg, percent): {self.generation_fc1_relu:0.6f}, {self.generation_fc1_relu / self.generation_samples:0.6f}, {self.generation_fc1_relu / self.total_generation:0.6f}')
+        print(f'FC2 (total, avg, percent): {self.generation_fc2:0.6f}, {self.generation_fc2 / self.generation_samples:0.6f}, {self.generation_fc2 / self.total_generation:0.6f}')
+        print(f'Residual Add 2 (total, avg, percent): {self.generation_resi_add2:0.6f}, {self.generation_resi_add2 / self.generation_samples:0.6f}, {self.generation_resi_add2 / self.total_generation:0.6f}')
+        print(f'Post (total, avg, percent): {self.generation_post:0.6f}, {self.generation_post / self.generation_samples:0.6f}, {self.generation_post / self.total_generation:0.6f}')
+
 
 time_stats = TimeStats()
 
@@ -169,6 +179,15 @@ class Int8OPTAttention(nn.Module):
         self.my_q_proj = None
         self.my_out_proj = None
 
+    def pre_init(self):
+        self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.q_proj)
+        self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.k_proj)
+        self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.v_proj)
+        self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.out_proj)
+
+        self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(self.qk_bmm)
+        self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm)
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return (
             tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
@@ -205,10 +224,6 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             query_states = self.q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
-            if self.my_q_proj is None:
-                # Happening only once
-                self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.q_proj)
-
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
             # print("my_q_proj_dt : ", my_q_proj_dt)
         else:
@@ -264,12 +279,6 @@ class Int8OPTAttention(nn.Module):
                 key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
                 value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             elif my_exec_mode == ExecMode.Mode3:
-                if self.my_k_proj is None:
-                    self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
-                        self.k_proj)
-                    self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
-                        self.v_proj)
-
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
                 # print("prefill my_k_proj_dt : ", my_k_proj_dt)
@@ -297,9 +306,6 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_weights = self.qk_bmm(query_states, key_states)
         elif my_exec_mode == ExecMode.Mode3:
-            if self.my_qk_bmm is None:
-                self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(self.qk_bmm)
-
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
             # print("my_qk_bmm_dt : ", my_qk_bmm_dt)
         else:
@@ -384,9 +390,6 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.pv_bmm(attn_probs, value_states)
         elif my_exec_mode == ExecMode.Mode3:
-            if self.my_pv_bmm is None:
-                self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm)
-
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(attn_probs, value_states)
             # print("my_pv_bmm_dt : ", my_pv_bmm_dt)
         else:
@@ -415,9 +418,6 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode3:
-            if self.my_out_proj is None:
-                self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.out_proj)
-
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
             # print("my_out_proj_dt : ", my_out_proj_dt)
         else:
@@ -440,10 +440,17 @@ class Int8OPTDecoderLayer(nn.Module):
         self.final_layer_norm = LayerNormQ(self.embed_dim)
 
         self.my_fc1 = None
-        self.my_fc1_relu = torch.nn.ReLU()
+        self.my_fc1_relu = None
 
         self.my_fc2 = None
 
+    def pre_init(self):
+        self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1)
+        self.my_fc1_relu = torch.nn.ReLU()
+
+        self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2)
+
+        self.self_attn.pre_init()
 
     def forward(
         self,
@@ -564,9 +571,6 @@ class Int8OPTDecoderLayer(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc1(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
-            if self.my_fc1 is None:
-                self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1)
-
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
             # print("my_fc1_dt : ", my_fc1_dt)
             assert hidden_states.dtype == torch.float32
@@ -588,9 +592,6 @@ class Int8OPTDecoderLayer(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
-            if self.my_fc2 is None:
-                self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2)
-
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
             # print("my_fc2_dt : ", my_fc2_dt)
         else:
@@ -636,6 +637,7 @@ class Int8OPTDecoderLayer(nn.Module):
                 time_stats.prefill_fc2 += outer_fc2_dt
                 time_stats.prefill_resi_add2 += outer_resi_add2_dt
                 time_stats.prefill_post += outer_post_dt
+                time_stats.prefill_samples += 1
             else:
                 time_stats.total_generation += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
                 time_stats.generation_resi_copy1 += outer_resi_copy_dt
@@ -648,6 +650,7 @@ class Int8OPTDecoderLayer(nn.Module):
                 time_stats.generation_fc2 += outer_fc2_dt
                 time_stats.generation_resi_add2 += outer_resi_add2_dt
                 time_stats.generation_post += outer_post_dt
+                time_stats.generation_samples += 1
 
         return outputs
 
@@ -711,6 +714,10 @@ class Int8OPTDecoder(OPTPreTrainedModel):
     _prepare_decoder_attention_mask = OPTDecoder._prepare_decoder_attention_mask
     old_forward = OPTDecoder.forward
 
+    def pre_init(self):
+        for layer in self.layers:
+            layer.pre_init()
+
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -767,6 +774,9 @@ class Int8OPTModel(OPTPreTrainedModel):
     get_decoder = OPTModel.get_decoder
     forward = OPTModel.forward
 
+    def pre_init(self):
+        self.decoder.pre_init()
+
 
 class Int8OPTForCausalLM(OPTPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
@@ -784,6 +794,9 @@ class Int8OPTForCausalLM(OPTPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def pre_init(self):
+        self.model.pre_init()
 
     get_input_embeddings = OPTForCausalLM.get_input_embeddings
     set_input_embeddings = OPTForCausalLM.set_input_embeddings

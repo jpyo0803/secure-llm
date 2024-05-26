@@ -24,6 +24,23 @@ model_smoothquant.eval()
 tokenizer = GPT2Tokenizer.from_pretrained('facebook/opt-125m')
 # Define the input prompt
 # input_prompt = 'her pay for the evening was almost double that of the wait staff and although that might not seem like a lot to some people , it was a small fortune to claire . after loading her final tray for a server , claire went to the restroom to freshen up and begin preparations for being loaded into the cake . pam had a couple of young men from college who assisted her into the cake . brian and max were a lot of fun and always made her laugh as they hoisted her up to the top of the cake'
+
+model_smoothquant.to('cuda:0' if start_gpu else 'cpu')
+model_smoothquant.pre_init()
+
+'''
+    NOTE(jpyo0803): Warmup
+'''
+dummy_prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the ")
+dummy_model_inputs = tokenizer([dummy_prompt], return_tensors='pt').to('cuda:0' if start_gpu else 'cpu') 
+
+dummy = model_smoothquant.generate(
+    **dummy_model_inputs, max_new_tokens=128, do_sample=False)
+
+'''
+    NOTE(jpyo0803): Above is warmup
+'''
+
 prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the "
           "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
           "there?")
@@ -31,20 +48,29 @@ prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: W
 model_inputs = tokenizer([prompt], return_tensors='pt').to(
     'cuda:0' if start_gpu else 'cpu')
 
-model_smoothquant.to('cuda:0' if start_gpu else 'cpu')
+target_input_token_len = 128
 
-dummy = model_smoothquant.generate(
-    **model_inputs, max_new_tokens=128, do_sample=False)
+pad_len = target_input_token_len - model_inputs['input_ids'].shape[1]
+
+model_inputs['input_ids'] = pad(model_inputs['input_ids'], (0, pad_len), value=77)
+model_inputs['attention_mask'] = pad(model_inputs['attention_mask'], (0, pad_len), value=1)
+
+# print input token length
+print(f"Input token length: {model_inputs['input_ids'].shape[1]}")
+assert model_inputs['input_ids'].shape[1] == target_input_token_len
 
 
 smoothquant.opt.is_prefill = True
 smoothquant.opt.time_stats.on()
 
-target_num_tokens = 256
+target_output_token_len = 256
 start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
-    **model_inputs, min_length=target_num_tokens, max_length=target_num_tokens, do_sample=False)
+    **model_inputs, min_length=target_output_token_len, max_length=target_output_token_len, do_sample=False)
 end_time = time.perf_counter_ns()
 print(f"End-to-end Latency: {(end_time - start_time)/1e9:0.6f} s")
 smoothquant.opt.time_stats.print_summary()
+# print Output token length
+print(f"Output token length: {generated_ids.shape[1]}")
+assert generated_ids.shape[1] == target_output_token_len
 # print(tokenizer.batch_decode(generated_ids)[0])

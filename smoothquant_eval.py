@@ -99,6 +99,8 @@ print("Start Device: ", "CUDA" if start_gpu else "CPU")
 model_smoothquant = Int8OPTForCausalLM.from_pretrained(
     'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float32, device_map='cuda:0' if start_gpu else 'cpu')
 
+model_smoothquant.pre_init() # Need this to initialize the model weights in CUDA
+
 print_model_size(model_smoothquant)
 acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)
 print(
