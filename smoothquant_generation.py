@@ -11,6 +11,25 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
 
+'''
+    NOTE(jpyo0803): Set execution mode
+
+    Mode1 = Smoothquant original (GPU only)
+    Mode2 = GPU Only (Unsecure)
+    Mode3 = CPU (torch native) + GPU (Unsecure), Flexgen style
+    Mode4 = CPU (custom cpp) + GPU (Unsecure), Flexgen style, KV cache managed in CPU
+    Mode5 = CPU (custom cpp) + GPU (Secure), Flexgen style, KV cache manged in CPU
+    Mode6 = CPU (custom cpp on SGX) + GPU (Secure), Flexgen style, KV cache managed in CPU
+    Mode7 = CPU (custom cpp on SGX) + GPU (Secure), Flexgen style, KV cache managed in GPU
+
+    From Mode 3 to 4 show torch native vs. custom cpp performance
+    From Mode 4 to 5 show unsecure vs. secure performance regarding addtive cipher
+    From Mode 5 to 6 show the effect of SGX on performance
+    From Mode 6 to 7 show the effect of placing KV cache in GPU
+'''
+
+
+
 print("Mode: ", smoothquant.opt.my_exec_mode)
 
 start_gpu = (smoothquant.opt.my_exec_mode ==
