@@ -1,5 +1,6 @@
 import torch
 import cupy
+import time
 
 class Linear_S8W_S8A_S8B_FP32O_Mixed:
   # Only perform matmul in GPU with cupy
@@ -40,7 +41,11 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
     return y
   
   def __call__(self, x):
-    return self.__run(x)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
 
 class Linear_S8W_S8A_S8B_S8O_Mixed(Linear_S8W_S8A_S8B_FP32O_Mixed):
   def __init__(self, torch_int_nn_linear):
@@ -50,7 +55,11 @@ class Linear_S8W_S8A_S8B_S8O_Mixed(Linear_S8W_S8A_S8B_FP32O_Mixed):
     return super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x).to(torch.int8)
   
   def __call__(self, x):
-    return self.__run(x)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
   
 class Linear_S8W_S8A_FP32B_FP32O_Mixed:
   def __init__(self, torch_int_nn_linear):
@@ -63,6 +72,7 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
 
   def __run(self, x):
     assert x.device == torch.device('cpu')
+    # Preprocess
     x = x.to(torch.int32)
 
     # Encrypt if needed
@@ -84,7 +94,11 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
     return y
   
   def __call__(self, x):
-    return self.__run(x)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
 
 class Linear_S8W_S8A_S8B_FP32O_GPU:
   def __init__(self, torch_int_nn_linear):
@@ -106,7 +120,11 @@ class Linear_S8W_S8A_S8B_FP32O_GPU:
     return y
   
   def __call__(self, x):
-    return self.__run(x)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
   
 class Linear_S8W_S8A_S8B_S8O_GPU(Linear_S8W_S8A_S8B_FP32O_GPU):
   def __init__(self, torch_int_nn_linear):
@@ -116,7 +134,11 @@ class Linear_S8W_S8A_S8B_S8O_GPU(Linear_S8W_S8A_S8B_FP32O_GPU):
     return super()._Linear_S8W_S8A_S8B_FP32O_GPU__run(x).to(torch.int8)
   
   def __call__(self, x):
-    return self.__run(x)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
 
 class Linear_S8W_S8A_FP32B_FP32O_GPU:
   def __init__(self, torch_int_nn_linear):
@@ -139,5 +161,10 @@ class Linear_S8W_S8A_FP32B_FP32O_GPU:
     return y
   
   def __call__(self, x):
-    return self.__run(x)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
+
     

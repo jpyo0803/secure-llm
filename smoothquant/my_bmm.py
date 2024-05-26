@@ -1,5 +1,6 @@
 import torch
 import cupy
+import time
 
 class BMM_S8X_S8Y_FP32Z_Mixed:
   def __init__(self, torch_int_nn_bmm):
@@ -32,7 +33,11 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
     return z
   
   def __call__(self, x, y):
-    return self.__run(x, y)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x, y)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
 
 class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):
   def __init__(self, torch_int_nn_bmm):
@@ -42,7 +47,11 @@ class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):
     return super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y).to(torch.int8)
   
   def __call__(self, x, y):
-    return self.__run(x, y)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x, y)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
 
 class BMM_S8X_S8Y_FP32Z_GPU:
   def __init__(self, torch_int_nn_bmm):
@@ -65,7 +74,11 @@ class BMM_S8X_S8Y_FP32Z_GPU:
     return z
   
   def __call__(self, x, y):
-    return self.__run(x, y)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x, y)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt
   
 class BMM_S8X_S8Y_S8Z_GPU(BMM_S8X_S8Y_FP32Z_GPU):
   def __init__(self, torch_int_nn_bmm):
@@ -75,4 +88,8 @@ class BMM_S8X_S8Y_S8Z_GPU(BMM_S8X_S8Y_FP32Z_GPU):
     return super()._BMM_S8X_S8Y_FP32Z_GPU__run(x, y).to(torch.int8)
   
   def __call__(self, x, y):
-    return self.__run(x, y)
+    start_time = time.perf_counter_ns()
+    y = self.__run(x, y)
+    end_time = time.perf_counter_ns()
+    dt = (end_time - start_time) / 1e9
+    return y, dt

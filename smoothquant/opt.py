@@ -27,7 +27,7 @@ import smoothquant.my_linear as my_linear
 import smoothquant.my_bmm as my_bmm
 
 from ctypes import *
-
+import time
 
 class ExecMode(Enum):
     Mode1 = 1
@@ -57,6 +57,80 @@ layer_cpp_lib.LayerNorm.argtypes = [POINTER(c_float), POINTER(
 layer_cpp_lib.ReLU.argtypes = [POINTER(c_float), c_int, c_int, c_int]
 layer_cpp_lib.Softmax.argtypes = [POINTER(c_float), c_int, c_int, c_int]
 
+'''
+    NOTE(jpyo0803): Time statistics
+'''
+class TimeStats:
+    def __init__(self, enable=False):
+        self.enable = enable
+        self.reset()
+
+    def on(self):
+        self.enable = True
+
+    def off(self):
+        self.enable = False
+
+    def is_on(self):
+        return self.enable
+    
+    def reset(self):
+        self.total = 0.0
+        self.total_prefill = 0.0
+        self.total_generation = 0.0
+
+        self.prefill_resi_copy1 = 0.0
+        self.prefill_ln1 = 0.0
+        self.prefill_attn = 0.0
+        self.prefill_resi_add1 = 0.0
+        self.prefill_resi_copy2 = 0.0
+        self.prefill_ln2 = 0.0
+        self.prefill_fc1_relu = 0.0
+        self.prefill_fc2 = 0.0
+        self.prefill_resi_add2 = 0.0
+        self.prefill_post = 0.0
+
+        self.generation_resi_copy1 = 0.0
+        self.generation_ln1 = 0.0
+        self.generation_attn = 0.0
+        self.generation_resi_add1 = 0.0
+        self.generation_resi_copy2 = 0.0
+        self.generation_ln2 = 0.0
+        self.generation_fc1_relu = 0.0
+        self.generation_fc2 = 0.0
+        self.generation_resi_add2 = 0.0
+        self.generation_post = 0.0
+
+    def print_summary(self):
+        print("Total Latency: ", self.total)
+        print("Total Latency (Prefill): ", self.total_prefill)
+        print("Total Latency (Generation): ", self.total_generation)
+
+        print("Prefill Residual Copy 1: ", self.prefill_resi_copy1)
+        print("Prefill LayerNorm 1: ", self.prefill_ln1)
+        print("Prefill Attention: ", self.prefill_attn)
+        print("Prefill Residual Add 1: ", self.prefill_resi_add1)
+        print("Prefill Residual Copy 2: ", self.prefill_resi_copy2)
+        print("Prefill LayerNorm 2: ", self.prefill_ln2)
+        print("Prefill FC1 ReLU: ", self.prefill_fc1_relu)
+        print("Prefill FC2: ", self.prefill_fc2)
+        print("Prefill Residual Add 2: ", self.prefill_resi_add2)
+        print("Prefill Post: ", self.prefill_post)
+
+        print("Generation Residual Copy 1: ", self.generation_resi_copy1)
+        print("Generation LayerNorm 1: ", self.generation_ln1)
+        print("Generation Attention: ", self.generation_attn)
+        print("Generation Residual Add 1: ", self.generation_resi_add1)
+        print("Generation Residual Copy 2: ", self.generation_resi_copy2)
+        print("Generation LayerNorm 2: ", self.generation_ln2)
+        print("Generation FC1 ReLU: ", self.generation_fc1_relu)
+        print("Generation FC2: ", self.generation_fc2)
+        print("Generation Residual Add 2: ", self.generation_resi_add2)
+        print("Generation Post: ", self.generation_post)
+
+time_stats = TimeStats()
+
+is_prefill = True
 
 class Int8OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -135,7 +209,8 @@ class Int8OPTAttention(nn.Module):
                 # Happening only once
                 self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.q_proj)
 
-            query_states = self.my_q_proj(hidden_states)
+            query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
+            # print("my_q_proj_dt : ", my_q_proj_dt)
         else:
             assert False
 
@@ -166,8 +241,13 @@ class Int8OPTAttention(nn.Module):
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
             elif my_exec_mode == ExecMode.Mode3:
-                key_states = self._shape(self.my_k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(self.my_v_proj(hidden_states), -1, bsz)
+                key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
+                value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+                # print("generation my_k_proj_dt : ", my_k_proj_dt)
+                # print("generation my_v_proj_dt : ", my_v_proj_dt)
+
+                key_states = self._shape(key_states, -1, bsz)
+                value_states = self._shape(value_states, -1, bsz)
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
@@ -190,11 +270,13 @@ class Int8OPTAttention(nn.Module):
                     self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
                         self.v_proj)
 
-                key_states = self._shape(self.my_k_proj(hidden_states), -1, bsz)
-                key_states = key_states.to(device_cpu)
+                key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
+                value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+                # print("prefill my_k_proj_dt : ", my_k_proj_dt)
+                # print("prefill my_v_proj_dt : ", my_v_proj_dt)
 
-                value_states = self._shape(self.my_v_proj(hidden_states), -1, bsz)
-                value_states = value_states.to(device_cpu)
+                key_states = self._shape(key_states, -1, bsz)
+                value_states = self._shape(value_states, -1, bsz)
             else:
                 assert False
 
@@ -218,7 +300,8 @@ class Int8OPTAttention(nn.Module):
             if self.my_qk_bmm is None:
                 self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(self.qk_bmm)
 
-            attn_weights = self.my_qk_bmm(query_states, key_states)
+            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
+            # print("my_qk_bmm_dt : ", my_qk_bmm_dt)
         else:
             assert False
 
@@ -304,7 +387,8 @@ class Int8OPTAttention(nn.Module):
             if self.my_pv_bmm is None:
                 self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm)
 
-            attn_output = self.my_pv_bmm(attn_probs, value_states)
+            attn_output, my_pv_bmm_dt = self.my_pv_bmm(attn_probs, value_states)
+            # print("my_pv_bmm_dt : ", my_pv_bmm_dt)
         else:
             assert False
 
@@ -333,7 +417,9 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             if self.my_out_proj is None:
                 self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.out_proj)
-            attn_output = self.my_out_proj(attn_output)
+
+            attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
+            # print("my_out_proj_dt : ", my_out_proj_dt)
         else:
             assert False
 
@@ -357,6 +443,7 @@ class Int8OPTDecoderLayer(nn.Module):
         self.my_fc1_relu = torch.nn.ReLU()
 
         self.my_fc2 = None
+
 
     def forward(
         self,
@@ -386,6 +473,10 @@ class Int8OPTDecoderLayer(nn.Module):
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
 
+        global is_prefill
+        if is_prefill == True and past_key_value is not None:
+            is_prefill = False
+
         # Self Attention
         if my_exec_mode == ExecMode.Mode1 or my_exec_mode == ExecMode.Mode2:
             assert hidden_states.device == torch.device("cuda:0")
@@ -396,23 +487,31 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
 
-        residual = hidden_states
+        start_time = time.perf_counter_ns()
+        residual = hidden_states.clone().detach()
+        end_time = time.perf_counter_ns()
+        outer_resi_copy_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Pass hidden_states to self_attn_layer_norm.
             Should be done in CPU side SGX, O(N^2)
         '''
 
+        start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         else:
             assert False
+        end_time = time.perf_counter_ns()
+        outer_ln1_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Pass hidden_states to self_attn.
         '''
+
+        start_time = time.perf_counter_ns()
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
@@ -420,23 +519,37 @@ class Int8OPTDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
+        end_time = time.perf_counter_ns()
+        outer_attn_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Add residual to hidden_states.
             Should be done in CPU side SGX, O(N^2)
         '''
+
+        start_time = time.perf_counter_ns()
         residual.add_(hidden_states.to(residual.dtype))
+        end_time = time.perf_counter_ns()
+        outer_resi_add1_dt = (end_time - start_time) / 1e9
+
+        start_time = time.perf_counter_ns()
+        hidden_states = residual.clone().detach()
+        end_time = time.perf_counter_ns()
+        outer_resi_copy2_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Pass residual to final_layer_norm.
             Should be done in CPU side SGX, O(N^2)
         '''
+        start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
-            hidden_states = self.final_layer_norm(residual)
+            hidden_states = self.final_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
-            hidden_states = self.final_layer_norm(residual)
+            hidden_states = self.final_layer_norm(hidden_states)
         else:
             assert False
+        end_time = time.perf_counter_ns()
+        outer_ln2_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Pass hidden_states to fc1.
@@ -447,18 +560,22 @@ class Int8OPTDecoderLayer(nn.Module):
             Don't forget to Relu here
         '''
 
+        start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc1(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
             if self.my_fc1 is None:
                 self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1)
 
-            hidden_states = self.my_fc1(hidden_states)
+            hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
+            # print("my_fc1_dt : ", my_fc1_dt)
             assert hidden_states.dtype == torch.float32
             hidden_states = self.my_fc1_relu(hidden_states)
             hidden_states = hidden_states.to(torch.int8)
         else:
             assert False
+        end_time = time.perf_counter_ns()
+        outer_fc1_relu_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Pass hidden_states to fc2.
@@ -467,22 +584,32 @@ class Int8OPTDecoderLayer(nn.Module):
             and adding bias should be done on CPU side SGX
         '''
 
+        start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
             if self.my_fc2 is None:
                 self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2)
 
-            hidden_states = self.my_fc2(hidden_states)
+            hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
+            # print("my_fc2_dt : ", my_fc2_dt)
         else:
             assert False
+        end_time = time.perf_counter_ns()
+        outer_fc2_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Add residual to hidden_states.
             Should be done in CPU side SGX, O(N^2)
         '''
-        residual.add_(hidden_states.to(residual.dtype))
 
+        start_time = time.perf_counter_ns()
+        residual.add_(hidden_states.to(residual.dtype))
+        end_time = time.perf_counter_ns()
+        outer_resi_add2_dt = (end_time - start_time) / 1e9
+
+
+        start_time = time.perf_counter_ns()
         outputs = (residual,)
 
         if output_attentions:
@@ -490,6 +617,37 @@ class Int8OPTDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
+        end_time = time.perf_counter_ns()
+        outer_post_dt = (end_time - start_time) / 1e9
+
+        global time_stats
+        if time_stats.is_on():
+            time_stats.total += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
+            
+            if is_prefill:
+                time_stats.total_prefill += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
+                time_stats.prefill_resi_copy1 += outer_resi_copy_dt
+                time_stats.prefill_ln1 += outer_ln1_dt
+                time_stats.prefill_attn += outer_attn_dt
+                time_stats.prefill_resi_add1 += outer_resi_add1_dt
+                time_stats.prefill_resi_copy2 += outer_resi_copy2_dt
+                time_stats.prefill_ln2 += outer_ln2_dt
+                time_stats.prefill_fc1_relu += outer_fc1_relu_dt
+                time_stats.prefill_fc2 += outer_fc2_dt
+                time_stats.prefill_resi_add2 += outer_resi_add2_dt
+                time_stats.prefill_post += outer_post_dt
+            else:
+                time_stats.total_generation += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
+                time_stats.generation_resi_copy1 += outer_resi_copy_dt
+                time_stats.generation_ln1 += outer_ln1_dt
+                time_stats.generation_attn += outer_attn_dt
+                time_stats.generation_resi_add1 += outer_resi_add1_dt
+                time_stats.generation_resi_copy2 += outer_resi_copy2_dt
+                time_stats.generation_ln2 += outer_ln2_dt
+                time_stats.generation_fc1_relu += outer_fc1_relu_dt
+                time_stats.generation_fc2 += outer_fc2_dt
+                time_stats.generation_resi_add2 += outer_resi_add2_dt
+                time_stats.generation_post += outer_post_dt
 
         return outputs
 

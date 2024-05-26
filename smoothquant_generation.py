@@ -34,12 +34,17 @@ model_inputs = tokenizer([prompt], return_tensors='pt').to(
 model_smoothquant.to('cuda:0' if start_gpu else 'cpu')
 
 dummy = model_smoothquant.generate(
-    **model_inputs, max_new_tokens=1, do_sample=False)
+    **model_inputs, max_new_tokens=128, do_sample=False)
 
-target_num_tokens = 128
+
+smoothquant.opt.is_prefill = True
+smoothquant.opt.time_stats.on()
+
+target_num_tokens = 256
 start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
     **model_inputs, min_length=target_num_tokens, max_length=target_num_tokens, do_sample=False)
 end_time = time.perf_counter_ns()
 print(f"End-to-end Latency: {(end_time - start_time)/1e9:0.6f} s")
-print(tokenizer.batch_decode(generated_ids)[0])
+smoothquant.opt.time_stats.print_summary()
+# print(tokenizer.batch_decode(generated_ids)[0])
