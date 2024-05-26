@@ -1,3 +1,5 @@
+// Referred to "https://github.com/jedisct1/aes-stream/tree/master"
+
 #ifndef aes_stream_H
 #define aes_stream_H
 
