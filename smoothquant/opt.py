@@ -569,12 +569,17 @@ class Int8OPTDecoder(OPTPreTrainedModel):
         input_len = input_ids.shape[1]
         from torch.nn.functional import pad
 
-        if input_len % 16 != 0:
+        if my_exec_mode == ExecMode.Mode1 and input_len % 16 != 0:
             # <pad> is 1
-            padding_len = 16 - input_len % 16
-            input_ids = pad(input_ids, (0, padding_len), value=1)
-            if attention_mask is not None:
-                attention_mask = pad(attention_mask, (0, padding_len), value=0)
+            pass
+            # padding_len = 16 - input_len % 16
+            # print("input ids before : ", input_ids.size(), input_ids.shape[1])
+            # print("atten mask before : ", attention_mask.size())
+            # input_ids = pad(input_ids, (0, padding_len), value=1)
+            # if attention_mask is not None:
+            #     attention_mask = pad(attention_mask, (0, padding_len), value=0)
+            # print("input ids after : ", input_ids.size(), input_ids.shape[1])
+            # print("atten mask after : ", attention_mask.size())
         output = self.old_forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
