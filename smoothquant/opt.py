@@ -188,13 +188,15 @@ class Int8OPTAttention(nn.Module):
         self.my_out_proj = None
 
     def pre_init(self):
-        self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.q_proj)
-        self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.k_proj)
-        self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.v_proj)
-        self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.out_proj)
+        privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
 
-        self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(self.qk_bmm)
-        self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm)
+        self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.q_proj, privacy_on)
+        self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.k_proj, privacy_on)
+        self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.v_proj, privacy_on)
+        self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.out_proj, privacy_on)
+
+        self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(self.qk_bmm, privacy_on)
+        self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm, privacy_on)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return (
@@ -235,6 +237,8 @@ class Int8OPTAttention(nn.Module):
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
             # print("my_q_proj_dt : ", my_q_proj_dt)
         elif my_exec_mode == ExecMode.Mode4:
+            query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
+        elif my_exec_mode == ExecMode.Mode5:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         else:
             assert False
@@ -285,6 +289,15 @@ class Int8OPTAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
+            elif my_exec_mode == ExecMode.Mode5:
+                key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
+                value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+
+                key_states = self._shape(key_states, -1, bsz)
+                value_states = self._shape(value_states, -1, bsz)
+                key_states = torch.cat([past_key_value[0], key_states], dim=2)
+                value_states = torch.cat(
+                    [past_key_value[1], value_states], dim=2)
             else:
                 assert False
         else:
@@ -306,6 +319,12 @@ class Int8OPTAttention(nn.Module):
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
             elif my_exec_mode == ExecMode.Mode4:
+                key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
+                value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+
+                key_states = self._shape(key_states, -1, bsz)
+                value_states = self._shape(value_states, -1, bsz)
+            elif my_exec_mode == ExecMode.Mode5:
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
@@ -334,6 +353,8 @@ class Int8OPTAttention(nn.Module):
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
             # print("my_qk_bmm_dt : ", my_qk_bmm_dt)
         elif my_exec_mode == ExecMode.Mode4:
+            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
+        elif my_exec_mode == ExecMode.Mode5:
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
         else:
             assert False
@@ -373,6 +394,9 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         elif my_exec_mode == ExecMode.Mode4:
+            attn_probs = attn_weights
+            cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
+        elif my_exec_mode == ExecMode.Mode5:
             attn_probs = attn_weights
             cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
         else:
@@ -424,6 +448,8 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(attn_probs, value_states)
             # print("my_pv_bmm_dt : ", my_pv_bmm_dt)
+        elif my_exec_mode == ExecMode.Mode5:
+            attn_output, my_pv_bmm_dt = self.my_pv_bmm(attn_probs, value_states)
         else:
             assert False
 
@@ -454,6 +480,8 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
             # print("my_out_proj_dt : ", my_out_proj_dt)
+        elif my_exec_mode == ExecMode.Mode5:
+            attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         else:
             assert False
 
@@ -479,9 +507,13 @@ class Int8OPTDecoderLayer(nn.Module):
         self.my_fc2 = None
 
     def pre_init(self):
-        self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1)
+        # how to compare enum by value?
+        
+        privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
 
-        self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2)
+        self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1, privacy_on)
+
+        self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2, privacy_on)
 
         self.self_attn.pre_init()
 
@@ -545,6 +577,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.bias.data_ptr(), POINTER(c_float)), self.self_attn_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
             hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+        elif my_exec_mode == ExecMode.Mode5:
+            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.bias.data_ptr(), POINTER(c_float)), self.self_attn_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -592,6 +627,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.bias.data_ptr(), POINTER(c_float)), self.final_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
             hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+        elif my_exec_mode == ExecMode.Mode5:
+            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.bias.data_ptr(), POINTER(c_float)), self.final_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -620,6 +658,11 @@ class Int8OPTDecoderLayer(nn.Module):
             assert hidden_states.dtype == torch.float32
             cipher_cpp_lib.ReLU(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
             hidden_states = hidden_states.to(torch.int8)
+        elif my_exec_mode == ExecMode.Mode5:
+            hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
+            assert hidden_states.dtype == torch.float32
+            cipher_cpp_lib.ReLU(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            hidden_states = hidden_states.to(torch.int8)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -640,6 +683,8 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
             # print("my_fc2_dt : ", my_fc2_dt)
+        elif my_exec_mode == ExecMode.Mode5:
+            hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         else:
             assert False
         end_time = time.perf_counter_ns()

@@ -18,14 +18,16 @@ int main() {
   aes_stream(&producer_PRG, buf.data(), buf_len);
   chrono::steady_clock::time_point end = chrono::steady_clock::now();
 
-  if (buf_len < 128) {
-    for (int i = 0; i < buf_len; ++i) {
-      cout << i << "-th random byte : " << (int)buf[i] << endl;
-    }
-  }
-
   cout << "Generating " << buf_len << " PRNG, Latency = " << chrono::duration_cast<chrono::microseconds>(end - begin).count() << "[µs]" << endl;
 
+  size_t buf_len2 = buf_len;
+  vector<unsigned char> buf2(buf_len2);
+
+  begin = chrono::steady_clock::now();
+  GetCPRNG(buf2.data(), buf_len2);
+  end = chrono::steady_clock::now();
+
+  cout << "Generating " << buf_len2 << " PRNG, Latency = " << chrono::duration_cast<chrono::microseconds>(end - begin).count() << "[µs]" << endl;
 
   return 0;
 }

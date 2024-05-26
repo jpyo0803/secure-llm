@@ -2,10 +2,19 @@ import torch
 import cupy
 import time
 
+from ctypes import *
+
+CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
+cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
+cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
+
 class Linear_S8W_S8A_S8B_FP32O_Mixed:
   # Only perform matmul in GPU with cupy
   # Other operations done in CPU with torch
-  def __init__(self, torch_int_nn_linear):
+  def __init__(self, torch_int_nn_linear, privacy_on):
+    self.privacy_on = privacy_on
+
+    self.weight_cpu = torch_int_nn_linear.weight.to(torch.int32).transpose(-2, -1).contiguous()
     self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))) # Send to GPU
     self.bias = torch_int_nn_linear.bias # stay in CPU
     assert self.bias.device == torch.device('cpu')
@@ -22,6 +31,12 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
     x = x.to(torch.int32)
 
     # Encrypt if needed
+    if self.privacy_on:
+      # How to generate torch.empty_like of dimension (B, 1, K) if x's dimension is (B, M, K) for a tensor name 'blind_factor'??
+      
+      blind_factor = torch.empty((x.shape[0], 1, x.shape[2]), dtype=torch.int32)
+      cipher_cpp_lib.GetCPRNG(cast(blind_factor.data_ptr(), POINTER(c_ubyte)), blind_factor.numel() * 4)
+      x += blind_factor
 
     # Main computation
     x = x.to(torch.device('cuda:0'))
@@ -31,7 +46,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
     y = y.to(torch.device('cpu'))
 
     # Decrypt if needed
-
+    if self.privacy_on:
+      unblind_factor = torch.matmul(blind_factor, self.weight_cpu)
+      y -= unblind_factor
 
     # Compute Epilogue
     y = y.to(torch.float32)
@@ -48,8 +65,8 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
     return y, dt
 
 class Linear_S8W_S8A_S8B_S8O_Mixed(Linear_S8W_S8A_S8B_FP32O_Mixed):
-  def __init__(self, torch_int_nn_linear):
-    super().__init__(torch_int_nn_linear)
+  def __init__(self, torch_int_nn_linear, privacy_on):
+    super().__init__(torch_int_nn_linear, privacy_on)
 
   def __run(self, x):
     return super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x).to(torch.int8)
@@ -62,7 +79,10 @@ class Linear_S8W_S8A_S8B_S8O_Mixed(Linear_S8W_S8A_S8B_FP32O_Mixed):
     return y, dt
   
 class Linear_S8W_S8A_FP32B_FP32O_Mixed:
-  def __init__(self, torch_int_nn_linear):
+  def __init__(self, torch_int_nn_linear, privacy_on):
+    self.privacy_on = privacy_on
+
+    self.weight_cpu = torch_int_nn_linear.weight.to(torch.int32).transpose(-2, -1).contiguous()
     self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
     self.bias = torch_int_nn_linear.bias
     assert self.bias.device == torch.device('cpu')
@@ -76,6 +96,10 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
     x = x.to(torch.int32)
 
     # Encrypt if needed
+    if self.privacy_on:
+      blind_factor = torch.empty((x.shape[0], 1, x.shape[2]), dtype=torch.int32)
+      cipher_cpp_lib.GetCPRNG(cast(blind_factor.data_ptr(), POINTER(c_ubyte)), blind_factor.numel() * 4)
+      x += blind_factor
 
     # Main computation
     x = x.to(torch.device('cuda:0'))
@@ -85,6 +109,9 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
     y = y.to(torch.device('cpu'))
 
     # Decrypt if needed
+    if self.privacy_on:
+      unblind_factor = torch.matmul(blind_factor, self.weight_cpu)
+      y -= unblind_factor
 
     # Compute Epilogue
     y = y.to(torch.float32)

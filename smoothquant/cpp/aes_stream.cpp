@@ -103,6 +103,7 @@ _aes_key_expand_256(__m128i round_keys[AES_STREAM_ROUNDS + 1], __m128i t1, __m12
 }
 #endif
 
+extern "C" {
 static void
 _aes_stream(_aes_stream_state *_st, unsigned char *buf, size_t buf_len)
 {
@@ -241,4 +242,18 @@ void
 aes_stream(aes_stream_state *st, unsigned char *buf, size_t buf_len)
 {
     _aes_stream((_aes_stream_state *) (void *) st, buf, buf_len);
+}
+
+bool first = true;
+unsigned char init_seed[AES_STREAM_SEEDBYTES] = {0x00};
+
+void GetCPRNG(unsigned char *buf, size_t buf_len) {
+  static aes_stream_state st;
+  if (first) {
+    aes_stream_init(&st, init_seed);
+    first = false;
+  }
+
+  aes_stream(&st, buf, buf_len);
+}
 }
