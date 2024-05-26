@@ -535,7 +535,8 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.bias.data_ptr(), POINTER(c_float)), self.self_attn_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -581,7 +582,8 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.final_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            hidden_states = self.final_layer_norm(hidden_states)
+            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.bias.data_ptr(), POINTER(c_float)), self.final_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
             assert False
         end_time = time.perf_counter_ns()
