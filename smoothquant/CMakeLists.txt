@@ -7,19 +7,13 @@ find_package(OpenMP REQUIRED)
 
 include_directories(./cpp)
 
-file(GLOB SOURCES "cpp/*.cpp")
+file(GLOB SOURCES "c/*.c")
 add_library(cipher_cpp SHARED ${SOURCES})
 
 target_compile_options(cipher_cpp PRIVATE -Ofast -maes -march=native)
 
 if (OpenMP_CXX_FOUND)
-    target_link_libraries(cipher_cpp PUBLIC OpenMP::OpenMP_CXX)
+    target_link_libraries(cipher_cpp PUBLIC OpenMP::OpenMP_CXX m)
 endif ()
 
-add_subdirectory(cpp_unittests)
-
-add_library(layer_struct_c SHARED cpp/layer_struct_c.c)
-
-target_link_libraries(layer_struct_c m)
-
-target_compile_options(layer_struct_c PRIVATE -Ofast -maes -march=native)
+# add_subdirectory(cpp_unittests)

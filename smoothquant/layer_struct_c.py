@@ -1,6 +1,6 @@
 from ctypes import *
 
-LAYER_STRUCT_C_LIB_PATH = "./smoothquant/build/liblayer_struct_c.so"
+LAYER_STRUCT_C_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 
 class LayerStructC:
     def __init__(self):
@@ -26,3 +26,21 @@ class LayerStructC:
         # Check if dimensions of x and y are equal
         assert x.size() == y.size()
         self.lib.LS_ResidualAdd(cast(x.data_ptr(), POINTER(c_float)), cast(y.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+
+    def SetHiddenStates_Internal(self, x):
+        self.lib.LS_SetHiddenStatesInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    
+    def CopyResidual1_Internal(self):
+        self.lib.LS_CopyResidual1Internal()
+
+    def SelfAttnLayerNormQ_Internal(self, layer_id):
+        self.lib.LS_SelfAttnLayerNormQInternal(layer_id)
+
+    def GetSelfAttnLayerNormQ_Internal(self, x):
+        self.lib.LS_GetSelfAttnLayerNormQInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+
+    def GetResidual1_Internal(self, x):
+        self.lib.LS_GetResidual1Internal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+
+    def EncryptHiddenStates(self, x):
+        self.lib.LS_EncryptHiddenStates(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))

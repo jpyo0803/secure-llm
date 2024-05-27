@@ -508,7 +508,6 @@ class Int8OPTDecoderLayer(nn.Module):
         privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
 
         self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1, privacy_on)
-
         self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2, privacy_on)
 
         self.self_attn_layer_norm_id = lsc.SetLayerNormParams(self.self_attn_layer_norm)
@@ -558,8 +557,24 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
 
+
         start_time = time.perf_counter_ns()
-        residual = hidden_states.clone().detach()
+        if my_exec_mode == ExecMode.Mode1:
+            residual = hidden_states.clone().detach()
+        elif my_exec_mode == ExecMode.Mode3:
+            residual = hidden_states.clone().detach()
+        elif my_exec_mode == ExecMode.Mode4:
+            residual = torch.empty_like(hidden_states)
+            lsc.SetHiddenStates_Internal(hidden_states)
+            lsc.CopyResidual1_Internal()
+            lsc.GetResidual1_Internal(residual)
+        elif my_exec_mode == ExecMode.Mode5:
+            residual = torch.empty_like(hidden_states)
+            lsc.SetHiddenStates_Internal(hidden_states)
+            lsc.CopyResidual1_Internal()
+            lsc.GetResidual1_Internal(residual)
+        else:
+            assert False
         end_time = time.perf_counter_ns()
         outer_resi_copy_dt = (end_time - start_time) / 1e9
 
@@ -568,17 +583,20 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
 
+
         start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.LayerNorm(hidden_states, self.self_attn_layer_norm_id)
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+            lsc.SelfAttnLayerNormQ_Internal(self.self_attn_layer_norm_id)
+            hidden_states = hidden_states.to(torch.int8)
+            lsc.GetSelfAttnLayerNormQ_Internal(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.LayerNorm(hidden_states, self.self_attn_layer_norm_id)
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+            lsc.SelfAttnLayerNormQ_Internal(self.self_attn_layer_norm_id)
+            hidden_states = hidden_states.to(torch.int8)
+            lsc.GetSelfAttnLayerNormQ_Internal(hidden_states)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -587,6 +605,7 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
             NOTE(jpyo0803): Pass hidden_states to self_attn.
         '''
+
 
         start_time = time.perf_counter_ns()
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -906,7 +925,8 @@ class Int8OPTForCausalLM(OPTPreTrainedModel):
         self.post_init()
 
     def pre_init(self):
-        self.model.pre_init()
+        if my_exec_mode.value >= ExecMode.Mode3.value:
+            self.model.pre_init()
 
     get_input_embeddings = OPTForCausalLM.get_input_embeddings
     set_input_embeddings = OPTForCausalLM.set_input_embeddings

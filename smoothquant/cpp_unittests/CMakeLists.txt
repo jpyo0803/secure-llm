@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.10)
 project(aes_stream_unittest)
 
 # Add the directory with the source files
-include_directories(../cpp)
+include_directories(../c)
 
 # Add the executable
 add_executable(${PROJECT_NAME} aes_stream_unittest.cpp)
