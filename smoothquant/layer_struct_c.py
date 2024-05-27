@@ -3,44 +3,65 @@ from ctypes import *
 LAYER_STRUCT_C_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 
 class LayerStructC:
-    def __init__(self):
-        self.lib = cdll.LoadLibrary(LAYER_STRUCT_C_LIB_PATH)
-        self.layer_id = 0
+    def __new__(cls):
+        if not hasattr(cls, "_instance"):
+          print("LayerStructC Instance Created")
+          cls._instance = super().__new__(cls)
 
-    def SetLayerNormParams(self, layer_norm):
-        layer_id = self.layer_id
-        self.lib.LS_SetLayerNormParams(cast(layer_norm.weight.data_ptr(), POINTER(c_float)), cast(layer_norm.bias.data_ptr(), POINTER(c_float)), layer_id, c_float(layer_norm.eps))
-        self.layer_id += 1
+          cls.lib = cdll.LoadLibrary(LAYER_STRUCT_C_LIB_PATH)
+          cls.layer_id = 0
+        return cls._instance
+
+    def __init__(self):
+        cls = type(self)
+        if not hasattr(cls, "__init"):
+            cls.__init = True
+
+    @classmethod
+    def SetLayerNormParams(cls, layer_norm):
+        layer_id = cls.layer_id
+        cls.lib.LS_SetLayerNormParams(cast(layer_norm.weight.data_ptr(), POINTER(c_float)), cast(layer_norm.bias.data_ptr(), POINTER(c_float)), layer_id, c_float(layer_norm.eps))
+        cls.layer_id += 1
         return layer_id
     
-    def LayerNorm(self, x, layer_id):
-        self.lib.LS_LayerNorm(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), layer_id)
+    @classmethod
+    def LayerNorm(cls, x, layer_id):
+        cls.lib.LS_LayerNorm(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), layer_id)
 
-    def ReLU(self, x):
-        self.lib.LS_ReLU(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    @classmethod
+    def ReLU(cls, x):
+        cls.lib.LS_ReLU(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
     
-    def Softmax(self, x):
-        self.lib.LS_Softmax(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    @classmethod
+    def Softmax(cls, x):
+        cls.lib.LS_Softmax(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
 
-    def ResidualAdd(self, x, y):
+    @classmethod
+    def ResidualAdd(cls, x, y):
         # Check if dimensions of x and y are equal
         assert x.size() == y.size()
-        self.lib.LS_ResidualAdd(cast(x.data_ptr(), POINTER(c_float)), cast(y.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+        cls.lib.LS_ResidualAdd(cast(x.data_ptr(), POINTER(c_float)), cast(y.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
 
-    def SetHiddenStates_Internal(self, x):
-        self.lib.LS_SetHiddenStatesInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    @classmethod
+    def SetHiddenStates_Internal(cls, x):
+        cls.lib.LS_SetHiddenStatesInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
     
-    def CopyResidual1_Internal(self):
-        self.lib.LS_CopyResidual1Internal()
+    @classmethod
+    def CopyResidual1_Internal(cls):
+        cls.lib.LS_CopyResidual1Internal()
 
-    def SelfAttnLayerNormQ_Internal(self, layer_id):
-        self.lib.LS_SelfAttnLayerNormQInternal(layer_id)
+    @classmethod
+    def SelfAttnLayerNormQ_Internal(cls, layer_id):
+        cls.lib.LS_SelfAttnLayerNormQInternal(layer_id)
 
-    def GetSelfAttnLayerNormQ_Internal(self, x):
-        self.lib.LS_GetSelfAttnLayerNormQInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    @classmethod
+    def GetSelfAttnLayerNormQ_Internal(cls, x):
+        cls.lib.LS_GetSelfAttnLayerNormQInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
 
-    def GetResidual1_Internal(self, x):
-        self.lib.LS_GetResidual1Internal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    @classmethod
+    def GetResidual1_Internal(cls, x):
+        cls.lib.LS_GetResidual1Internal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
 
-    def EncryptHiddenStates(self, x):
-        self.lib.LS_EncryptHiddenStates(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    @classmethod
+    def EncryptHiddenStates(cls, x):
+        cls.lib.LS_EncryptHiddenStates(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
