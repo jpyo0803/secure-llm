@@ -17,3 +17,9 @@ if (OpenMP_CXX_FOUND)
 endif ()
 
 add_subdirectory(cpp_unittests)
+
+add_library(layer_struct_c SHARED cpp/layer_struct_c.c)
+
+target_link_libraries(layer_struct_c m)
+
+target_compile_options(layer_struct_c PRIVATE -Ofast -maes -march=native)

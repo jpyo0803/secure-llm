@@ -20,14 +20,15 @@ from torch_int.nn.bmm import BMM_S8T_S8N_S8T, BMM_S8T_S8N_F32T
 
 from enum import Enum
 
-import cupy as cp
-import cupyx.scipy.special
-
 import smoothquant.my_linear as my_linear
 import smoothquant.my_bmm as my_bmm
 
 from ctypes import *
 import time
+
+import smoothquant.layer_struct_c as lsc
+
+lsc = lsc.LayerStructC()
 
 class ExecMode(Enum):
     Mode1 = 1
@@ -57,13 +58,6 @@ class ExecMode(Enum):
 my_exec_mode = None
 
 logger = logging.get_logger(__name__)
-
-CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
-cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
-cipher_cpp_lib.LayerNorm.argtypes = [POINTER(c_float), POINTER(
-    c_float), POINTER(c_float), c_float, c_int, c_int, c_int]
-cipher_cpp_lib.ReLU.argtypes = [POINTER(c_float), c_int, c_int, c_int]
-cipher_cpp_lib.Softmax.argtypes = [POINTER(c_float), c_int, c_int, c_int]
 
 '''
     NOTE(jpyo0803): Time statistics
@@ -395,10 +389,12 @@ class Int8OPTAttention(nn.Module):
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         elif my_exec_mode == ExecMode.Mode4:
             attn_probs = attn_weights
-            cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
+            lsc.Softmax(attn_probs)
+            # cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
         elif my_exec_mode == ExecMode.Mode5:
             attn_probs = attn_weights
-            cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
+            lsc.Softmax(attn_probs)
+            # cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
         else:
             assert False
 
@@ -515,6 +511,9 @@ class Int8OPTDecoderLayer(nn.Module):
 
         self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2, privacy_on)
 
+        self.self_attn_layer_norm_id = lsc.SetLayerNormParams(self.self_attn_layer_norm)
+        self.final_layer_norm_id = lsc.SetLayerNormParams(self.final_layer_norm)
+
         self.self_attn.pre_init()
 
     def forward(
@@ -575,10 +574,10 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.bias.data_ptr(), POINTER(c_float)), self.self_attn_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            lsc.LayerNorm(hidden_states, self.self_attn_layer_norm_id)
             hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         elif my_exec_mode == ExecMode.Mode5:
-            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.self_attn_layer_norm.bias.data_ptr(), POINTER(c_float)), self.self_attn_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            lsc.LayerNorm(hidden_states, self.self_attn_layer_norm_id)
             hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
             assert False
@@ -625,10 +624,10 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.final_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.bias.data_ptr(), POINTER(c_float)), self.final_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
             hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         elif my_exec_mode == ExecMode.Mode5:
-            cipher_cpp_lib.LayerNorm(cast(hidden_states.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.weight.data_ptr(), POINTER(c_float)), cast(self.final_layer_norm.bias.data_ptr(), POINTER(c_float)), self.final_layer_norm.eps, hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
             hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
             assert False
@@ -656,12 +655,13 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
             assert hidden_states.dtype == torch.float32
-            cipher_cpp_lib.ReLU(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            lsc.ReLU(hidden_states)
             hidden_states = hidden_states.to(torch.int8)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
             assert hidden_states.dtype == torch.float32
-            cipher_cpp_lib.ReLU(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+            lsc.ReLU(hidden_states)
+            # cipher_cpp_lib.ReLU(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
             hidden_states = hidden_states.to(torch.int8)
         else:
             assert False
