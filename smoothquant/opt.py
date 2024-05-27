@@ -605,7 +605,16 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
 
         start_time = time.perf_counter_ns()
-        residual.add_(hidden_states.to(residual.dtype))
+        if my_exec_mode == ExecMode.Mode1:
+            residual.add_(hidden_states.to(residual.dtype))
+        elif my_exec_mode == ExecMode.Mode3:
+            residual.add_(hidden_states.to(residual.dtype))
+        elif my_exec_mode == ExecMode.Mode4:
+            lsc.ResidualAdd(residual, hidden_states)
+        elif my_exec_mode == ExecMode.Mode5:
+            lsc.ResidualAdd(residual, hidden_states)
+        else:
+            assert False
         end_time = time.perf_counter_ns()
         outer_resi_add1_dt = (end_time - start_time) / 1e9
 
@@ -696,7 +705,17 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
 
         start_time = time.perf_counter_ns()
-        residual.add_(hidden_states.to(residual.dtype))
+        if my_exec_mode == ExecMode.Mode1:
+            residual.add_(hidden_states.to(residual.dtype))
+        elif my_exec_mode == ExecMode.Mode3:
+            residual.add_(hidden_states.to(residual.dtype))
+        elif my_exec_mode == ExecMode.Mode4:
+            lsc.ResidualAdd(residual, hidden_states)
+        elif my_exec_mode == ExecMode.Mode5:
+            lsc.ResidualAdd(residual, hidden_states)
+        else:
+            assert False
+        
         end_time = time.perf_counter_ns()
         outer_resi_add2_dt = (end_time - start_time) / 1e9
 

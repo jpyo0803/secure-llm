@@ -71,3 +71,15 @@ void LS_Softmax(float* x, int B, int M, int N) {
     }
   }
 }
+
+void LS_ResidualAdd(float* x, float* y, int B, int M, int N) {
+// x += y
+#pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        x[i * M * N + j * N + k] += y[i * M * N + j * N + k];
+      }
+    }
+  }
+}

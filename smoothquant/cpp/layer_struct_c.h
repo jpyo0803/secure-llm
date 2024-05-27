@@ -20,4 +20,6 @@ void LS_ReLU(float* x, int B, int M, int N);
 
 void LS_Softmax(float* x, int B, int M, int N);
 
+void LS_ResidualAdd(float* x, float* y, int B, int M, int N);
+
 #endif

@@ -21,3 +21,8 @@ class LayerStructC:
     
     def Softmax(self, x):
         self.lib.LS_Softmax(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+
+    def ResidualAdd(self, x, y):
+        # Check if dimensions of x and y are equal
+        assert x.size() == y.size()
+        self.lib.LS_ResidualAdd(cast(x.data_ptr(), POINTER(c_float)), cast(y.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
