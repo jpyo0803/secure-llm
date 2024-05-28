@@ -5,6 +5,7 @@ import time
 from ctypes import *
 
 import smoothquant.layer_struct_c as lsc
+import smoothquant.opt
 
 lsc = lsc.LayerStructC()
 
@@ -18,6 +19,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
     self.alpha = torch.tensor(torch_int_nn_bmm.a.item(), dtype=torch.float32)
     self.unblind_factor_id_u = lsc.GetBlindFactorID()
     self.unblind_factor_id_v = lsc.GetBlindFactorID()
+
+    self.bmm_id = lsc.SetBmmParams(torch_int_nn_bmm)
 
   def __run(self, x, y):
     assert x.device == torch.device('cpu')
@@ -62,9 +65,12 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
       # z -= unblind_factor_uy 
       # z -= unblind_factor_uv
 
-    # Compute Epilogue
     z = z.to(torch.float32)
-    z *= self.alpha
+    # Compute Epilogue
+    if smoothquant.opt.my_exec_mode.value >= smoothquant.opt.ExecMode.Mode4.value:
+      lsc.ComputeEpilogue_BMM_I8I8(z, self.bmm_id)
+    else:
+      z *= self.alpha
     assert z.dtype == torch.float32
     return z
   

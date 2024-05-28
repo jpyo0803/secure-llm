@@ -7,6 +7,8 @@
 
 #include "aes_stream.h"
 
+void LS_SetBmmParams(float alpha) { bmm_alpha_list[g_bmm_alpha_id++] = alpha; }
+
 void LS_SetLinearParams_I8I8I8(char* weight, char* bias, int M, int N,
                                float alpha, float beta) {
   struct LinearParamsI8I8* params =
@@ -503,6 +505,17 @@ void LS_ComputeEpilogue_I8FP32FP32(float* x, int B, int M, int N,
       for (int k = 0; k < N; ++k) {
         x[i * M * N + j * N + k] =
             x[i * M * N + j * N + k] * params->alpha + bias[k];
+      }
+    }
+  }
+}
+
+void LS_ComputeEpilogue_BMM_I8I8(float* x, int B, int M, int N, int bmm_id) {
+  float alpha = bmm_alpha_list[bmm_id];
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        x[i * M * N + j * N + k] *= alpha;
       }
     }
   }

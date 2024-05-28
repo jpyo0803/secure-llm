@@ -74,6 +74,11 @@ struct TensorInt32* unblind_factor_xv_list[500];
 struct TensorInt32* unblind_factor_uy_list[500];
 struct TensorInt32* unblind_factor_uv_list[500];
 
+float bmm_alpha_list[500];
+int g_bmm_alpha_id = 0;
+
+void LS_SetBmmParams(float alpha);
+
 void LS_SetLinearParams_I8I8I8(char* weight, char* bias, int M, int N,
                                float alpha, float beta);
 
@@ -112,6 +117,8 @@ void LS_ComputeEpilogue_I8I8I8(float* x, int B, int M, int N, int linear_id);
 
 void LS_ComputeEpilogue_I8FP32FP32(float* x, int B, int M, int N,
                                    int linear_id);
+
+void LS_ComputeEpilogue_BMM_I8I8(float* x, int B, int M, int N, int linear_id);
 
 void LS_SetHiddenStatesInternal(float* hidden_states, int B, int M,
                                 int N);  // Set data 1

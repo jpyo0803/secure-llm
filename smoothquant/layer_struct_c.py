@@ -12,6 +12,7 @@ class LayerStructC:
           cls.layer_id = 0
           cls.linear_id_i8i8i8 = 0
           cls.linear_id_i8i8fp32fp32 = 0
+          cls.bmm_id = 0
 
           cls.blind_factor_id = 0
         return cls._instance
@@ -26,6 +27,17 @@ class LayerStructC:
         ret = cls.blind_factor_id
         cls.blind_factor_id += 1
         return ret
+    
+    @classmethod
+    def SetBmmParams(cls, bmm):
+        bmm_id = cls.bmm_id
+        cls.lib.LS_SetBmmParams(c_float(bmm.a.item()))   
+        cls.bmm_id += 1
+        return bmm_id
+
+    @classmethod
+    def ComputeEpilogue_BMM_I8I8(cls, x, bmm_id):
+        cls.lib.LS_ComputeEpilogue_BMM_I8I8(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), bmm_id)
 
     @classmethod
     def SetLayerNormParams(cls, layer_norm):
