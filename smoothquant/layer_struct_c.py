@@ -23,122 +23,38 @@ class LayerStructC:
             cls.__init = True
 
     @classmethod
-    def GetBlindFactorID(cls):
-        ret = cls.blind_factor_id
-        cls.blind_factor_id += 1
-        return ret
-    
-    @classmethod
-    def SetBmmParams(cls, bmm):
-        bmm_id = cls.bmm_id
-        cls.lib.LS_SetBmmParams(c_float(bmm.a.item()))   
-        cls.bmm_id += 1
-        return bmm_id
+    def Set_Hidden_States(cls, hidden_states):
+        return cls.lib.Ex_Set_Hidden_States(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
 
     @classmethod
-    def ComputeEpilogue_BMM_I8I8(cls, x, bmm_id):
-        cls.lib.LS_ComputeEpilogue_BMM_I8I8(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), bmm_id)
-
-    @classmethod
-    def SetLayerNormParams(cls, layer_norm):
-        layer_id = cls.layer_id
-        cls.lib.LS_SetLayerNormParams(cast(layer_norm.weight.data_ptr(), POINTER(c_float)), cast(layer_norm.bias.data_ptr(), POINTER(c_float)), layer_norm.weight.size(0), c_float(layer_norm.eps))
-        cls.layer_id += 1
-        return layer_id
+    def Copy_Hidden_States(cls, src_id):
+        return cls.lib.Ex_Copy_Hidden_States(src_id)
     
     @classmethod
-    def SetLinearParams_I8I8I8(cls, linear):
-        linear_id = cls.linear_id_i8i8i8
+    def Set_Layer_Norm_Param(cls, layer_norm):
+        return cls.lib.Ex_Set_Layer_Norm_Param(cast(layer_norm.weight.data_ptr(), POINTER(c_float)), cast(layer_norm.bias.data_ptr(), POINTER(c_float)),  layer_norm.weight.size(0), layer_norm.weight.size(0))
+
+    @classmethod
+    def Layer_Norm_Q(cls, src_id, layer_norm_param_id):
+        return cls.lib.Ex_Layer_Norm_Q(src_id, layer_norm_param_id)
+    
+    @classmethod
+    def Set_Linear_Param_WS8BS8(cls, linear):
         weight_transpose = linear.weight.transpose(-2, -1).contiguous()
-        cls.lib.LS_SetLinearParams_I8I8I8(cast(weight_transpose.data_ptr(), POINTER(c_char)), cast(linear.bias.data_ptr(), POINTER(c_char)), 
-                                            weight_transpose.size(0), weight_transpose.size(1), c_float(linear.a.item()), c_float(linear.b.item()))
-        cls.linear_id_i8i8i8 += 1
-        return linear_id
-
-
-    @classmethod
-    def SetLinearParams_I8I8FP32FP32(cls, linear):
-        linear_id = cls.linear_id_i8i8fp32fp32
-        weight_transpose = linear.weight.transpose(-2, -1).contiguous()
-        cls.lib.LS_SetLinearParams_I8I8FP32FP32(cast(weight_transpose.data_ptr(), POINTER(c_char)), cast(linear.bias.data_ptr(), POINTER(c_char)), 
-                                                weight_transpose.size(0), weight_transpose.size(1), c_float(linear.a.item()), c_float(1.0))
-        cls.linear_id_i8i8fp32fp32 += 1
-        return linear_id
-
-    @classmethod
-    def LayerNorm(cls, x, layer_id):
-        cls.lib.LS_LayerNorm(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), layer_id)
-
-    @classmethod
-    def ReLU(cls, x):
-        cls.lib.LS_ReLU(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+        return cls.lib.Ex_Set_Linear_Param_WS8BS8(cast(weight_transpose.data_ptr(), POINTER(c_int8)), cast(linear.bias.data_ptr(), POINTER(c_int8)), weight_transpose.size(0), weight_transpose.size(1), c_float(linear.a.item()), c_float(linear.b.item()))
     
     @classmethod
-    def Softmax(cls, x):
-        cls.lib.LS_Softmax(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
-
-    @classmethod
-    def ResidualAdd(cls, x, y):
-        # Check if dimensions of x and y are equal
-        assert x.size() == y.size()
-        cls.lib.LS_ResidualAdd(cast(x.data_ptr(), POINTER(c_float)), cast(y.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
-
-    @classmethod
-    def ResidualAdd1_Internal(cls, hidden_states):
-        cls.lib.LS_ResidualAdd1_Internal(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
-
-    @classmethod
-    def BlindInputOp1_I8I8I8(cls, x, blind_factor_id):
-        cls.lib.LS_Blind_Input_Op1_I8I8I8(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id)
-
-    @classmethod
-    def UnblindOutputOp1_I8I8I8(cls, x, blind_factor_id, linear_id):
-        cls.lib.LS_Unblind_Output_Op1_I8I8I8(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id, linear_id)
-
-    @classmethod
-    def BlindInputOp2_I8I8(cls, x, y, blind_factor_id_u, blind_factor_id_v):
-        cls.lib.LS_Blind_Input_Op2_I8I8(cast(x.data_ptr(), POINTER(c_int32)), cast(y.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), y.size(2), blind_factor_id_u, blind_factor_id_v)
-
-    @classmethod
-    def UnblindOutputOp2_I8I8(cls, x, blind_factor_id_u, blind_factor_id_v):
-        cls.lib.LS_Unblind_Output_Op2_I8I8(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id_u, blind_factor_id_v)
-
-    @classmethod
-    def ComputeEpilogue_I8I8I8(cls, x, linear_id):
-        cls.lib.LS_ComputeEpilogue_I8I8I8(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), linear_id)
-
-    @classmethod
-    def BlindInputOp1_I8FP32FP32(cls, x, blind_factor_id):
-        cls.lib.LS_Blind_Input_Op1_I8FP32FP32(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id)
-
-    @classmethod
-    def UnblindOutputOp1_I8FP32FP32(cls, x, blind_factor_id, linear_id):
-        cls.lib.LS_Unblind_Output_Op1_I8FP32FP32(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id, linear_id)
-
-    @classmethod
-    def ComputeEpilogue_I8FP32FP32(cls, x, linear_id):
-        cls.lib.LS_ComputeEpilogue_I8FP32FP32(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), linear_id)
-
-    @classmethod
-    def SetHiddenStates_Internal(cls, x):
-        cls.lib.LS_SetHiddenStatesInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    def Get_Tensor_Dim_Int32(cls, src_id):
+        B = M = K = -1
+        cls.lib.Ex_Get_Tensor_Dim_Int32(src_id, byref(B), byref(M), byref(K))
+        return (B, M, K)
     
     @classmethod
-    def CopyResidual1_Internal(cls):
-        cls.lib.LS_CopyResidual1Internal()
+    def Get_Tensor_Int32(cls, src_id, out):
+        cls.lib.Ex_Get_Tensor_Int32(src_id, cast(out.data_ptr(), POINTER(c_int32)))
 
     @classmethod
-    def LayerNormQ_Internal(cls, layer_id):
-        cls.lib.LS_LayerNormQInternal(layer_id)
+    def Get_Encrpyted_Tensor_Opr1_Int32(cls, src_id, out):
+        return cls.lib.Ex_Get_Encrpyted_Tensor_Int32(src_id, cast(out.data_ptr(), POINTER(c_int32)))
 
-    @classmethod
-    def GetLayerNormQ_Internal(cls, x):
-        cls.lib.LS_GetLayerNormQInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
-
-    @classmethod
-    def GetResidual1_Internal(cls, x):
-        cls.lib.LS_GetResidual1Internal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
-
-    @classmethod
-    def EncryptHiddenStates(cls, x):
-        cls.lib.LS_EncryptHiddenStates(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    

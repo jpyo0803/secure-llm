@@ -7,8 +7,6 @@ from transformers.models.opt.modeling_opt import (
     OPTModel,
     OPTPreTrainedModel,
     OPTLearnedPositionalEmbedding,
-    OPTAttention,
-    OPTDecoderLayer,
     OPTDecoder,
     BaseModelOutputWithPast,
 )
@@ -202,7 +200,7 @@ class Int8OPTAttention(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states, # type: torchtensor for mode 1, 3. For above mode 4, it is id 
         key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
@@ -215,9 +213,6 @@ class Int8OPTAttention(nn.Module):
         is_cross_attention = key_value_states is not None
 
         bsz, tgt_len, _ = hidden_states.size()
-
-        device_cuda = torch.device("cuda:0")
-        device_cpu = torch.device("cpu")
 
         '''
             NOTE(jpyo0803): Pass hidden_states to Q projection.
@@ -487,6 +482,8 @@ class Int8OPTAttention(nn.Module):
 class Int8OPTDecoderLayer(nn.Module):
     def __init__(self, embed_dim, num_attention_heads, ffn_dim):
         super().__init__()
+
+        # DecoderLayer Stuff
         self.embed_dim = embed_dim
         self.self_attn = Int8OPTAttention(
             embed_dim=self.embed_dim, num_heads=num_attention_heads
@@ -499,8 +496,8 @@ class Int8OPTDecoderLayer(nn.Module):
 
         self.my_fc1 = None
         self.my_fc1_relu = None
-
         self.my_fc2 = None
+
 
     def pre_init(self):
         # how to compare enum by value?
@@ -510,8 +507,8 @@ class Int8OPTDecoderLayer(nn.Module):
         self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1, privacy_on)
         self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2, privacy_on)
 
-        self.self_attn_layer_norm_id = lsc.SetLayerNormParams(self.self_attn_layer_norm)
-        self.final_layer_norm_id = lsc.SetLayerNormParams(self.final_layer_norm)
+        self.self_attn_layer_norm_id = lsc.Set_Layer_Norm_Param(self.self_attn_layer_norm)
+        self.final_layer_norm_id = lsc.Set_Layer_Norm_Param(self.final_layer_norm)
 
         self.self_attn.pre_init()
 
@@ -543,11 +540,13 @@ class Int8OPTDecoderLayer(nn.Module):
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
 
+        '''
+            NOTE(jpyo0803): tell whether this is prefill stage or decode stage
+        '''
         global is_prefill
         if is_prefill == True and past_key_value is not None:
             is_prefill = False
 
-        # Self Attention
         if my_exec_mode == ExecMode.Mode1 or my_exec_mode == ExecMode.Mode2:
             assert hidden_states.device == torch.device("cuda:0")
         else:
@@ -557,6 +556,10 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
 
+        if my_exec_mode == ExecMode.Mode4:
+            hidden_states = lsc.Set_Hidden_States(hidden_states)
+        elif my_exec_mode == ExecMode.Mode5:
+            hidden_states = lsc.Set_Hidden_States(hidden_states)
 
         start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
@@ -564,13 +567,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual = hidden_states.clone().detach()
         elif my_exec_mode == ExecMode.Mode4:
-            # residual = torch.empty_like(hidden_states)
-            lsc.SetHiddenStates_Internal(hidden_states)
-            lsc.CopyResidual1_Internal()
+            residual = lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
-            # residual = torch.empty_like(hidden_states)
-            lsc.SetHiddenStates_Internal(hidden_states)
-            lsc.CopyResidual1_Internal() # hidden_states is copied internally
+            residual = lsc.Copy_Hidden_States(hidden_states)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -588,13 +587,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.LayerNormQ_Internal(self.self_attn_layer_norm_id)
-            hidden_states = hidden_states.to(torch.int8)
-            lsc.GetLayerNormQ_Internal(hidden_states) # TODO: Internalize
+            hidden_states = lsc.Layer_Norm_Q(hidden_states, self.self_attn_layer_norm_id)
         elif my_exec_mode == ExecMode.Mode5: 
-            lsc.LayerNormQ_Internal(self.self_attn_layer_norm_id)
-            hidden_states = hidden_states.to(torch.int8)
-            lsc.GetLayerNormQ_Internal(hidden_states) # TODO :internalize
+            hidden_states = lsc.Layer_Norm_Q(hidden_states, self.self_attn_layer_norm_id)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -603,7 +598,6 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
             NOTE(jpyo0803): Pass hidden_states to self_attn.
         '''
-
 
         start_time = time.perf_counter_ns()
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
