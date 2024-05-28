@@ -7,11 +7,84 @@
 
 #include "aes_stream.h"
 
+void LS_SetLinearParams_I8I8I8I8(char* weight, char* bias, int M, int N,
+                                 float alpha, float beta) {
+  struct LinearParamsI8I8* params =
+      (struct LinearParamsI8I8*)malloc(sizeof(struct LinearParamsI8I8));
+  params->weight = (char*)malloc(M * N * sizeof(char));
+  for (int i = 0; i < M * N; ++i) {
+    params->weight[i] = weight[i];
+  }
+  params->bias = (char*)malloc(N * sizeof(char));
+  for (int i = 0; i < N; ++i) {
+    params->bias[i] = bias[i];
+  }
+  params->M = M;
+  params->N = N;
+  params->alpha = alpha;
+  params->beta = beta;
+
+  linear_params_i8i8i8i8_list[g_linear_i8i8i8i8_id++] = params;
+
+  // TOOD(jpyo0803): Implement cleanup procedure
+}
+
+void LS_SetLinearParams_I8I8I8FP32(char* weight, char* bias, int M, int N,
+                                   float alpha, float beta) {
+  struct LinearParamsI8I8* params =
+      (struct LinearParamsI8I8*)malloc(sizeof(struct LinearParamsI8I8));
+  params->weight = (char*)malloc(M * N * sizeof(char));
+  for (int i = 0; i < M * N; ++i) {
+    params->weight[i] = weight[i];
+  }
+  params->bias = (char*)malloc(N * sizeof(char));
+  for (int i = 0; i < N; ++i) {
+    params->bias[i] = bias[i];
+  }
+  params->M = M;
+  params->N = N;
+  params->alpha = alpha;
+  params->beta = beta;
+
+  linear_params_i8i8i8fp32_list[g_linear_i8i8i8fp32_id++] = params;
+
+  // TOOD(jpyo0803): Implement cleanup procedure
+}
+
+void LS_SetLinearParams_I8I8FP32FP32(char* weight, float* bias, int M, int N,
+                                     float alpha, float beta) {
+  struct LinearParamsI8FP32* params =
+      (struct LinearParamsI8FP32*)malloc(sizeof(struct LinearParamsI8FP32));
+  params->weight = (char*)malloc(M * N * sizeof(char));
+  for (int i = 0; i < M * N; ++i) {
+    params->weight[i] = weight[i];
+  }
+  params->bias = (float*)malloc(N * sizeof(float));
+  for (int i = 0; i < N; ++i) {
+    params->bias[i] = bias[i];
+  }
+  params->M = M;
+  params->N = N;
+  params->alpha = alpha;
+  params->beta = beta;
+
+  linear_params_i8i8fp32fp32_list[g_linear_i8i8fp32fp32_id++] = params;
+
+  // TOOD(jpyo0803): Implement cleanup procedure
+}
+
 void LS_SetLayerNormParams(float* gamma, float* beta, int N, float eps) {
   struct LayerNormParams* params =
       (struct LayerNormParams*)malloc(sizeof(struct LayerNormParams));
-  params->gamma = gamma;
-  params->beta = beta;
+  params->gamma = (float*)malloc(N * sizeof(float));
+  for (int i = 0; i < N; ++i) {
+    params->gamma[i] = gamma[i];
+  }
+  params->beta = (float*)malloc(N * sizeof(float));
+  for (int i = 0; i < N; ++i) {
+    params->beta[i] = beta[i];
+  }
+
   params->N = N;
   params->eps = eps;
   layer_norm_params_list[g_layer_id++] = params;
@@ -166,7 +239,7 @@ void LS_SetHiddenStatesInternal(float* hidden_states, int B, int M, int N) {
   }
 
   hidden_states_internal = CreateTensorFloat(B, M, N);
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int i = 0; i < B * M * N; ++i) {
     hidden_states_internal->data[i] = hidden_states[i];
   }
@@ -185,13 +258,13 @@ void LS_CopyResidual1Internal() {
   int N = hidden_states_internal->N;
   residual1_internal = CreateTensorFloat(B, M, N);
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int i = 0; i < B * M * N; ++i) {
     residual1_internal->data[i] = hidden_states_internal->data[i];
   }
 }
 
-struct TensorInt8* self_attn_layer_norm_internal_q =
+struct TensorInt8* self_attn_layer_norm_q_internal =
     NULL;  // output of layer norm
 void LS_SelfAttnLayerNormQInternal(int layer_id) {
   assert(hidden_states_internal != NULL);
@@ -204,29 +277,29 @@ void LS_SelfAttnLayerNormQInternal(int layer_id) {
   LS_Round(hidden_states_internal->data, B, M, N);
   LS_Clamp(hidden_states_internal->data, B, M, N, -128, 127);
 
-  if (self_attn_layer_norm_internal_q != NULL) {
-    DeleteTensorInt8(self_attn_layer_norm_internal_q);
+  if (self_attn_layer_norm_q_internal != NULL) {
+    DeleteTensorInt8(self_attn_layer_norm_q_internal);
   }
 
-  self_attn_layer_norm_internal_q =
+  self_attn_layer_norm_q_internal =
       CreateTensorInt8(B, M, N);  // output of layer norm
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int i = 0; i < B * M * N; ++i) {
-    self_attn_layer_norm_internal_q->data[i] =
+    self_attn_layer_norm_q_internal->data[i] =
         (char)hidden_states_internal->data[i];
   }
 }
 
 void LS_GetSelfAttnLayerNormQInternal(char* q, int B, int M, int N) {
-  assert(self_attn_layer_norm_internal_q != NULL);
-  assert(B == self_attn_layer_norm_internal_q->B);
-  assert(M == self_attn_layer_norm_internal_q->M);
-  assert(N == self_attn_layer_norm_internal_q->N);
+  assert(self_attn_layer_norm_q_internal != NULL);
+  assert(B == self_attn_layer_norm_q_internal->B);
+  assert(M == self_attn_layer_norm_q_internal->M);
+  assert(N == self_attn_layer_norm_q_internal->N);
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int i = 0; i < B * M * N; ++i) {
-    q[i] = self_attn_layer_norm_internal_q->data[i];
+    q[i] = self_attn_layer_norm_q_internal->data[i];
   }
 }
 
@@ -236,8 +309,7 @@ void LS_GetResidual1Internal(float* out, int B, int M, int N) {
   assert(M == residual1_internal->M);
   assert(N == residual1_internal->N);
 
-
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int i = 0; i < B * M * N; ++i) {
     out[i] = residual1_internal->data[i];
   }

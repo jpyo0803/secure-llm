@@ -8,6 +8,24 @@ struct LayerNormParams {
   float eps;
 };
 
+struct LinearParamsI8I8 {
+  char* weight;  // M by N
+  char* bias;    // 1 by N
+  int M;
+  int N;
+  float alpha;
+  float beta;
+};
+
+struct LinearParamsI8FP32 {
+  char* weight;  // M by N
+  float* bias;   // 1 by N
+  int M;
+  int N;
+  float alpha;
+  float beta;  // should be 1.0
+};
+
 struct TensorFloat {
   float* data;
   int B;
@@ -40,8 +58,26 @@ struct TensorInt8 {
   unsigned int num_bytes;
 };
 
+struct LinearParamsI8I8* linear_params_i8i8i8i8_list[300];
+int g_linear_i8i8i8i8_id = 0;
+
+struct LinearParamsI8I8* linear_params_i8i8i8fp32_list[300];
+int g_linear_i8i8i8fp32_id = 0;
+
+struct LinearParamsI8FP32* linear_params_i8i8fp32fp32_list[300];
+int g_linear_i8i8fp32fp32_id = 0;
+
 struct LayerNormParams* layer_norm_params_list[300];
 int g_layer_id = 0;
+
+void LS_SetLinearParams_I8I8I8I8(char* weight, char* bias, int M, int N,
+                                 float alpha, float beta);
+
+void LS_SetLinearParams_I8I8I8FP32(char* weight, char* bias, int M, int N,
+                                   float alpha, float beta);
+
+void LS_SetLinearParams_I8I8FP32FP32(char* weight, float* bias, int M, int N,
+                                     float alpha, float beta);
 
 void LS_SetLayerNormParams(float* gamma, float* beta, int N, float eps);
 

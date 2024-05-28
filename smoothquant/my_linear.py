@@ -1,8 +1,13 @@
 import torch
 import cupy
 import time
+import smoothquant.opt
 
 from ctypes import *
+
+import smoothquant.layer_struct_c as lsc
+
+lsc = lsc.LayerStructC()
 
 CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
@@ -11,8 +16,11 @@ cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
 class Linear_S8W_S8A_S8B_FP32O_Mixed:
   # Only perform matmul in GPU with cupy
   # Other operations done in CPU with torch
-  def __init__(self, torch_int_nn_linear, privacy_on):
+  def __init__(self, torch_int_nn_linear, privacy_on, set_in_c = False):
     self.privacy_on = privacy_on
+
+    # weight 2D
+    # bias 1D
 
     self.weight_cpu = torch_int_nn_linear.weight.to(torch.int32).transpose(-2, -1).contiguous()
     self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))) # Send to GPU
@@ -25,6 +33,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
     assert self.beta.dtype == torch.float32
     assert self.alpha.device == torch.device('cpu')
     assert self.beta.device == torch.device('cpu')
+
+    if smoothquant.opt.my_exec_mode.value >= smoothquant.opt.ExecMode.Mode4.value and set_in_c:
+      self.linear_id = lsc.SetLinearParams_I8I8I8FP32(torch_int_nn_linear)
 
   def __run(self, x):
     assert x.device == torch.device('cpu')
@@ -66,7 +77,10 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
 
 class Linear_S8W_S8A_S8B_S8O_Mixed(Linear_S8W_S8A_S8B_FP32O_Mixed):
   def __init__(self, torch_int_nn_linear, privacy_on):
-    super().__init__(torch_int_nn_linear, privacy_on)
+    super().__init__(torch_int_nn_linear, privacy_on, set_in_c = False)
+
+    if smoothquant.opt.my_exec_mode.value >= smoothquant.opt.ExecMode.Mode4.value:
+      self.linear_id = lsc.SetLinearParams_I8I8I8I8(torch_int_nn_linear)
 
   def __run(self, x):
     return super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x).to(torch.int8)
@@ -89,6 +103,10 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
     self.alpha = torch.tensor(torch_int_nn_linear.a.item(), dtype=torch.float32)
     assert self.alpha.dtype == torch.float32
     assert self.alpha.device == torch.device('cpu')
+
+
+    if smoothquant.opt.my_exec_mode.value >= smoothquant.opt.ExecMode.Mode4.value:
+      self.linear_id = lsc.SetLinearParams_I8I8FP32FP32(torch_int_nn_linear)
 
   def __run(self, x):
     assert x.device == torch.device('cpu')

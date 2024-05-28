@@ -10,6 +10,9 @@ class LayerStructC:
 
           cls.lib = cdll.LoadLibrary(LAYER_STRUCT_C_LIB_PATH)
           cls.layer_id = 0
+          cls.linear_id_i8i8i8i8 = 0
+          cls.linear_id_i8i8i8fp32 = 0
+          cls.linear_id_i8i8fp32fp32 = 0
         return cls._instance
 
     def __init__(self):
@@ -20,10 +23,34 @@ class LayerStructC:
     @classmethod
     def SetLayerNormParams(cls, layer_norm):
         layer_id = cls.layer_id
-        cls.lib.LS_SetLayerNormParams(cast(layer_norm.weight.data_ptr(), POINTER(c_float)), cast(layer_norm.bias.data_ptr(), POINTER(c_float)), layer_id, c_float(layer_norm.eps))
+        cls.lib.LS_SetLayerNormParams(cast(layer_norm.weight.data_ptr(), POINTER(c_float)), cast(layer_norm.bias.data_ptr(), POINTER(c_float)), layer_norm.weight.size(0), c_float(layer_norm.eps))
         cls.layer_id += 1
         return layer_id
     
+    @classmethod
+    def SetLinearParams_I8I8I8I8(cls, linear):
+        linear_id = cls.linear_id_i8i8i8i8
+        cls.lib.LS_SetLinearParams_I8I8I8I8(cast(linear.weight.data_ptr(), POINTER(c_char)), cast(linear.bias.data_ptr(), POINTER(c_char)), 
+                                            linear.weight.size(0), linear.weight.size(1), c_float(linear.a.item()), c_float(linear.b.item()))
+        cls.linear_id_i8i8i8i8 += 1
+        return linear_id
+
+    @classmethod
+    def SetLinearParams_I8I8I8FP32(cls, linear):
+        linear_id = cls.linear_id_i8i8i8fp32
+        cls.lib.LS_SetLinearParams_I8I8I8FP32(cast(linear.weight.data_ptr(), POINTER(c_char)), cast(linear.bias.data_ptr(), POINTER(c_char)), 
+                                              linear.weight.size(0), linear.weight.size(1), c_float(linear.a.item()), c_float(linear.b.item()))
+        cls.linear_id_i8i8i8fp32 += 1
+        return linear_id
+
+    @classmethod
+    def SetLinearParams_I8I8FP32FP32(cls, linear):
+        linear_id = cls.linear_id_i8i8fp32fp32
+        cls.lib.LS_SetLinearParams_I8I8FP32FP32(cast(linear.weight.data_ptr(), POINTER(c_char)), cast(linear.bias.data_ptr(), POINTER(c_char)), 
+                                                linear.weight.size(0), linear.weight.size(1), c_float(linear.a.item()), c_float(1.0))
+        cls.linear_id_i8i8fp32fp32 += 1
+        return linear_id
+
     @classmethod
     def LayerNorm(cls, x, layer_id):
         cls.lib.LS_LayerNorm(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), layer_id)
