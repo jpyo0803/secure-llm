@@ -1,62 +1,9 @@
 #ifndef SECURE_LLM_SMOOTHQUANT_CPP_LAYER_STRUCT_H
 #define SECURE_LLM_SMOOTHQUANT_CPP_LAYER_STRUCT_H
 
-struct LayerNormParams {
-  float* gamma;
-  float* beta;
-  int N;
-  float eps;
-};
+#include "tensor.h"
+#include "datatypes.h"
 
-struct LinearParamsI8I8 {
-  char* weight;  // M by N
-  char* bias;    // 1 by N
-  int M;
-  int N;
-  float alpha;
-  float beta;
-};
-
-struct LinearParamsI8FP32 {
-  char* weight;  // M by N
-  float* bias;   // 1 by N
-  int M;
-  int N;
-  float alpha;
-  float beta;  // should be 1.0
-};
-
-struct TensorFloat {
-  float* data;
-  int B;
-  int M;
-  int N;
-  unsigned int num_bytes;
-};
-
-struct TensorInt32 {
-  int* data;
-  int B;
-  int M;
-  int N;
-  unsigned int num_bytes;
-};
-
-struct TensorUint32 {
-  unsigned int* data;
-  int B;
-  int M;
-  int N;
-  unsigned int num_bytes;
-};
-
-struct TensorInt8 {
-  char* data;
-  int B;
-  int M;
-  int N;
-  unsigned int num_bytes;
-};
 
 struct LinearParamsI8I8*
     linear_params_i8i8i8_list[600];  // i8i8i8i8 + i8i8i8fp32
