@@ -12,6 +12,14 @@ struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   return tensor;
 }
 
+struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N) {
+  struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+  for (int i = 0; i < B * M * N; i++) {
+    tensor->data[i] = data[i];
+  }
+  return tensor;
+}
+
 void DeleteTensorInt32(struct TensorInt32* tensor) {
   free(tensor->data);
   free(tensor);

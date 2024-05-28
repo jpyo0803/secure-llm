@@ -28,7 +28,7 @@ struct LinearParamWS8BFP32 {
 }* linear_param_ws8bfp32_list[STATIC_LIST_LEN];
 int linear_param_ws8bfp32_id = 0;
 
-float bmm_alpha_list[STATIC_LIST_LEN];
-int bmm_alpha_id = 0;
+float bmm_param_list[STATIC_LIST_LEN];
+int bmm_param_id = 0;
 
 #endif

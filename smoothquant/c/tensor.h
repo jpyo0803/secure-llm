@@ -34,6 +34,7 @@ struct TensorInt8 {
 };
 
 struct TensorInt32* CreateTensorInt32(int B, int M, int N);
+struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N);
 void DeleteTensorInt32(struct TensorInt32* tensor);
 
 struct TensorUint32* CreateTensorUint32(int B, int M, int N);

@@ -28,12 +28,14 @@ import smoothquant.layer_struct_c as lsc
 
 lsc = lsc.LayerStructC()
 
+
 class ExecMode(Enum):
     Mode1 = 1
     Mode2 = 2
     Mode3 = 3
     Mode4 = 4
     Mode5 = 5
+
 
 '''
     NOTE(jpyo0803): Set execution mode
@@ -60,6 +62,8 @@ logger = logging.get_logger(__name__)
 '''
     NOTE(jpyo0803): Time statistics
 '''
+
+
 class TimeStats:
     def __init__(self, enable=False):
         self.enable = enable
@@ -73,7 +77,7 @@ class TimeStats:
 
     def is_on(self):
         return self.enable
-    
+
     def reset(self):
         self.total = 0.0
         self.total_prefill = 0.0
@@ -113,34 +117,55 @@ class TimeStats:
 
         print("[Prefill Statistics]")
         print("Samples: ", self.prefill_samples)
-        print(f'Residual Copy 1 (total, avg, percent): {self.prefill_resi_copy1:0.6f}, {self.prefill_resi_copy1 / self.prefill_samples:0.6f}, {self.prefill_resi_copy1 / self.total_prefill:0.6f}')
-        print(f'LayerNorm 1 (total, avg, percent): {self.prefill_ln1:0.6f}, {self.prefill_ln1 / self.prefill_samples:0.6f}, {self.prefill_ln1 / self.total_prefill:0.6f}')
-        print(f'Attention (total, avg, percent): {self.prefill_attn:0.6f}, {self.prefill_attn / self.prefill_samples:0.6f}, {self.prefill_attn / self.total_prefill:0.6f}')
-        print(f'Residual Add 1 (total, avg, percent): {self.prefill_resi_add1:0.6f}, {self.prefill_resi_add1 / self.prefill_samples:0.6f}, {self.prefill_resi_add1 / self.total_prefill:0.6f}')
-        print(f'Residual Copy 2 (total, avg, percent): {self.prefill_resi_copy2:0.6f}, {self.prefill_resi_copy2 / self.prefill_samples:0.6f}, {self.prefill_resi_copy2 / self.total_prefill:0.6f}')
-        print(f'LayerNorm 2 (total, avg, percent): {self.prefill_ln2:0.6f}, {self.prefill_ln2 / self.prefill_samples:0.6f}, {self.prefill_ln2 / self.total_prefill:0.6f}')
-        print(f'FC1 ReLU (total, avg, percent): {self.prefill_fc1_relu:0.6f}, {self.prefill_fc1_relu / self.prefill_samples:0.6f}, {self.prefill_fc1_relu / self.total_prefill:0.6f}')
-        print(f'FC2 (total, avg, percent): {self.prefill_fc2:0.6f}, {self.prefill_fc2 / self.prefill_samples:0.6f}, {self.prefill_fc2 / self.total_prefill:0.6f}')
-        print(f'Residual Add 2 (total, avg, percent): {self.prefill_resi_add2:0.6f}, {self.prefill_resi_add2 / self.prefill_samples:0.6f}, {self.prefill_resi_add2 / self.total_prefill:0.6f}')
-        print(f'Post (total, avg, percent): {self.prefill_post:0.6f}, {self.prefill_post / self.prefill_samples:0.6f}, {self.prefill_post / self.total_prefill:0.6f}')
+        print(
+            f'Residual Copy 1 (total, avg, percent): {self.prefill_resi_copy1:0.6f}, {self.prefill_resi_copy1 / self.prefill_samples:0.6f}, {self.prefill_resi_copy1 / self.total_prefill:0.6f}')
+        print(
+            f'LayerNorm 1 (total, avg, percent): {self.prefill_ln1:0.6f}, {self.prefill_ln1 / self.prefill_samples:0.6f}, {self.prefill_ln1 / self.total_prefill:0.6f}')
+        print(
+            f'Attention (total, avg, percent): {self.prefill_attn:0.6f}, {self.prefill_attn / self.prefill_samples:0.6f}, {self.prefill_attn / self.total_prefill:0.6f}')
+        print(
+            f'Residual Add 1 (total, avg, percent): {self.prefill_resi_add1:0.6f}, {self.prefill_resi_add1 / self.prefill_samples:0.6f}, {self.prefill_resi_add1 / self.total_prefill:0.6f}')
+        print(
+            f'Residual Copy 2 (total, avg, percent): {self.prefill_resi_copy2:0.6f}, {self.prefill_resi_copy2 / self.prefill_samples:0.6f}, {self.prefill_resi_copy2 / self.total_prefill:0.6f}')
+        print(
+            f'LayerNorm 2 (total, avg, percent): {self.prefill_ln2:0.6f}, {self.prefill_ln2 / self.prefill_samples:0.6f}, {self.prefill_ln2 / self.total_prefill:0.6f}')
+        print(
+            f'FC1 ReLU (total, avg, percent): {self.prefill_fc1_relu:0.6f}, {self.prefill_fc1_relu / self.prefill_samples:0.6f}, {self.prefill_fc1_relu / self.total_prefill:0.6f}')
+        print(
+            f'FC2 (total, avg, percent): {self.prefill_fc2:0.6f}, {self.prefill_fc2 / self.prefill_samples:0.6f}, {self.prefill_fc2 / self.total_prefill:0.6f}')
+        print(
+            f'Residual Add 2 (total, avg, percent): {self.prefill_resi_add2:0.6f}, {self.prefill_resi_add2 / self.prefill_samples:0.6f}, {self.prefill_resi_add2 / self.total_prefill:0.6f}')
+        print(
+            f'Post (total, avg, percent): {self.prefill_post:0.6f}, {self.prefill_post / self.prefill_samples:0.6f}, {self.prefill_post / self.total_prefill:0.6f}')
 
         print("[Generation Statistics]")
         print("Samples: ", self.generation_samples)
-        print(f'Residual Copy 1 (total, avg, percent): {self.generation_resi_copy1:0.6f}, {self.generation_resi_copy1 / self.generation_samples:0.6f}, {self.generation_resi_copy1 / self.total_generation:0.6f}')
-        print(f'LayerNorm 1 (total, avg, percent): {self.generation_ln1:0.6f}, {self.generation_ln1 / self.generation_samples:0.6f}, {self.generation_ln1 / self.total_generation:0.6f}')
-        print(f'Attention (total, avg, percent): {self.generation_attn:0.6f}, {self.generation_attn / self.generation_samples:0.6f}, {self.generation_attn / self.total_generation:0.6f}')
-        print(f'Residual Add 1 (total, avg, percent): {self.generation_resi_add1:0.6f}, {self.generation_resi_add1 / self.generation_samples:0.6f}, {self.generation_resi_add1 / self.total_generation:0.6f}')
-        print(f'Residual Copy 2 (total, avg, percent): {self.generation_resi_copy2:0.6f}, {self.generation_resi_copy2 / self.generation_samples:0.6f}, {self.generation_resi_copy2 / self.total_generation:0.6f}')
-        print(f'LayerNorm 2 (total, avg, percent): {self.generation_ln2:0.6f}, {self.generation_ln2 / self.generation_samples:0.6f}, {self.generation_ln2 / self.total_generation:0.6f}')
-        print(f'FC1 ReLU (total, avg, percent): {self.generation_fc1_relu:0.6f}, {self.generation_fc1_relu / self.generation_samples:0.6f}, {self.generation_fc1_relu / self.total_generation:0.6f}')
-        print(f'FC2 (total, avg, percent): {self.generation_fc2:0.6f}, {self.generation_fc2 / self.generation_samples:0.6f}, {self.generation_fc2 / self.total_generation:0.6f}')
-        print(f'Residual Add 2 (total, avg, percent): {self.generation_resi_add2:0.6f}, {self.generation_resi_add2 / self.generation_samples:0.6f}, {self.generation_resi_add2 / self.total_generation:0.6f}')
-        print(f'Post (total, avg, percent): {self.generation_post:0.6f}, {self.generation_post / self.generation_samples:0.6f}, {self.generation_post / self.total_generation:0.6f}')
+        print(
+            f'Residual Copy 1 (total, avg, percent): {self.generation_resi_copy1:0.6f}, {self.generation_resi_copy1 / self.generation_samples:0.6f}, {self.generation_resi_copy1 / self.total_generation:0.6f}')
+        print(
+            f'LayerNorm 1 (total, avg, percent): {self.generation_ln1:0.6f}, {self.generation_ln1 / self.generation_samples:0.6f}, {self.generation_ln1 / self.total_generation:0.6f}')
+        print(
+            f'Attention (total, avg, percent): {self.generation_attn:0.6f}, {self.generation_attn / self.generation_samples:0.6f}, {self.generation_attn / self.total_generation:0.6f}')
+        print(
+            f'Residual Add 1 (total, avg, percent): {self.generation_resi_add1:0.6f}, {self.generation_resi_add1 / self.generation_samples:0.6f}, {self.generation_resi_add1 / self.total_generation:0.6f}')
+        print(
+            f'Residual Copy 2 (total, avg, percent): {self.generation_resi_copy2:0.6f}, {self.generation_resi_copy2 / self.generation_samples:0.6f}, {self.generation_resi_copy2 / self.total_generation:0.6f}')
+        print(
+            f'LayerNorm 2 (total, avg, percent): {self.generation_ln2:0.6f}, {self.generation_ln2 / self.generation_samples:0.6f}, {self.generation_ln2 / self.total_generation:0.6f}')
+        print(
+            f'FC1 ReLU (total, avg, percent): {self.generation_fc1_relu:0.6f}, {self.generation_fc1_relu / self.generation_samples:0.6f}, {self.generation_fc1_relu / self.total_generation:0.6f}')
+        print(
+            f'FC2 (total, avg, percent): {self.generation_fc2:0.6f}, {self.generation_fc2 / self.generation_samples:0.6f}, {self.generation_fc2 / self.total_generation:0.6f}')
+        print(
+            f'Residual Add 2 (total, avg, percent): {self.generation_resi_add2:0.6f}, {self.generation_resi_add2 / self.generation_samples:0.6f}, {self.generation_resi_add2 / self.total_generation:0.6f}')
+        print(
+            f'Post (total, avg, percent): {self.generation_post:0.6f}, {self.generation_post / self.generation_samples:0.6f}, {self.generation_post / self.total_generation:0.6f}')
 
 
 time_stats = TimeStats()
 
 is_prefill = True
+
 
 class Int8OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -182,12 +207,17 @@ class Int8OPTAttention(nn.Module):
     def pre_init(self):
         privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
 
-        self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.q_proj, privacy_on)
-        self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.k_proj, privacy_on)
-        self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(self.v_proj, privacy_on)
-        self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.out_proj, privacy_on)
+        self.my_q_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
+            self.q_proj, privacy_on)
+        self.my_k_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
+            self.k_proj, privacy_on)
+        self.my_v_proj = my_linear.Linear_S8W_S8A_S8B_S8O_Mixed(
+            self.v_proj, privacy_on)
+        self.my_out_proj = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(
+            self.out_proj, privacy_on)
 
-        self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(self.qk_bmm, privacy_on)
+        self.my_qk_bmm = my_bmm.BMM_S8X_S8Y_FP32Z_Mixed(
+            self.qk_bmm, privacy_on)
         self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm, privacy_on)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -200,7 +230,7 @@ class Int8OPTAttention(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        hidden_states, # type: torchtensor for mode 1, 3. For above mode 4, it is id 
+        hidden_states,  # type: torchtensor for mode 1, 3. For above mode 4, it is id
         key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
@@ -273,6 +303,16 @@ class Int8OPTAttention(nn.Module):
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
+                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(key_states, out)
+                key_states = out
+
+                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(value_states, out)
+                value_states = out
+
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
@@ -281,6 +321,16 @@ class Int8OPTAttention(nn.Module):
             elif my_exec_mode == ExecMode.Mode5:
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+
+                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(key_states, out)
+                key_states = out
+
+                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(value_states, out)
+                value_states = out
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
@@ -311,11 +361,31 @@ class Int8OPTAttention(nn.Module):
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
+                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(key_states, out)
+                key_states = out
+
+                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(value_states, out)
+                value_states = out
+
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
             elif my_exec_mode == ExecMode.Mode5:
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+
+                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(key_states, out)
+                key_states = out
+
+                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
+                out = torch.empty((B, M, N), dtype=torch.int8)
+                lsc.Get_Tensor_Int8(value_states, out)
+                value_states = out
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
@@ -339,12 +409,18 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_weights = self.qk_bmm(query_states, key_states)
         elif my_exec_mode == ExecMode.Mode3:
-            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
+            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
+                query_states, key_states)
             # print("my_qk_bmm_dt : ", my_qk_bmm_dt)
         elif my_exec_mode == ExecMode.Mode4:
-            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
+            query_states = lsc.Set_Tensor_Int8(query_states)
+            key_states = lsc.Set_Tensor_Int8(key_states)
+
+            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
+                query_states, key_states)
         elif my_exec_mode == ExecMode.Mode5:
-            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(query_states, key_states)
+            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
+                query_states, key_states)
         else:
             assert False
 
@@ -435,12 +511,15 @@ class Int8OPTAttention(nn.Module):
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.pv_bmm(attn_probs, value_states)
         elif my_exec_mode == ExecMode.Mode3:
-            attn_output, my_pv_bmm_dt = self.my_pv_bmm(attn_probs, value_states)
+            attn_output, my_pv_bmm_dt = self.my_pv_bmm(
+                attn_probs, value_states)
         elif my_exec_mode == ExecMode.Mode4:
-            attn_output, my_pv_bmm_dt = self.my_pv_bmm(attn_probs, value_states)
+            attn_output, my_pv_bmm_dt = self.my_pv_bmm(
+                attn_probs, value_states)
             # print("my_pv_bmm_dt : ", my_pv_bmm_dt)
         elif my_exec_mode == ExecMode.Mode5:
-            attn_output, my_pv_bmm_dt = self.my_pv_bmm(attn_probs, value_states)
+            attn_output, my_pv_bmm_dt = self.my_pv_bmm(
+                attn_probs, value_states)
         else:
             assert False
 
@@ -498,17 +577,20 @@ class Int8OPTDecoderLayer(nn.Module):
         self.my_fc1_relu = None
         self.my_fc2 = None
 
-
     def pre_init(self):
         # how to compare enum by value?
-        
+
         privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
 
-        self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(self.fc1, privacy_on)
-        self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(self.fc2, privacy_on)
+        self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(
+            self.fc1, privacy_on, relu_on=True)
+        self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(
+            self.fc2, privacy_on)
 
-        self.self_attn_layer_norm_id = lsc.Set_Layer_Norm_Param(self.self_attn_layer_norm)
-        self.final_layer_norm_id = lsc.Set_Layer_Norm_Param(self.final_layer_norm)
+        self.self_attn_layer_norm_id = lsc.Set_Layer_Norm_Param(
+            self.self_attn_layer_norm)
+        self.final_layer_norm_id = lsc.Set_Layer_Norm_Param(
+            self.final_layer_norm)
 
         self.self_attn.pre_init()
 
@@ -580,16 +662,17 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
 
-
         start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            hidden_states = lsc.Layer_Norm_Q(hidden_states, self.self_attn_layer_norm_id)
-        elif my_exec_mode == ExecMode.Mode5: 
-            hidden_states = lsc.Layer_Norm_Q(hidden_states, self.self_attn_layer_norm_id)
+            hidden_states = lsc.Layer_Norm_Q(
+                hidden_states, self.self_attn_layer_norm_id)
+        elif my_exec_mode == ExecMode.Mode5:
+            hidden_states = lsc.Layer_Norm_Q(
+                hidden_states, self.self_attn_layer_norm_id)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -625,7 +708,8 @@ class Int8OPTDecoderLayer(nn.Module):
             lsc.ResidualAdd1_Internal(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             # lsc.ResidualAdd(residual, hidden_states)
-            lsc.ResidualAdd1_Internal(hidden_states) # set hidden_states after add inside
+            # set hidden_states after add inside
+            lsc.ResidualAdd1_Internal(hidden_states)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -637,9 +721,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = residual.clone().detach()
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.CopyResidual1_Internal() # residual is copied internally
+            lsc.CopyResidual1_Internal()  # residual is copied internally
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.CopyResidual1_Internal() # residual is copied internally
+            lsc.CopyResidual1_Internal()  # residual is copied internally
 
         end_time = time.perf_counter_ns()
         outer_resi_copy2_dt = (end_time - start_time) / 1e9
@@ -656,13 +740,13 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             lsc.LayerNormQ_Internal(self.final_layer_norm_id)
             hidden_states = hidden_states.to(torch.int8)
-            lsc.GetLayerNormQ_Internal(hidden_states) # TODO: Internalize
+            lsc.GetLayerNormQ_Internal(hidden_states)  # TODO: Internalize
             # lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
             # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         elif my_exec_mode == ExecMode.Mode5:
             lsc.LayerNormQ_Internal(self.final_layer_norm_id)
             hidden_states = hidden_states.to(torch.int8)
-            lsc.GetLayerNormQ_Internal(hidden_states) # TODO: Internalize
+            lsc.GetLayerNormQ_Internal(hidden_states)  # TODO: Internalize
             # lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
             # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
@@ -748,10 +832,9 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = hidden_states
         else:
             assert False
-        
+
         end_time = time.perf_counter_ns()
         outer_resi_add2_dt = (end_time - start_time) / 1e9
-
 
         start_time = time.perf_counter_ns()
         outputs = (residual,)
@@ -766,10 +849,14 @@ class Int8OPTDecoderLayer(nn.Module):
 
         global time_stats
         if time_stats.is_on():
-            time_stats.total += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
-            
+            time_stats.total += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + \
+                outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + \
+                outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
+
             if is_prefill:
-                time_stats.total_prefill += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
+                time_stats.total_prefill += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + \
+                    outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + \
+                    outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
                 time_stats.prefill_resi_copy1 += outer_resi_copy_dt
                 time_stats.prefill_ln1 += outer_ln1_dt
                 time_stats.prefill_attn += outer_attn_dt
@@ -782,7 +869,9 @@ class Int8OPTDecoderLayer(nn.Module):
                 time_stats.prefill_post += outer_post_dt
                 time_stats.prefill_samples += 1
             else:
-                time_stats.total_generation += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
+                time_stats.total_generation += outer_resi_copy_dt + outer_ln1_dt + outer_attn_dt + outer_resi_add1_dt + \
+                    outer_resi_copy2_dt + outer_ln2_dt + outer_fc1_relu_dt + \
+                    outer_fc2_dt + outer_resi_add2_dt + outer_post_dt
                 time_stats.generation_resi_copy1 += outer_resi_copy_dt
                 time_stats.generation_ln1 += outer_ln1_dt
                 time_stats.generation_attn += outer_attn_dt

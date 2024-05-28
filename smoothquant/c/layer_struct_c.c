@@ -105,6 +105,21 @@ int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N, float alp
   return curr_id;
 }
 
+int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N, float alpha) {
+  int curr_id = linear_param_ws8bfp32_id;
+
+  struct LinearParamWS8BFP32* linear_param = (struct LinearParamWS8BFP32*)malloc(sizeof(struct LinearParamWS8BFP32));
+  linear_param->weight = CreateTensorInt8FromData(weight, 1, M, N);
+  linear_param->bias = CreateTensorFloatFromData(bias, 1, 1, N); 
+  linear_param->alpha = alpha;
+  linear_param->beta = 1.0;
+
+  linear_param_ws8bfp32_list[curr_id] = linear_param;
+  linear_param_ws8bfp32_id = (linear_param_ws8bfp32_id + 1) % DYNAMIC_LIST_LEN;
+
+  return curr_id;
+}
+
 void Ex_Get_Tensor_Dim_Int32(int src_id, int* B, int* M, int *N) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   *B = src_tensor->B;
@@ -121,7 +136,7 @@ void Ex_Get_Tensor(int src_id, int* out) {
 
 // Need to return blind factor id
 int Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) { 
-  Ex_Get_Input(src_id, out);
+  Ex_Get_Tensor(src_id, out);
 
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
 
@@ -158,16 +173,146 @@ int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
   return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int blind_factor_id, int layer_weight_id) {
-  int curr_id = tensor_int32_id;
-  if (tensor_int32_list[curr_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[curr_id]);
+int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int blind_factor_id, int linear_param_id) {
+  // Compute Unblinding factor
+  struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
+  struct TensorInt8* linear_weight = linear_param_wb8bs8_list[linear_param_id]->weight;
+
+  struct TensorInt32* unblind_factor = MatmulS32S8S32(blind_factor, linear_weight);
+
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        data[i * M * N + j * N + k] -= unblind_factor->data[i * M * N + j * N + k];
+      }
+    }
   }
 
-  // Compute Unblinding factor
-  struct* 
+  return Ex_Set_Tensor_Int32(data, B, M, N);
+}
 
-  tensor_int32_list[curr_id] = CreateTensorInt32FromData(data, B, M, N);
+int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
+  struct TensorInt32* src_tensor = tensor_int32_list[src_id];
+  struct LinearParamWS8BS8* linear_param = linear_param_wb8bs8_list[linear_param_id];
+
+  float alpha = linear_param->alpha;
+  
+  float beta = linear_param->beta;
+  struct TensorInt8* bias = linear_param->bias;
+
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
+
+  struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        dst_tensor->data[i * M * N + j * N + k] = alpha * src_tensor->data[i * M * N + j * N + k] + beta * bias->data[k];
+      }
+    }
+  }
+
+  int curr_id = tensor_float_id;
+  tensor_float_list[curr_id] = dst_tensor;
+  tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_ReLU(int src_id) {
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
+
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
+
+  struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        dst_tensor->data[i * M * N + j * N + k] = src_tensor->data[i * M * N + j * N + k] > 0.0 ? src_tensor->data[i * M * N + j * N + k] : 0.0;
+      }
+    }
+  }
+
+  int curr_id = tensor_float_id;
+  tensor_float_list[curr_id] = dst_tensor;
+  tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_Cast_From_Float_To_Int8(int src_id) {
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
+
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
+
+  struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        dst_tensor->data[i * M * N + j * N + k] = (char)src_tensor->data[i * M * N + j * N + k];
+      }
+    }
+  }
+
+  int curr_id = tensor_int8_id;
+  tensor_int8_list[curr_id] = dst_tensor;
+  tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_Cast_From_Float_To_Int32(int src_id) {
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
+
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
+
+  struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        dst_tensor->data[i * M * N + j * N + k] = (int)src_tensor->data[i * M * N + j * N + k];
+      }
+    }
+  }
+
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = dst_tensor;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+void Ex_Get_Tensor_Dim_Int8(int src_id, int* B, int* M, int *N) {
+  struct TensorInt8* src_tensor = tensor_int8_list[src_id];
+  *B = src_tensor->B;
+  *M = src_tensor->M;
+  *N = src_tensor->N;
+}
+
+void Ex_Get_Tensor_Int8(int src_id, char* out) {
+  struct TensorInt8* src_tensor = tensor_int8_list[src_id];
+  for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
+    out[i] = src_tensor->data[i];
+  }
+}
+
+int Ex_Set_Tensor_Int8(char* data, int B, int M, int N) {
+  int curr_id = tensor_int8_id;
+  if (tensor_int8_list[curr_id] != NULL) {
+    DeleteTensorInt8(tensor_int8_list[curr_id]);
+  }
+
+  tensor_int8_list[curr_id] = CreateTensorInt8FromData(data, B, M, N);
+  tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_Set_Bmm_Param(float alpha) {
+  int curr_id = bmm_param_id;
+  bmm_param_list[curr_id] = alpha;
+  bmm_param_id = (bmm_param_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
