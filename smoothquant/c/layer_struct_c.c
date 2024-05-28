@@ -311,6 +311,21 @@ void LS_Unblind_Output_Op1_I8I8I8(int* x, int B, int M, int N,
   DeleteTensorInt32(unblind_factor);
 }
 
+void LS_ComputeEpilogue_I8I8I8(float* x, int B, int M, int N, int linear_id) {
+  struct LinearParamsI8I8* params = linear_params_i8i8i8_list[linear_id];
+  char* bias = params->bias;
+
+#pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        x[i * M * N + j * N + k] =
+            x[i * M * N + j * N + k] * params->alpha + bias[k] * params->beta;
+      }
+    }
+  }
+}
+
 void LS_Blind_Input_Op1_I8FP32FP32(int* x, int B, int M, int N,
                                    int blind_factor_id) {
   if (blind_factor_list[blind_factor_id] != NULL) {
@@ -370,6 +385,23 @@ void LS_Unblind_Output_Op1_I8FP32FP32(int* x, int B, int M, int N,
   }
 
   DeleteTensorInt32(unblind_factor);
+}
+
+void LS_ComputeEpilogue_I8FP32FP32(float* x, int B, int M, int N,
+                                   int linear_id) {
+  struct LinearParamsI8FP32* params =
+      linear_params_i8i8fp32fp32_list[linear_id];
+  float* bias = params->bias;
+
+#pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        x[i * M * N + j * N + k] =
+            x[i * M * N + j * N + k] * params->alpha + bias[k];
+      }
+    }
+  }
 }
 
 struct TensorFloat* hidden_states_internal = NULL;

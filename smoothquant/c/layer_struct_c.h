@@ -98,6 +98,10 @@ void LS_Blind_Input_Op1_I8FP32FP32(int* x, int B, int M, int N,
 void LS_Unblind_Output_Op1_I8FP32FP32(int* x, int B, int M, int N,
                                       int blind_factor_id, int linear_id);
 
+void LS_ComputeEpilogue_I8I8I8(float* x, int B, int M, int N, int linear_id);
+
+void LS_ComputeEpilogue_I8FP32FP32(float* x, int B, int M, int N, int linear_id);
+
 void LS_SetHiddenStatesInternal(float* hidden_states, int B, int M,
                                 int N);  // Set data 1
 

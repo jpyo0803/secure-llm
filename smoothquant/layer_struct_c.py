@@ -80,12 +80,20 @@ class LayerStructC:
         cls.lib.LS_Unblind_Output_Op1_I8I8I8(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id, linear_id)
 
     @classmethod
+    def ComputeEpilogue_I8I8I8(cls, x, linear_id):
+        cls.lib.LS_ComputeEpilogue_I8I8I8(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), linear_id)
+
+    @classmethod
     def BlindInputOp1_I8FP32FP32(cls, x, blind_factor_id):
         cls.lib.LS_Blind_Input_Op1_I8FP32FP32(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id)
 
     @classmethod
     def UnblindOutputOp1_I8FP32FP32(cls, x, blind_factor_id, linear_id):
         cls.lib.LS_Unblind_Output_Op1_I8FP32FP32(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id, linear_id)
+
+    @classmethod
+    def ComputeEpilogue_I8FP32FP32(cls, x, linear_id):
+        cls.lib.LS_ComputeEpilogue_I8FP32FP32(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), linear_id)
 
     @classmethod
     def SetHiddenStates_Internal(cls, x):
