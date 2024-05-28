@@ -58,11 +58,9 @@ struct TensorInt8 {
   unsigned int num_bytes;
 };
 
-struct LinearParamsI8I8* linear_params_i8i8i8i8_list[300];
-int g_linear_i8i8i8i8_id = 0;
-
-struct LinearParamsI8I8* linear_params_i8i8i8fp32_list[300];
-int g_linear_i8i8i8fp32_id = 0;
+struct LinearParamsI8I8*
+    linear_params_i8i8i8_list[600];  // i8i8i8i8 + i8i8i8fp32
+int g_linear_i8i8i8_id = 0;
 
 struct LinearParamsI8FP32* linear_params_i8i8fp32fp32_list[300];
 int g_linear_i8i8fp32fp32_id = 0;
@@ -70,11 +68,10 @@ int g_linear_i8i8fp32fp32_id = 0;
 struct LayerNormParams* layer_norm_params_list[300];
 int g_layer_id = 0;
 
-void LS_SetLinearParams_I8I8I8I8(char* weight, char* bias, int M, int N,
-                                 float alpha, float beta);
+struct TensorInt32* blind_factor_list[500];
 
-void LS_SetLinearParams_I8I8I8FP32(char* weight, char* bias, int M, int N,
-                                   float alpha, float beta);
+void LS_SetLinearParams_I8I8I8(char* weight, char* bias, int M, int N,
+                               float alpha, float beta);
 
 void LS_SetLinearParams_I8I8FP32FP32(char* weight, float* bias, int M, int N,
                                      float alpha, float beta);
@@ -88,6 +85,18 @@ void LS_ReLU(float* x, int B, int M, int N);
 void LS_Softmax(float* x, int B, int M, int N);
 
 void LS_ResidualAdd(float* x, float* y, int B, int M, int N);
+
+void LS_Blind_Input_Op1_I8I8I8(int* x, int B, int M, int N,
+                               int blind_factor_id);
+
+void LS_Unblind_Output_Op1_I8I8I8(int* x, int B, int M, int N,
+                                  int blind_factor_id, int linear_id);
+
+void LS_Blind_Input_Op1_I8FP32FP32(int* x, int B, int M, int N,
+                                   int blind_factor_id);
+
+void LS_Unblind_Output_Op1_I8FP32FP32(int* x, int B, int M, int N,
+                                      int blind_factor_id, int linear_id);
 
 void LS_SetHiddenStatesInternal(float* hidden_states, int B, int M,
                                 int N);  // Set data 1

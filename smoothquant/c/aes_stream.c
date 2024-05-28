@@ -263,3 +263,20 @@ void GetCPRNG(unsigned char *buf, size_t buf_len) {
 
   aes_stream(&st, buf, buf_len);
 }
+
+void GetDummyCPRNG(unsigned char *buf, size_t buf_len) {
+  size_t i;
+  for (i = 0; i < buf_len; i++) {
+    buf[i] = 0;
+  }
+}
+
+void GetDummyCPRNG_Ones(unsigned char *buf, size_t buf_len) {
+  size_t i;
+  for (i = 0; i < buf_len / 4; i++) {
+    buf[i * 4] = 1;
+    buf[i * 4 + 1] = 0;
+    buf[i * 4 + 2] = 0;
+    buf[i * 4 + 3] = 0;
+  }
+}

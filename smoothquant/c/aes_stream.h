@@ -29,4 +29,8 @@ void aes_stream_init(aes_stream_state *st,
 void aes_stream(aes_stream_state *st, unsigned char *buf, size_t buf_len);
 
 void GetCPRNG(unsigned char *buf, size_t buf_len);
+
+void GetDummyCPRNG(unsigned char *buf, size_t buf_len);
+
+void GetDummyCPRNG_Ones(unsigned char *buf, size_t buf_len);
 #endif

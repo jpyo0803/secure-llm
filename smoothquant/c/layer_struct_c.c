@@ -7,8 +7,8 @@
 
 #include "aes_stream.h"
 
-void LS_SetLinearParams_I8I8I8I8(char* weight, char* bias, int M, int N,
-                                 float alpha, float beta) {
+void LS_SetLinearParams_I8I8I8(char* weight, char* bias, int M, int N,
+                               float alpha, float beta) {
   struct LinearParamsI8I8* params =
       (struct LinearParamsI8I8*)malloc(sizeof(struct LinearParamsI8I8));
   params->weight = (char*)malloc(M * N * sizeof(char));
@@ -24,29 +24,7 @@ void LS_SetLinearParams_I8I8I8I8(char* weight, char* bias, int M, int N,
   params->alpha = alpha;
   params->beta = beta;
 
-  linear_params_i8i8i8i8_list[g_linear_i8i8i8i8_id++] = params;
-
-  // TOOD(jpyo0803): Implement cleanup procedure
-}
-
-void LS_SetLinearParams_I8I8I8FP32(char* weight, char* bias, int M, int N,
-                                   float alpha, float beta) {
-  struct LinearParamsI8I8* params =
-      (struct LinearParamsI8I8*)malloc(sizeof(struct LinearParamsI8I8));
-  params->weight = (char*)malloc(M * N * sizeof(char));
-  for (int i = 0; i < M * N; ++i) {
-    params->weight[i] = weight[i];
-  }
-  params->bias = (char*)malloc(N * sizeof(char));
-  for (int i = 0; i < N; ++i) {
-    params->bias[i] = bias[i];
-  }
-  params->M = M;
-  params->N = N;
-  params->alpha = alpha;
-  params->beta = beta;
-
-  linear_params_i8i8i8fp32_list[g_linear_i8i8i8fp32_id++] = params;
+  linear_params_i8i8i8_list[g_linear_i8i8i8_id++] = params;
 
   // TOOD(jpyo0803): Implement cleanup procedure
 }
@@ -183,6 +161,22 @@ void LS_ResidualAdd(float* x, float* y, int B, int M, int N) {
   }
 }
 
+struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
+  struct TensorInt32* tensor =
+      (struct TensorInt32*)malloc(sizeof(struct TensorInt32));
+  tensor->num_bytes = B * M * N * sizeof(int);
+  tensor->data = (int*)malloc(tensor->num_bytes);
+  tensor->B = B;
+  tensor->M = M;
+  tensor->N = N;
+  return tensor;
+}
+
+void DeleteTensorInt32(struct TensorInt32* tensor) {
+  free(tensor->data);
+  free(tensor);
+}
+
 struct TensorUint32* CreateTensorUint32(int B, int M, int N) {
   struct TensorUint32* tensor =
       (struct TensorUint32*)malloc(sizeof(struct TensorUint32));
@@ -229,6 +223,153 @@ struct TensorInt8* CreateTensorInt8(int B, int M, int N) {
 void DeleteTensorInt8(struct TensorInt8* tensor) {
   free(tensor->data);
   free(tensor);
+}
+
+// In-place blind input
+void LS_Blind_Input_Op1_I8I8I8(int* x, int B, int M, int N,
+                               int blind_factor_id) {
+  if (blind_factor_list[blind_factor_id] != NULL) {
+    DeleteTensorInt32(blind_factor_list[blind_factor_id]);
+  }
+
+  blind_factor_list[blind_factor_id] = CreateTensorInt32(B, 1, N);
+  GetCPRNG((unsigned char*)blind_factor_list[blind_factor_id]->data,
+           blind_factor_list[blind_factor_id]->num_bytes);
+
+  // for (int i = 0; i < 10; ++i) {
+  //   printf("before blindfactor: %d\n",
+  //   blind_factor_list[blind_factor_id]->data[i]);
+  // }
+
+#pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        // printf("%d + %d\n", x[i * M * N + j * N + k],
+        //        blind_factor_list[blind_factor_id]->data[i * N + k]);
+        x[i * M * N + j * N + k] +=
+            blind_factor_list[blind_factor_id]->data[i * N + k];
+        // printf("res = %d\n", x[i * M * N + j * N + k]);
+      }
+    }
+  }
+}
+
+void LS_Unblind_Output_Op1_I8I8I8(int* x, int B, int M, int N,
+                                  int blind_factor_id, int linear_id) {
+  struct TensorInt32* unblind_factor = CreateTensorInt32(B, 1, N);
+
+  struct TensorInt32* blind_factor = blind_factor_list[blind_factor_id];  // 3D
+  char* weight = linear_params_i8i8i8_list[linear_id]->weight;            // 2D
+
+  // for (int i = 0; i < 10; ++i) {
+  //   printf("after blindfactor: %d\n", blind_factor->data[i]);
+  // }
+
+  int prev_b = blind_factor->B;  // Must match 'B'
+  int prev_m = blind_factor->M;  // should be 1
+  int prev_k = blind_factor->N;
+
+  int prev_n = linear_params_i8i8i8_list[linear_id]->N;
+
+  // B == prev_b
+  // prev_m == 1
+  // N == prev_n
+
+#pragma omp parallel for collapse(2)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < N; ++j) {
+      int sum = 0;
+      for (int k = 0; k < prev_k; ++k) {
+        sum += blind_factor->data[i * prev_k + k] * weight[k * N + j];
+      }
+      // if (sum != 0) {
+      //   printf("sum is not zero = %d\n", sum);
+      //   exit(-1);
+      // }
+      unblind_factor->data[i * N + j] = sum;
+    }
+  }
+
+#pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        // printf("before x : %d\n", x[i * M * N + j * N + k]);
+        // printf("unblind_factor : %d\n", unblind_factor->data[i * N + k]);
+        x[i * M * N + j * N + k] -= unblind_factor->data[i * N + k];
+        // if (unblind_factor->data[i * N + k] != 0) {
+        //   printf("this is not zero = %d\n", unblind_factor->data[i * N + k]);
+        //   exit(-1);
+        // }
+        // printf("after x : %d\n", x[i * M * N + j * N + k]);
+        // exit(-1);
+      }
+    }
+  }
+
+  DeleteTensorInt32(unblind_factor);
+}
+
+void LS_Blind_Input_Op1_I8FP32FP32(int* x, int B, int M, int N,
+                                   int blind_factor_id) {
+  if (blind_factor_list[blind_factor_id] != NULL) {
+    DeleteTensorInt32(blind_factor_list[blind_factor_id]);
+  }
+
+  blind_factor_list[blind_factor_id] = CreateTensorInt32(B, 1, N);
+  GetCPRNG((unsigned char*)blind_factor_list[blind_factor_id]->data,
+           blind_factor_list[blind_factor_id]->num_bytes);
+
+#pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        x[i * M * N + j * N + k] +=
+            blind_factor_list[blind_factor_id]->data[i * N + k];
+      }
+    }
+  }
+}
+
+void LS_Unblind_Output_Op1_I8FP32FP32(int* x, int B, int M, int N,
+                                      int blind_factor_id, int linear_id) {
+  struct TensorInt32* unblind_factor = CreateTensorInt32(B, 1, N);
+
+  struct TensorInt32* blind_factor = blind_factor_list[blind_factor_id];  // 3D
+  char* weight = linear_params_i8i8fp32fp32_list[linear_id]->weight;      // 2D
+
+  int prev_b = blind_factor->B;  // Must match 'B'
+  int prev_m = blind_factor->M;  // should be 1
+  int prev_k = blind_factor->N;
+
+  int prev_n = linear_params_i8i8fp32fp32_list[linear_id]->N;
+
+  // B == prev_b
+  // prev_m == 1
+  // N == prev_n
+
+#pragma omp parallel for collapse(2)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < N; ++j) {
+      int sum = 0;
+      for (int k = 0; k < prev_k; ++k) {
+        sum += blind_factor->data[i * prev_k + k] * weight[k * N + j];
+      }
+      unblind_factor->data[i * N + j] = sum;
+    }
+  }
+
+#pragma omp parallel for collapse(3)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        x[i * M * N + j * N + k] -= unblind_factor->data[i * N + k];
+      }
+    }
+  }
+
+  DeleteTensorInt32(unblind_factor);
 }
 
 struct TensorFloat* hidden_states_internal = NULL;
