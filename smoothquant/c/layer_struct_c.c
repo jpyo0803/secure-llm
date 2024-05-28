@@ -163,6 +163,23 @@ void LS_ResidualAdd(float* x, float* y, int B, int M, int N) {
   }
 }
 
+void LS_ResidualAdd1_Internal(float* hidden_states, int B, int M, int N) {
+#pragma omp parallel for collapse(2)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        hidden_states[i * M * N + j * N + k] +=
+            residual1_internal->data[i * M * N + j * N + k];
+      }
+    }
+  }
+
+  // also should set hidden states
+  for (int i = 0; i < B * M * N; ++i) {
+    hidden_states_internal->data[i] = hidden_states[i];
+  }
+}
+
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   struct TensorInt32* tensor =
       (struct TensorInt32*)malloc(sizeof(struct TensorInt32));
@@ -521,7 +538,6 @@ void LS_ComputeEpilogue_BMM_I8I8(float* x, int B, int M, int N, int bmm_id) {
   }
 }
 
-struct TensorFloat* hidden_states_internal = NULL;
 void LS_SetHiddenStatesInternal(float* hidden_states, int B, int M, int N) {
   // Delete previous hidden states to prevent memory leak
   if (hidden_states_internal != NULL) {
@@ -535,7 +551,6 @@ void LS_SetHiddenStatesInternal(float* hidden_states, int B, int M, int N) {
   }
 }
 
-struct TensorFloat* residual1_internal = NULL;
 void LS_CopyResidual1Internal() {
   if (residual1_internal != NULL) {
     DeleteTensorFloat(residual1_internal);
@@ -554,9 +569,8 @@ void LS_CopyResidual1Internal() {
   }
 }
 
-struct TensorInt8* self_attn_layer_norm_q_internal =
-    NULL;  // output of layer norm
-void LS_SelfAttnLayerNormQInternal(int layer_id) {
+struct TensorInt8* layer_norm_q_internal = NULL;  // output of layer norm
+void LS_LayerNormQInternal(int layer_id) {
   assert(hidden_states_internal != NULL);
 
   int B = hidden_states_internal->B;
@@ -567,29 +581,27 @@ void LS_SelfAttnLayerNormQInternal(int layer_id) {
   LS_Round(hidden_states_internal->data, B, M, N);
   LS_Clamp(hidden_states_internal->data, B, M, N, -128, 127);
 
-  if (self_attn_layer_norm_q_internal != NULL) {
-    DeleteTensorInt8(self_attn_layer_norm_q_internal);
+  if (layer_norm_q_internal != NULL) {
+    DeleteTensorInt8(layer_norm_q_internal);
   }
 
-  self_attn_layer_norm_q_internal =
-      CreateTensorInt8(B, M, N);  // output of layer norm
+  layer_norm_q_internal = CreateTensorInt8(B, M, N);  // output of layer norm
 
 #pragma omp parallel for
   for (int i = 0; i < B * M * N; ++i) {
-    self_attn_layer_norm_q_internal->data[i] =
-        (char)hidden_states_internal->data[i];
+    layer_norm_q_internal->data[i] = (char)hidden_states_internal->data[i];
   }
 }
 
-void LS_GetSelfAttnLayerNormQInternal(char* q, int B, int M, int N) {
-  assert(self_attn_layer_norm_q_internal != NULL);
-  assert(B == self_attn_layer_norm_q_internal->B);
-  assert(M == self_attn_layer_norm_q_internal->M);
-  assert(N == self_attn_layer_norm_q_internal->N);
+void LS_GetLayerNormQInternal(char* q, int B, int M, int N) {
+  assert(layer_norm_q_internal != NULL);
+  assert(B == layer_norm_q_internal->B);
+  assert(M == layer_norm_q_internal->M);
+  assert(N == layer_norm_q_internal->N);
 
 #pragma omp parallel for
   for (int i = 0; i < B * M * N; ++i) {
-    q[i] = self_attn_layer_norm_q_internal->data[i];
+    q[i] = layer_norm_q_internal->data[i];
   }
 }
 

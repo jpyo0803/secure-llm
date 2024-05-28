@@ -564,15 +564,13 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual = hidden_states.clone().detach()
         elif my_exec_mode == ExecMode.Mode4:
-            residual = torch.empty_like(hidden_states)
+            # residual = torch.empty_like(hidden_states)
             lsc.SetHiddenStates_Internal(hidden_states)
             lsc.CopyResidual1_Internal()
-            lsc.GetResidual1_Internal(residual)
         elif my_exec_mode == ExecMode.Mode5:
-            residual = torch.empty_like(hidden_states)
+            # residual = torch.empty_like(hidden_states)
             lsc.SetHiddenStates_Internal(hidden_states)
-            lsc.CopyResidual1_Internal()
-            lsc.GetResidual1_Internal(residual)
+            lsc.CopyResidual1_Internal() # hidden_states is copied internally
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -590,13 +588,13 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.SelfAttnLayerNormQ_Internal(self.self_attn_layer_norm_id)
+            lsc.LayerNormQ_Internal(self.self_attn_layer_norm_id)
             hidden_states = hidden_states.to(torch.int8)
-            lsc.GetSelfAttnLayerNormQ_Internal(hidden_states)
-        elif my_exec_mode == ExecMode.Mode5:
-            lsc.SelfAttnLayerNormQ_Internal(self.self_attn_layer_norm_id)
+            lsc.GetLayerNormQ_Internal(hidden_states) # TODO: Internalize
+        elif my_exec_mode == ExecMode.Mode5: 
+            lsc.LayerNormQ_Internal(self.self_attn_layer_norm_id)
             hidden_states = hidden_states.to(torch.int8)
-            lsc.GetSelfAttnLayerNormQ_Internal(hidden_states)
+            lsc.GetLayerNormQ_Internal(hidden_states) # TODO :internalize
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -629,16 +627,26 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.ResidualAdd(residual, hidden_states)
+            # lsc.ResidualAdd(residual, hidden_states)
+            lsc.ResidualAdd1_Internal(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.ResidualAdd(residual, hidden_states)
+            # lsc.ResidualAdd(residual, hidden_states)
+            lsc.ResidualAdd1_Internal(hidden_states) # set hidden_states after add inside
         else:
             assert False
         end_time = time.perf_counter_ns()
         outer_resi_add1_dt = (end_time - start_time) / 1e9
 
         start_time = time.perf_counter_ns()
-        hidden_states = residual.clone().detach()
+        if my_exec_mode == ExecMode.Mode1:
+            hidden_states = residual.clone().detach()
+        elif my_exec_mode == ExecMode.Mode3:
+            hidden_states = residual.clone().detach()
+        elif my_exec_mode == ExecMode.Mode4:
+            lsc.CopyResidual1_Internal() # residual is copied internally
+        elif my_exec_mode == ExecMode.Mode5:
+            lsc.CopyResidual1_Internal() # residual is copied internally
+
         end_time = time.perf_counter_ns()
         outer_resi_copy2_dt = (end_time - start_time) / 1e9
 
@@ -652,11 +660,17 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.final_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+            lsc.LayerNormQ_Internal(self.final_layer_norm_id)
+            hidden_states = hidden_states.to(torch.int8)
+            lsc.GetLayerNormQ_Internal(hidden_states) # TODO: Internalize
+            # lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
+            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
-            hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+            lsc.LayerNormQ_Internal(self.final_layer_norm_id)
+            hidden_states = hidden_states.to(torch.int8)
+            lsc.GetLayerNormQ_Internal(hidden_states) # TODO: Internalize
+            # lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
+            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -729,9 +743,15 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.ResidualAdd(residual, hidden_states)
+            lsc.SetHiddenStates_Internal(hidden_states)
+            # lsc.ResidualAdd(residual, hidden_states)
+            lsc.ResidualAdd1_Internal(hidden_states)
+            residual = hidden_states
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.ResidualAdd(residual, hidden_states)
+            lsc.SetHiddenStates_Internal(hidden_states)
+            # lsc.ResidualAdd(residual, hidden_states)
+            lsc.ResidualAdd1_Internal(hidden_states)
+            residual = hidden_states
         else:
             assert False
         

@@ -77,6 +77,9 @@ struct TensorInt32* unblind_factor_uv_list[500];
 float bmm_alpha_list[500];
 int g_bmm_alpha_id = 0;
 
+struct TensorFloat* residual1_internal;
+struct TensorFloat* hidden_states_internal;
+
 void LS_SetBmmParams(float alpha);
 
 void LS_SetLinearParams_I8I8I8(char* weight, char* bias, int M, int N,
@@ -94,6 +97,8 @@ void LS_ReLU(float* x, int B, int M, int N);
 void LS_Softmax(float* x, int B, int M, int N);
 
 void LS_ResidualAdd(float* x, float* y, int B, int M, int N);
+
+void LS_ResidualAdd1_Internal(float* hidden_states, int B, int M, int N);
 
 void LS_Blind_Input_Op1_I8I8I8(int* x, int B, int M, int N,
                                int blind_factor_id);
@@ -125,9 +130,7 @@ void LS_SetHiddenStatesInternal(float* hidden_states, int B, int M,
 
 void LS_CopyResidual1Internal();
 
-void LS_SelfAttnLayerNormQInternal(int layer_id);
-
-void LS_FinalLayerNormQInternal(int layer_id);
+void LS_LayerNormQInternal(int layer_id);
 
 void LS_GetResidual1Internal(float* out, int B, int M, int N);
 

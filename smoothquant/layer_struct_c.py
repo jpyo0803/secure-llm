@@ -84,6 +84,10 @@ class LayerStructC:
         cls.lib.LS_ResidualAdd(cast(x.data_ptr(), POINTER(c_float)), cast(y.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
 
     @classmethod
+    def ResidualAdd1_Internal(cls, hidden_states):
+        cls.lib.LS_ResidualAdd1_Internal(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
+
+    @classmethod
     def BlindInputOp1_I8I8I8(cls, x, blind_factor_id):
         cls.lib.LS_Blind_Input_Op1_I8I8I8(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id)
 
@@ -124,12 +128,12 @@ class LayerStructC:
         cls.lib.LS_CopyResidual1Internal()
 
     @classmethod
-    def SelfAttnLayerNormQ_Internal(cls, layer_id):
-        cls.lib.LS_SelfAttnLayerNormQInternal(layer_id)
+    def LayerNormQ_Internal(cls, layer_id):
+        cls.lib.LS_LayerNormQInternal(layer_id)
 
     @classmethod
-    def GetSelfAttnLayerNormQ_Internal(cls, x):
-        cls.lib.LS_GetSelfAttnLayerNormQInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
+    def GetLayerNormQ_Internal(cls, x):
+        cls.lib.LS_GetLayerNormQInternal(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2))
 
     @classmethod
     def GetResidual1_Internal(cls, x):

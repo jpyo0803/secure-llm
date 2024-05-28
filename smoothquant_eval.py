@@ -95,7 +95,7 @@ def print_model_size(model):
 
 
 tokenizer = GPT2Tokenizer.from_pretrained('facebook/opt-125m')
-dataset = load_dataset('lambada', split='validation[:50]')
+dataset = load_dataset('lambada', split='validation[:10]')
 evaluator = Evaluator(dataset, tokenizer)
 
 print("Execution Mode: ", smoothquant.opt.my_exec_mode)
