@@ -225,6 +225,110 @@ void DeleteTensorInt8(struct TensorInt8* tensor) {
   free(tensor);
 }
 
+void LS_Blind_Input_Op2_I8I8(int* x, int* y, int B, int M, int K, int N,
+                             int blind_factor_id_u, int blind_factor_id_v) {
+  if (blind_factor_list[blind_factor_id_u] != NULL) {
+    DeleteTensorInt32(blind_factor_list[blind_factor_id_u]);
+  }
+  if (blind_factor_list[blind_factor_id_v] != NULL) {
+    DeleteTensorInt32(blind_factor_list[blind_factor_id_v]);
+  }
+
+  blind_factor_list[blind_factor_id_u] = CreateTensorInt32(B, 1, K);
+  GetDummyCPRNG((unsigned char*)blind_factor_list[blind_factor_id_u]->data,
+                blind_factor_list[blind_factor_id_u]->num_bytes);
+
+  blind_factor_list[blind_factor_id_v] = CreateTensorInt32(B, K, 1);
+  GetDummyCPRNG((unsigned char*)blind_factor_list[blind_factor_id_v]->data,
+                blind_factor_list[blind_factor_id_v]->num_bytes);
+
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < K; ++k) {
+        x[i * M * K + j * K + k] +=
+            blind_factor_list[blind_factor_id_u]->data[i * K + k];
+      }
+    }
+  }
+
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < K; ++j) {
+      for (int k = 0; k < N; ++k) {
+        y[i * K * N + j * N + k] +=
+            blind_factor_list[blind_factor_id_v]->data[i * K + j];
+      }
+    }
+  }
+
+  if (unblind_factor_xv_list[blind_factor_id_v] != NULL) {
+    DeleteTensorInt32(unblind_factor_xv_list[blind_factor_id_v]);
+  }
+  if (unblind_factor_uy_list[blind_factor_id_u] != NULL) {
+    DeleteTensorInt32(unblind_factor_uy_list[blind_factor_id_u]);
+  }
+  if (unblind_factor_uv_list[blind_factor_id_u] != NULL) {
+    DeleteTensorInt32(unblind_factor_uv_list[blind_factor_id_u]);
+  }
+
+  unblind_factor_xv_list[blind_factor_id_v] =
+      CreateTensorInt32(B, M, 1);  // (B x M x K) x (B x K x 1) = (B x M x 1)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < K; ++k) {
+        sum += x[i * M * K + j * K + k] *
+               blind_factor_list[blind_factor_id_v]->data[i * K + k];
+      }
+      unblind_factor_xv_list[blind_factor_id_v]->data[i * M + j] = sum;
+    }
+  }
+
+  unblind_factor_uy_list[blind_factor_id_u] =
+      CreateTensorInt32(B, 1, N);  // (B x 1 x K) x (B x K x N) = (B x 1 x N)
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < N; ++j) {
+      int sum = 0;
+      for (int k = 0; k < K; ++k) {
+        sum += blind_factor_list[blind_factor_id_u]->data[i * K + k] *
+               y[i * K * N + k * N + j];
+      }
+      unblind_factor_uy_list[blind_factor_id_u]->data[i * N + j] = sum;
+    }
+  }
+
+  unblind_factor_uv_list[blind_factor_id_u] =
+      CreateTensorInt32(B, 1, 1);  // (B x 1 x K) x (B x K x 1) = (B x 1 x 1)
+
+  for (int i = 0; i < B; ++i) {
+    int sum = 0;
+    for (int k = 0; k < K; ++k) {
+      sum += blind_factor_list[blind_factor_id_u]->data[i * K + k] *
+             blind_factor_list[blind_factor_id_v]->data[i * K + k];
+    }
+    unblind_factor_uv_list[blind_factor_id_u]->data[i] = sum;
+  }
+}
+
+void LS_Unblind_Output_Op2_I8I8(int* x, int B, int M, int N,
+                                int blind_factor_id_u, int blind_factor_id_v) {
+  struct TensorInt32* unblind_factor_xv =
+      unblind_factor_xv_list[blind_factor_id_v];
+  struct TensorInt32* unblind_factor_uy =
+      unblind_factor_uy_list[blind_factor_id_u];
+  struct TensorInt32* unblind_factor_uv =
+      unblind_factor_uv_list[blind_factor_id_u];  // just follow id_u for uv
+
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        int unblind_factor = unblind_factor_xv->data[i * M + j] +
+                             unblind_factor_uy->data[i * N + k] +
+                             unblind_factor_uv->data[i];
+        x[i * M * N + j * N + k] -= unblind_factor;
+      }
+    }
+  }
+}
 // In-place blind input
 void LS_Blind_Input_Op1_I8I8I8(int* x, int B, int M, int N,
                                int blind_factor_id) {
@@ -299,8 +403,8 @@ void LS_Unblind_Output_Op1_I8I8I8(int* x, int B, int M, int N,
         // printf("unblind_factor : %d\n", unblind_factor->data[i * N + k]);
         x[i * M * N + j * N + k] -= unblind_factor->data[i * N + k];
         // if (unblind_factor->data[i * N + k] != 0) {
-        //   printf("this is not zero = %d\n", unblind_factor->data[i * N + k]);
-        //   exit(-1);
+        //   printf("this is not zero = %d\n", unblind_factor->data[i * N +
+        //   k]); exit(-1);
         // }
         // printf("after x : %d\n", x[i * M * N + j * N + k]);
         // exit(-1);

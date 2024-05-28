@@ -70,10 +70,12 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
 
     # Compute Epilogue
     y = y.to(torch.float32)
-    # y *= self.alpha
-    # y += self.beta * self.bias
+    if smoothquant.opt.my_exec_mode.value >= smoothquant.opt.ExecMode.Mode4.value:
+      lsc.ComputeEpilogue_I8I8I8(y, self.linear_id)
+    else:
+      y *= self.alpha
+      y += self.beta * self.bias
     assert y.dtype == torch.float32
-    lsc.ComputeEpilogue_I8I8I8(y, self.linear_id)
     return y
   
   def __call__(self, x):
@@ -143,9 +145,11 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
     # Compute Epilogue
 
     y = y.to(torch.float32)
-    # y *= self.alpha
-    # y += self.bias
-    lsc.ComputeEpilogue_I8FP32FP32(y, self.linear_id)
+    if smoothquant.opt.my_exec_mode.value >= smoothquant.opt.ExecMode.Mode4.value:
+      lsc.ComputeEpilogue_I8FP32FP32(y, self.linear_id)
+    else:
+      y *= self.alpha
+      y += self.bias
     assert y.dtype == torch.float32
     return y
   

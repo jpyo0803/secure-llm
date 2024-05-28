@@ -80,6 +80,14 @@ class LayerStructC:
         cls.lib.LS_Unblind_Output_Op1_I8I8I8(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id, linear_id)
 
     @classmethod
+    def BlindInputOp2_I8I8(cls, x, y, blind_factor_id_u, blind_factor_id_v):
+        cls.lib.LS_Blind_Input_Op2_I8I8(cast(x.data_ptr(), POINTER(c_int32)), cast(y.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), y.size(2), blind_factor_id_u, blind_factor_id_v)
+
+    @classmethod
+    def UnblindOutputOp2_I8I8(cls, x, blind_factor_id_u, blind_factor_id_v):
+        cls.lib.LS_Unblind_Output_Op2_I8I8(cast(x.data_ptr(), POINTER(c_int32)), x.size(0), x.size(1), x.size(2), blind_factor_id_u, blind_factor_id_v)
+
+    @classmethod
     def ComputeEpilogue_I8I8I8(cls, x, linear_id):
         cls.lib.LS_ComputeEpilogue_I8I8I8(cast(x.data_ptr(), POINTER(c_float)), x.size(0), x.size(1), x.size(2), linear_id)
 
