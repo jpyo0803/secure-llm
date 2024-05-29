@@ -56,16 +56,11 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             assert x.device == torch.device('cpu')
             x = x.to(torch.int32)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            B, M, K = lsc.Get_Tensor_Dim_Int32(x)
-            out = torch.empty((B, M, K), dtype=torch.int32)
-            lsc.Get_Tensor_Int32(x, out)
-            x = out
+            x = lsc.Cast_From_Int8_To_Int32(x)
+            x = lsc.Get_Tensor_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            B, M, K = lsc.Get_Tensor_Dim_Int32(x)
-            out = torch.empty((B, M, K), dtype=torch.int32)
-            blind_factor_id = lsc.Get_Encrypted_Tensor_Opr1_Int32(x, out)
-            x = out
-
+            x = lsc.Cast_From_Int8_To_Int32(x)
+            x, blind_factor_id = lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
         else:
             assert False
 
@@ -89,13 +84,13 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             y = lsc.Set_Decrypted_Tensor_Opr1_Int32(
                 y, blind_factor_id, self.linear_layer_id)
             y = lsc.Compute_Epilogue_WS8BS8(y, self.linear_layer_id)
-
-            if self.relu_on:
-                y = lsc.ReLU(y)
-
         else:
             assert False
 
+        if self.relu_on:
+            y = lsc.ReLU(y)
+    
+        y = lsc.Cast_From_Float_To_Int8(y)
         return y
 
     def __call__(self, x):
@@ -116,9 +111,9 @@ class Linear_S8W_S8A_S8B_S8O_Mixed(Linear_S8W_S8A_S8B_FP32O_Mixed):
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             return super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x).to(torch.int8)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            return lsc.Cast_from_Float_To_Int32(super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x))
+            return super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            return lsc.Cast_from_Float_To_Int32(super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x))
+            return super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x)
 
     def __call__(self, x):
         start_time = time.perf_counter_ns()
@@ -163,9 +158,11 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
             assert x.device == torch.device('cpu')
             x = x.to(torch.int32)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            pass
+            x = lsc.Cast_From_Int8_To_Int32(x)
+            x = lsc.Get_Tensor_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            pass
+            x = lsc.Cast_From_Int8_To_Int32(x)
+            x = blind_factor_id = lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
 
         # Main computation
         x = x.to(torch.device('cuda:0'))
@@ -181,87 +178,12 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
             y *= self.alpha
             y += self.bias
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            pass
+            y = lsc.Set_Tensor_Int32(y)
+            y = lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            pass
-
-        return y
-
-    def __call__(self, x):
-        start_time = time.perf_counter_ns()
-        y = self.__run(x)
-        end_time = time.perf_counter_ns()
-        dt = (end_time - start_time) / 1e9
-        return y, dt
-
-
-class Linear_S8W_S8A_S8B_FP32O_GPU:
-    def __init__(self, torch_int_nn_linear):
-        ndim = torch_int_nn_linear.weight.ndim
-        self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.transpose(
-            ndim - 2, ndim - 1).contiguous().to(torch.device('cuda:0')))
-        self.bias = cupy.from_dlpack(
-            torch_int_nn_linear.bias.to(torch.device('cuda:0')))
-        self.alpha = cupy.array(
-            torch_int_nn_linear.a.item(), dtype=cupy.float32)
-        self.beta = cupy.array(
-            torch_int_nn_linear.b.item(), dtype=cupy.float32)
-
-    def __run(self, x):
-        assert x.device == torch.device('cuda:0')
-        x = x.to(torch.int32)
-        x = cupy.from_dlpack(x)
-        y = cupy.matmul(x, self.weight)
-        y = y.astype(cupy.float32)
-        y *= self.alpha
-        y += self.beta * self.bias
-        y = torch.from_dlpack(y)
-        return y
-
-    def __call__(self, x):
-        start_time = time.perf_counter_ns()
-        y = self.__run(x)
-        end_time = time.perf_counter_ns()
-        dt = (end_time - start_time) / 1e9
-        return y, dt
-
-
-class Linear_S8W_S8A_S8B_S8O_GPU(Linear_S8W_S8A_S8B_FP32O_GPU):
-    def __init__(self, torch_int_nn_linear):
-        super().__init__(torch_int_nn_linear)
-
-    def __run(self, x):
-        return super()._Linear_S8W_S8A_S8B_FP32O_GPU__run(x).to(torch.int8)
-
-    def __call__(self, x):
-        start_time = time.perf_counter_ns()
-        y = self.__run(x)
-        end_time = time.perf_counter_ns()
-        dt = (end_time - start_time) / 1e9
-        return y, dt
-
-
-class Linear_S8W_S8A_FP32B_FP32O_GPU:
-    def __init__(self, torch_int_nn_linear):
-        ndim = torch_int_nn_linear.weight.ndim
-        self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.transpose(
-            ndim - 2, ndim - 1).contiguous().to(torch.device('cuda:0')))
-        self.bias = cupy.from_dlpack(
-            torch_int_nn_linear.bias.to(torch.device('cuda:0')))
-        assert self.bias.dtype == cupy.float32
-        self.alpha = cupy.array(
-            torch_int_nn_linear.a.item(), dtype=cupy.float32)
-
-    def __run(self, x):
-        assert x.device == torch.device('cuda:0')
-        x = x.to(torch.int32)
-        x = cupy.from_dlpack(x)
-        y = cupy.matmul(x, self.weight)
-        y = y.astype(cupy.float32)
-        y *= self.alpha
-        y += self.bias
-        y = torch.from_dlpack(y)
-        assert y.dtype == torch.float32
+            y = lsc.Set_Decrypted_Tensor_Opr1_Int32(
+                y, blind_factor_id, self.linear_layer_id)
+            y = lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
         return y
 
     def __call__(self, x):

@@ -242,8 +242,14 @@ class Int8OPTAttention(nn.Module):
         # for the decoder
         is_cross_attention = key_value_states is not None
 
-        bsz, tgt_len, _ = hidden_states.size()
-
+        if my_exec_mode == ExecMode.Mode1:
+            bsz, tgt_len, _ = hidden_states.size()
+        elif my_exec_mode == ExecMode.Mode3:
+            bsz, tgt_len, _ = hidden_states.size()
+        elif my_exec_mode == ExecMode.Mode4:
+            bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
+        elif my_exec_mode == ExecMode.Mode5:
+            bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
         '''
             NOTE(jpyo0803): Pass hidden_states to Q projection.
             Matmul should be done on Untrusted GPU side
@@ -257,11 +263,12 @@ class Int8OPTAttention(nn.Module):
             # print("my_q_proj_dt : ", my_q_proj_dt)
         elif my_exec_mode == ExecMode.Mode4:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
+            query_states = lsc.Get_Tensor_Int8(query_states)
         elif my_exec_mode == ExecMode.Mode5:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
+            query_states = lsc.Get_Tensor_Int8(query_states)
         else:
             assert False
-
         '''
             NOTE(jpyo0803): Get Key, Value projection.
         '''
@@ -303,15 +310,8 @@ class Int8OPTAttention(nn.Module):
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
-                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(key_states, out)
-                key_states = out
-
-                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(value_states, out)
-                value_states = out
+                key_states = lsc.Get_Tensor_Int8(key_states)
+                value_states = lsc.Get_Tensor_Int8(value_states)
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
@@ -322,15 +322,8 @@ class Int8OPTAttention(nn.Module):
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
-                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(key_states, out)
-                key_states = out
-
-                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(value_states, out)
-                value_states = out
+                key_states = lsc.Get_Tensor_Int8(key_states)
+                value_states = lsc.Get_Tensor_Int8(value_states)
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
@@ -361,15 +354,8 @@ class Int8OPTAttention(nn.Module):
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
-                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(key_states, out)
-                key_states = out
-
-                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(value_states, out)
-                value_states = out
+                key_states = lsc.Get_Tensor_Int8(key_states)
+                value_states =lsc.Get_Tensor_Int8(value_states)
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
@@ -377,15 +363,8 @@ class Int8OPTAttention(nn.Module):
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
-                B, M, N = lsc.Get_Tensor_Dim_Int8(key_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(key_states, out)
-                key_states = out
-
-                B, M, N = lsc.Get_Tensor_Dim_Int8(value_states)
-                out = torch.empty((B, M, N), dtype=torch.int8)
-                lsc.Get_Tensor_Int8(value_states, out)
-                value_states = out
+                key_states = lsc.Get_Tensor_Int8(key_states)
+                value_states = lsc.Get_Tensor_Int8(value_states)
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
@@ -418,9 +397,15 @@ class Int8OPTAttention(nn.Module):
 
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, key_states)
+
+            attn_weights = lsc.Get_Tensor_Float(attn_weights)
         elif my_exec_mode == ExecMode.Mode5:
+            query_states = lsc.Set_Tensor_Int8(query_states)
+            key_states = lsc.Set_Tensor_Int8(key_states)
+
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, key_states)
+            attn_weights = lsc.Get_Tensor_Float(attn_weights)
         else:
             assert False
 
@@ -459,12 +444,12 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         elif my_exec_mode == ExecMode.Mode4:
-            attn_probs = attn_weights
-            lsc.Softmax(attn_probs)
+            attn_weights = lsc.Set_Tensor_Float(attn_weights)
+            attn_probs = lsc.Softmax(attn_weights)
             # cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
         elif my_exec_mode == ExecMode.Mode5:
-            attn_probs = attn_weights
-            lsc.Softmax(attn_probs)
+            attn_weights = lsc.Set_Tensor_Float(attn_weights)
+            attn_probs = lsc.Softmax(attn_weights)
             # cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
         else:
             assert False
@@ -499,8 +484,18 @@ class Int8OPTAttention(nn.Module):
             attn_probs_reshaped = None
 
         # (A_row V_row)_row = (A_row V_col ^T)_row
-        attn_probs.mul_(127).round_()
-        attn_probs = attn_probs.to(torch.int8)
+        if my_exec_mode == ExecMode.Mode1:
+            attn_probs.mul_(127).round_()
+            attn_probs = attn_probs.to(torch.int8)
+        elif my_exec_mode == ExecMode.Mode3:
+            attn_probs.mul_(127).round_()
+            attn_probs = attn_probs.to(torch.int8)
+        elif my_exec_mode == ExecMode.Mode4:
+            attn_probs = lsc.Quantize_Post_Softmax(attn_probs)
+        elif my_exec_mode == ExecMode.Mode5:
+            attn_probs = lsc.Quantize_Post_Softmax(attn_probs)
+        else:
+            assert False
 
         value_states = value_states.transpose(1, 2).contiguous()
         '''
@@ -514,12 +509,17 @@ class Int8OPTAttention(nn.Module):
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
         elif my_exec_mode == ExecMode.Mode4:
+            value_states = lsc.Set_Tensor_Int8(value_states)
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
-            # print("my_pv_bmm_dt : ", my_pv_bmm_dt)
+            
+            attn_output = lsc.Get_Tensor_Int8(attn_output)
         elif my_exec_mode == ExecMode.Mode5:
+            value_states = lsc.Set_Tensor_Int8(value_states)
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
+            
+            attn_output = lsc.Get_Tensor_Int8(attn_output)
         else:
             assert False
 
@@ -548,9 +548,11 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode4:
+            attn_output = lsc.Set_Tensor_Int8(attn_output)
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
             # print("my_out_proj_dt : ", my_out_proj_dt)
         elif my_exec_mode == ExecMode.Mode5:
+            attn_output = lsc.Set_Tensor_Int8(attn_output)
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         else:
             assert False
@@ -704,12 +706,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode4:
-            # lsc.ResidualAdd(residual, hidden_states)
-            lsc.ResidualAdd1_Internal(hidden_states)
+            hidden_states = lsc.Residual_Add(residual, hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
-            # lsc.ResidualAdd(residual, hidden_states)
-            # set hidden_states after add inside
-            lsc.ResidualAdd1_Internal(hidden_states)
+            hidden_states = lsc.Residual_Add(residual, hidden_states)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -721,9 +720,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = residual.clone().detach()
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.CopyResidual1_Internal()  # residual is copied internally
+            residual = lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.CopyResidual1_Internal()  # residual is copied internally
+            residual = lsc.Copy_Hidden_States(hidden_states)
 
         end_time = time.perf_counter_ns()
         outer_resi_copy2_dt = (end_time - start_time) / 1e9
@@ -738,17 +737,11 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.final_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.LayerNormQ_Internal(self.final_layer_norm_id)
-            hidden_states = hidden_states.to(torch.int8)
-            lsc.GetLayerNormQ_Internal(hidden_states)  # TODO: Internalize
-            # lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
-            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+            hidden_states = lsc.Layer_Norm_Q(
+                hidden_states, self.final_layer_norm_id)
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.LayerNormQ_Internal(self.final_layer_norm_id)
-            hidden_states = hidden_states.to(torch.int8)
-            lsc.GetLayerNormQ_Internal(hidden_states)  # TODO: Internalize
-            # lsc.LayerNorm(hidden_states, self.final_layer_norm_id)
-            # hidden_states = hidden_states.round().clamp(-128, 127).to(torch.int8)
+            hidden_states = lsc.Layer_Norm_Q(
+                hidden_states, self.final_layer_norm_id)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -774,15 +767,8 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = hidden_states.to(torch.int8)
         elif my_exec_mode == ExecMode.Mode4:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            assert hidden_states.dtype == torch.float32
-            lsc.ReLU(hidden_states)
-            hidden_states = hidden_states.to(torch.int8)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            assert hidden_states.dtype == torch.float32
-            lsc.ReLU(hidden_states)
-            # cipher_cpp_lib.ReLU(cast(hidden_states.data_ptr(), POINTER(c_float)), hidden_states.size(0), hidden_states.size(1), hidden_states.size(2))
-            hidden_states = hidden_states.to(torch.int8)
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -794,7 +780,6 @@ class Int8OPTDecoderLayer(nn.Module):
             Multiplying the result of matmul by alpha
             and adding bias should be done on CPU side SGX
         '''
-
         start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc2(hidden_states)
@@ -802,14 +787,12 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
-            # print("my_fc2_dt : ", my_fc2_dt)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         else:
             assert False
         end_time = time.perf_counter_ns()
         outer_fc2_dt = (end_time - start_time) / 1e9
-
         '''
             NOTE(jpyo0803): Add residual to hidden_states.
             Should be done in CPU side SGX, O(N^2)
@@ -821,15 +804,11 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode4:
-            lsc.SetHiddenStates_Internal(hidden_states)
-            # lsc.ResidualAdd(residual, hidden_states)
-            lsc.ResidualAdd1_Internal(hidden_states)
-            residual = hidden_states
+            residual = lsc.Residual_Add(residual, hidden_states)
+            residual = lsc.Get_Tensor_Float(residual)
         elif my_exec_mode == ExecMode.Mode5:
-            lsc.SetHiddenStates_Internal(hidden_states)
-            # lsc.ResidualAdd(residual, hidden_states)
-            lsc.ResidualAdd1_Internal(hidden_states)
-            residual = hidden_states
+            residual = lsc.Residual_Add(residual, hidden_states)
+            residual = lsc.Get_Tensor_Float(residual)
         else:
             assert False
 

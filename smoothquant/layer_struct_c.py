@@ -1,4 +1,5 @@
 from ctypes import *
+import torch
 
 LAYER_STRUCT_C_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 
@@ -10,12 +11,7 @@ class LayerStructC:
             cls._instance = super().__new__(cls)
 
             cls.lib = cdll.LoadLibrary(LAYER_STRUCT_C_LIB_PATH)
-            cls.layer_id = 0
-            cls.linear_id_i8i8i8 = 0
-            cls.linear_id_i8i8fp32fp32 = 0
-            cls.bmm_id = 0
 
-            cls.blind_factor_id = 0
         return cls._instance
 
     def __init__(self):
@@ -51,18 +47,26 @@ class LayerStructC:
 
     @classmethod
     def Get_Tensor_Dim_Int32(cls, src_id):
-        B = M = N = -1
-        cls.lib.Ex_Get_Tensor_Dim_Int32(src_id, byref(B), byref(M), byref(N))
-        return (B, M, N)
+        dim = torch.empty(3, dtype=torch.int32)
+        cls.lib.Ex_Get_Tensor_Dim_Int32(
+            src_id, cast(dim.data_ptr(), POINTER(c_int32)))
+        return (dim[0], dim[1], dim[2])
 
     @classmethod
-    def Get_Tensor_Int32(cls, src_id, out):
+    def Get_Tensor_Int32(cls, src_id):
+        B, M, N = cls.Get_Tensor_Dim_Int32(src_id)
+        out = torch.empty((B, M, N), dtype=torch.int32)
         cls.lib.Ex_Get_Tensor_Int32(
             src_id, cast(out.data_ptr(), POINTER(c_int32)))
+        return out
 
     @classmethod
-    def Get_Encrypted_Tensor_Opr1_Int32(cls, src_id, out):
-        return cls.lib.Ex_Get_Encrpyted_Tensor_Int32(src_id, cast(out.data_ptr(), POINTER(c_int32)))
+    def Get_Encrypted_Tensor_Opr1_Int32(cls, src_id):
+        B, M, N = cls.Get_Tensor_Dim_Int32(src_id)
+        out = torch.empty((B, M, N), dtype=torch.int32)
+        blind_factor_id = cls.lib.Ex_Get_Encrpyted_Tensor_Int32(
+            src_id, cast(out.data_ptr(), POINTER(c_int32)))
+        return out, blind_factor_id
 
     @classmethod
     def Set_Tensor_Int32(cls, src):
@@ -77,8 +81,20 @@ class LayerStructC:
         return cls.lib.Ex_Compute_Epilogue_WS8BS8(src_id, linear_param_id)
 
     @classmethod
+    def Compute_Epilogue_WS8BFP32(cls, src_id, linear_param_id):
+        return cls.lib.Ex_Compute_Epilogue_WS8BFP32(src_id, linear_param_id)
+
+    @classmethod
     def ReLU(cls, src_id):
         return cls.lib.Ex_ReLU(src_id)
+
+    @classmethod
+    def Softmax(cls, src_id):
+        return cls.lib.Ex_Softmax(src_id)
+
+    @classmethod
+    def Quantize_Post_Softmax(cls, src_id):
+        return cls.lib.Ex_Quantize_Post_Softmax(src_id)
 
     @classmethod
     def Cast_From_Float_To_Int8(cls, src_id):
@@ -89,20 +105,51 @@ class LayerStructC:
         return cls.lib.Ex_Cast_From_Float_To_Int32(src_id)
 
     @classmethod
-    def Get_Tensor_Dim_Int8(cls, src_id):
-        B = M = N = -1
-        cls.lib.Ex_Get_Tensor_Dim_Int8(src_id, byref(B), byref(M), byref(N))
-        return (B, M, N)
+    def Cast_From_Int8_To_Int32(cls, src_id):
+        return cls.lib.Ex_Cast_From_Int8_To_Int32(src_id)
 
-    @classmethod
-    def Get_Tensor_Int8(cls, src_id, out):
+    @ classmethod
+    def Get_Tensor_Dim_Int8(cls, src_id):
+        dim = torch.empty(3, dtype=torch.int32)
+        cls.lib.Ex_Get_Tensor_Dim_Int8(
+            src_id, cast(dim.data_ptr(), POINTER(c_int32)))
+        return (dim[0], dim[1], dim[2])
+
+    @ classmethod
+    def Get_Tensor_Int8(cls, src_id):
+        B, M, N = cls.Get_Tensor_Dim_Int8(src_id)
+        out = torch.empty((B, M, N), dtype=torch.int8)
         cls.lib.Ex_Get_Tensor_Int8(
             src_id, cast(out.data_ptr(), POINTER(c_int8)))
+        return out
 
-    @classmethod
+    @ classmethod
     def Set_Tensor_Int8(cls, src):
         return cls.lib.Ex_Set_Tensor_Int8(cast(src.data_ptr(), POINTER(c_int8)), src.size(0), src.size(1), src.size(2))
 
     @classmethod
+    def Get_Tensor_Dim_Float(cls, src_id):
+        dim = torch.empty(3, dtype=torch.int32)
+        cls.lib.Ex_Get_Tensor_Dim_Float(
+            src_id, cast(dim.data_ptr(), POINTER(c_int32)))
+        return (dim[0], dim[1], dim[2])
+
+    @classmethod
+    def Get_Tensor_Float(cls, src_id):
+        B, M, N = cls.Get_Tensor_Dim_Float(src_id)
+        out = torch.empty((B, M, N), dtype=torch.float32)
+        cls.lib.Ex_Get_Tensor_Float(
+            src_id, cast(out.data_ptr(), POINTER(c_float)))
+        return out
+
+    @classmethod
+    def Set_Tensor_Float(cls, src):
+        return cls.lib.Ex_Set_Tensor_Float(cast(src.data_ptr(), POINTER(c_float)), src.size(0), src.size(1), src.size(2))
+
+    @ classmethod
     def Set_Bmm_Param(cls, bmm):
         return cls.lib.Ex_Set_Bmm_Param(c_float(bmm.a.item()))
+
+    @classmethod
+    def Residual_Add(cls, src_id_1, src_id_2):
+        return cls.lib.Ex_Residual_Add(src_id_1, src_id_2)
