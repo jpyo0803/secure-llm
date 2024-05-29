@@ -13,7 +13,7 @@ timer = st.SingletonTimer()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
 
 '''
     NOTE(jpyo0803): Set execution mode
@@ -31,7 +31,6 @@ smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
     From Mode 5 to 6 show the effect of SGX on performance
     From Mode 6 to 7 show the effect of placing KV cache in GPU
 '''
-
 
 
 print("Mode: ", smoothquant.opt.my_exec_mode)
@@ -54,8 +53,10 @@ model_smoothquant.pre_init()
 '''
     NOTE(jpyo0803): Warmup
 '''
-dummy_prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the ")
-dummy_model_inputs = tokenizer([dummy_prompt], return_tensors='pt').to('cuda:0' if start_gpu else 'cpu') 
+dummy_prompt = (
+    "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the ")
+dummy_model_inputs = tokenizer([dummy_prompt], return_tensors='pt').to(
+    'cuda:0' if start_gpu else 'cpu')
 
 dummy = model_smoothquant.generate(
     **dummy_model_inputs, max_new_tokens=128, do_sample=False)
@@ -71,12 +72,14 @@ prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: W
 model_inputs = tokenizer([prompt], return_tensors='pt').to(
     'cuda:0' if start_gpu else 'cpu')
 
-target_input_token_len = 512
+target_input_token_len = 1024
 
 pad_len = target_input_token_len - model_inputs['input_ids'].shape[1]
 
-model_inputs['input_ids'] = pad(model_inputs['input_ids'], (0, pad_len), value=77)
-model_inputs['attention_mask'] = pad(model_inputs['attention_mask'], (0, pad_len), value=1)
+model_inputs['input_ids'] = pad(
+    model_inputs['input_ids'], (0, pad_len), value=77)
+model_inputs['attention_mask'] = pad(
+    model_inputs['attention_mask'], (0, pad_len), value=1)
 
 # print input token length
 print(f"Input token length: {model_inputs['input_ids'].shape[1]}")
@@ -86,7 +89,7 @@ assert model_inputs['input_ids'].shape[1] == target_input_token_len
 smoothquant.opt.is_prefill = True
 smoothquant.opt.time_stats.on()
 
-target_output_token_len = 1024
+target_output_token_len = 2048
 start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
     **model_inputs, min_length=target_output_token_len, max_length=target_output_token_len, do_sample=False)
@@ -98,4 +101,23 @@ print(f"Output token length: {generated_ids.shape[1]}")
 assert generated_ids.shape[1] == target_output_token_len
 # print(tokenizer.batch_decode(generated_ids)[0])
 
-st.SingletonTimer().display_summary()
+raw_data = st.SingletonTimer().display_summary()
+
+
+data = []
+
+categories = ['Set Hidden States', 'Copy Residual 1', 'Layer Norm 1', 'Get Hidden States Size', 'Q Projection', 'KV Projection', 'Get Past KV', 'Reshape Q, K, V', 'QK^T BMM', 'Apply Attention Mask', 'Softmax', 'Apply Layer Head Mask', 'Reshape Attention Probabilities', 'Post Softmax Quantization',
+              'Transpose V', 'PV BMM', 'Reshape Attention Output', 'Out Projection', 'Add Residual 1', 'Copy Residual 2', 'Layer Norm 2', 'FC1 + ReLU', 'FC2', 'Add Residual 2', 'Post Decoder Layer']
+assert len(categories) == 25
+
+for state in ['Prefill', 'Generation']:
+    for category in categories:
+        key = f'{category} ({state})'
+        num_samples, min_time, max_time, avg_time, total_time = raw_data[key]
+        sub_data = [key, num_samples, min_time, max_time, avg_time, total_time]
+        data.append(sub_data)
+
+        f = open('smoothquant_generation_expr_result.csv', 'w')
+        writer = csv.writer(f)
+        writer.writerows(data)
+        f.close()

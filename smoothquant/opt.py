@@ -284,8 +284,8 @@ class Int8OPTAttention(nn.Module):
         '''
         # get key, value proj
 
-        t = timer.start(tag=f'Key, Value Projection ({state})',
-                        category=f'Key, Value Projection ({state})')
+        t = timer.start(tag=f'KV Projection ({state})',
+                        category=f'KV Projection ({state})')
         if is_cross_attention and past_key_value is not None:
             assert False
             # reuse k,v, cross_attentions
@@ -385,8 +385,8 @@ class Int8OPTAttention(nn.Module):
                 assert False
         timer.end(t)  # End of Key, Value Projection
 
-        t = timer.start(tag=f'Get Past Key Value ({state})',
-                        category=f'Get Past Key Value ({state})')
+        t = timer.start(tag=f'Get Past KV ({state})',
+                        category=f'Get Past KV ({state})')
         past_key_value = (key_states, value_states)
         timer.end(t)
 
@@ -554,8 +554,8 @@ class Int8OPTAttention(nn.Module):
             assert False
         timer.end(t)
 
-        t = timer.start(tag=f'Transpose Value States ({state})',
-                        category=f'Transpose Value States ({state})')
+        t = timer.start(tag=f'Transpose V ({state})',
+                        category=f'Transpose V ({state})')
         value_states = value_states.transpose(1, 2).contiguous()
         timer.end(t)
 
@@ -720,8 +720,8 @@ class Int8OPTDecoderLayer(nn.Module):
         timer.end(t)
 
         start_time = time.perf_counter_ns()
-        t = timer.start(tag=f'Copy Residual ({state})',
-                        category=f'Copy Residual ({state})')
+        t = timer.start(tag=f'Copy Residual 1 ({state})',
+                        category=f'Copy Residual 1 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             residual = hidden_states.clone().detach()
         elif my_exec_mode == ExecMode.Mode3:
@@ -856,8 +856,8 @@ class Int8OPTDecoderLayer(nn.Module):
 
         start_time = time.perf_counter_ns()
 
-        t = timer.start(f'FC1 ({state})',
-                        f'FC1 ({state})')
+        t = timer.start(f'FC1 + ReLU ({state})',
+                        f'FC1 + ReLU ({state})')
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc1(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -867,7 +867,6 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = hidden_states.to(torch.int8)
         elif my_exec_mode == ExecMode.Mode4:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            # hidden_states = lsc.Get_Tensor_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
         else:
@@ -930,7 +929,8 @@ class Int8OPTDecoderLayer(nn.Module):
 
         start_time = time.perf_counter_ns()
 
-        t = timer.start(tag=f'Post Decoder Layer ({state})', category=f'Post Decoder Layer ({state})')
+        t = timer.start(
+            tag=f'Post Decoder Layer ({state})', category=f'Post Decoder Layer ({state})')
         outputs = (residual,)
 
         if output_attentions:
