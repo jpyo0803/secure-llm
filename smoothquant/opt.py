@@ -247,7 +247,6 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             bsz, tgt_len, _ = hidden_states.size()
         elif my_exec_mode == ExecMode.Mode4:
-            # bsz, tgt_len, _ = hidden_states.size()
             bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
@@ -261,7 +260,6 @@ class Int8OPTAttention(nn.Module):
             query_states = self.q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
-            # print("my_q_proj_dt : ", my_q_proj_dt)
         elif my_exec_mode == ExecMode.Mode4:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
@@ -738,8 +736,6 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = residual.clone().detach()
         elif my_exec_mode == ExecMode.Mode4:
             residual = lsc.Copy_Hidden_States(hidden_states)
-            # residual = lsc.Get_Tensor_Float(residual)
-            # residual = lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             residual = lsc.Copy_Hidden_States(hidden_states)
 
