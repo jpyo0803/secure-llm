@@ -8,6 +8,10 @@ import os
 import gc
 from torch.nn.functional import pad
 
+import singleton_timer as st
+
+timer = st.SingletonTimer()
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
@@ -115,3 +119,6 @@ print_model_size(model_smoothquant)
 acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)
 print(
     f'SmoothQuant INT8 accuracy: {acc_smoothquant}, per-sample lantecy: {lantecy_smoothquant:.3f}ms')
+
+
+timer.display_summary()

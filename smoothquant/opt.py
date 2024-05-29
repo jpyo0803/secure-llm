@@ -26,6 +26,10 @@ import time
 
 import smoothquant.layer_struct_c as lsc
 
+import singleton_timer as st
+
+timer = st.SingletonTimer()
+
 lsc = lsc.LayerStructC()
 
 
@@ -242,6 +246,9 @@ class Int8OPTAttention(nn.Module):
         # for the decoder
         is_cross_attention = key_value_states is not None
 
+        state = "Prefill" if is_prefill else "Generation"
+        t = timer.start(tag=f'Get Hidden States Size ({state})',
+                        category=f'Get Hidden States Size ({state})')
         if my_exec_mode == ExecMode.Mode1:
             bsz, tgt_len, _ = hidden_states.size()
         elif my_exec_mode == ExecMode.Mode3:
@@ -250,12 +257,17 @@ class Int8OPTAttention(nn.Module):
             bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
+        else:
+            assert False
+        timer.end(t)
         '''
             NOTE(jpyo0803): Pass hidden_states to Q projection.
             Matmul should be done on Untrusted GPU side
             Multiplying the result of matmul by alpha and adding bias should be done on CPU side SGX
         '''
         # get query proj
+        t = timer.start(tag=f'Q Projection ({state})',
+                        category=f'Q Projection ({state})')
         if my_exec_mode == ExecMode.Mode1:
             query_states = self.q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -266,10 +278,14 @@ class Int8OPTAttention(nn.Module):
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         else:
             assert False
+        timer.end(t)
         '''
             NOTE(jpyo0803): Get Key, Value projection.
         '''
         # get key, value proj
+
+        t = timer.start(tag=f'Key, Value Projection ({state})',
+                        category=f'Key, Value Projection ({state})')
         if is_cross_attention and past_key_value is not None:
             assert False
             # reuse k,v, cross_attentions
@@ -367,9 +383,15 @@ class Int8OPTAttention(nn.Module):
                 value_states = self._shape(value_states, -1, bsz)
             else:
                 assert False
+        timer.end(t)  # End of Key, Value Projection
 
+        t = timer.start(tag=f'Get Past Key Value ({state})',
+                        category=f'Get Past Key Value ({state})')
         past_key_value = (key_states, value_states)
+        timer.end(t)
 
+        t = timer.start(tag=f'Reshape Q, K, V ({state})',
+                        category=f'Reshape Q, K, V ({state})')
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
 
         if my_exec_mode == ExecMode.Mode1:
@@ -398,11 +420,17 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             query_states = lsc.Set_Tensor_Int8(query_states)
             key_states = lsc.Set_Tensor_Int8(key_states)
+        else:
+            assert False
+        timer.end(t)
 
         '''
             NOTE(jpyo0803): Pass query_states and key_states to qk_bmm.
             Matmul should be done on Untrusted GPU side
         '''
+
+        t = timer.start(tag=f'QK^T BMM ({state})',
+                        category=f'QK^T BMM ({state})')
         if my_exec_mode == ExecMode.Mode1:
             attn_weights = self.qk_bmm(query_states, key_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -419,7 +447,10 @@ class Int8OPTAttention(nn.Module):
             attn_weights = lsc.Get_Tensor_Float(attn_weights)
         else:
             assert False
+        timer.end(t)
 
+        t = timer.start(tag=f'Apply Attention Mask ({state})',
+                        category=f'Apply Attention Mask ({state})')
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
@@ -444,12 +475,15 @@ class Int8OPTAttention(nn.Module):
             )
             attn_weights = attn_weights.view(
                 bsz * self.num_heads, tgt_len, src_len)
+        timer.end(t)
 
         '''
             NOTE(jpyo0803): Softmax on attn_weights.
             Should be done in CPU side SGX, O(N^2)
         '''
 
+        t = timer.start(tag=f'Softmax ({state})',
+                        category=f'Softmax ({state})')
         if my_exec_mode == ExecMode.Mode1:
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         elif my_exec_mode == ExecMode.Mode3:
@@ -464,7 +498,10 @@ class Int8OPTAttention(nn.Module):
             attn_probs = lsc.Get_Tensor_Float(attn_probs)
         else:
             assert False
+        timer.end(t)
 
+        t = timer.start(tag=f'Apply Layer Head Mask ({state})',
+                        category=f'Apply Layer Head Mask ({state})')
         if layer_head_mask is not None:
             '''
                 NOTE(jpyo0803): Apply layer_head_mask to attn_probs.
@@ -480,7 +517,10 @@ class Int8OPTAttention(nn.Module):
             )
             attn_probs = attn_probs.view(
                 bsz * self.num_heads, tgt_len, src_len)
+        timer.end(t)
 
+        t = timer.start(tag=f'Reshape Attention Probabilities ({state})',
+                        category=f'Reshape Attention Probabilities ({state})')
         if output_attentions:
             # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
@@ -493,7 +533,10 @@ class Int8OPTAttention(nn.Module):
             )
         else:
             attn_probs_reshaped = None
+        timer.end(t)
 
+        t = timer.start(tag=f'Post Softmax Quantization ({state})',
+                        category=f'Post Softmax Quantization ({state})')
         # (A_row V_row)_row = (A_row V_col ^T)_row
         if my_exec_mode == ExecMode.Mode1:
             attn_probs.mul_(127).round_()
@@ -509,13 +552,20 @@ class Int8OPTAttention(nn.Module):
             attn_probs = lsc.Quantize_Post_Softmax(attn_probs)
         else:
             assert False
+        timer.end(t)
 
+        t = timer.start(tag=f'Transpose Value States ({state})',
+                        category=f'Transpose Value States ({state})')
         value_states = value_states.transpose(1, 2).contiguous()
+        timer.end(t)
+
         '''
             NOTE(jpyo0803): Pass attn_probs and value_states to pv_bmm.
             Matmul should be done on Untrusted GPU side
         '''
 
+        t = timer.start(tag=f'PV BMM ({state})',
+                        category=f'PV BMM ({state})')
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.pv_bmm(attn_probs, value_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -533,7 +583,10 @@ class Int8OPTAttention(nn.Module):
             attn_output = lsc.Get_Tensor_Int8(attn_output)
         else:
             assert False
+        timer.end(t)
 
+        t = timer.start(tag=f'Reshape Attention Output ({state})',
+                        category=f'Reshape Attention Output ({state})')
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
@@ -548,12 +601,16 @@ class Int8OPTAttention(nn.Module):
         # partitioned aross GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(
             bsz, tgt_len, self.embed_dim).contiguous()
+        timer.end(t)
 
         '''
             NOTE(jpyo0803): Pass attn_output to out_proj.
             Matmul should be done on Untrusted GPU side
             Multiplying the result of matmul by alpha and adding bias should be done on CPU side SGX
         '''
+
+        t = timer.start(tag=f'Out Projection ({state})',
+                        category=f'Out Projection ({state})')
         if my_exec_mode == ExecMode.Mode1:
             attn_output = self.out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode3:
@@ -566,6 +623,7 @@ class Int8OPTAttention(nn.Module):
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         else:
             assert False
+        timer.end(t)
 
         return attn_output, attn_probs_reshaped, past_key_value
 
@@ -650,14 +708,20 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
 
+        state = 'Prefill' if is_prefill else 'Generation'
+        t = timer.start(tag=f'Set Hidden States ({state})',
+                        category=f'Set Hidden States ({state})')
         if my_exec_mode == ExecMode.Mode4:
             hidden_states = lsc.Set_Hidden_States(
                 hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states = lsc.Set_Hidden_States(
                 hidden_states)  # pass
+        timer.end(t)
 
         start_time = time.perf_counter_ns()
+        t = timer.start(tag=f'Copy Residual ({state})',
+                        category=f'Copy Residual ({state})')
         if my_exec_mode == ExecMode.Mode1:
             residual = hidden_states.clone().detach()
         elif my_exec_mode == ExecMode.Mode3:
@@ -668,15 +732,17 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = lsc.Copy_Hidden_States(hidden_states)  # pass
         else:
             assert False
+        timer.end(t)
         end_time = time.perf_counter_ns()
         outer_resi_copy_dt = (end_time - start_time) / 1e9
-
         '''
             NOTE(jpyo0803): Pass hidden_states to self_attn_layer_norm.
             Should be done in CPU side SGX, O(N^2)
         '''
 
         start_time = time.perf_counter_ns()
+        t = timer.start(f'Layer Norm 1 ({state})',
+                        f'Layer Norm 1 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -689,6 +755,7 @@ class Int8OPTDecoderLayer(nn.Module):
                 hidden_states, self.self_attn_layer_norm_id)  # id (float) -> id (int8)
         else:
             assert False
+        timer.end(t)
         end_time = time.perf_counter_ns()
         outer_ln1_dt = (end_time - start_time) / 1e9
 
@@ -713,6 +780,9 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
 
         start_time = time.perf_counter_ns()
+
+        t = timer.start(tag=f'Add Residual 1 ({state})',
+                        category=f'Add Residual 1 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode3:
@@ -726,10 +796,15 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = lsc.Residual_Add(residual, hidden_states)
         else:
             assert False
+        timer.end(t)
+
         end_time = time.perf_counter_ns()
         outer_resi_add1_dt = (end_time - start_time) / 1e9
 
         start_time = time.perf_counter_ns()
+
+        t = timer.start(tag=f'Copy Residual 2 ({state})',
+                        category=f'Copy Residual 2 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = residual.clone().detach()
         elif my_exec_mode == ExecMode.Mode3:
@@ -738,6 +813,9 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             residual = lsc.Copy_Hidden_States(hidden_states)
+        else:
+            assert False
+        timer.end(t)
 
         end_time = time.perf_counter_ns()
         outer_resi_copy2_dt = (end_time - start_time) / 1e9
@@ -747,6 +825,9 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
         start_time = time.perf_counter_ns()
+
+        t = timer.start(tag=f'Layer Norm 2 ({state})',
+                        category=f'Layer Norm 2 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.final_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -759,19 +840,24 @@ class Int8OPTDecoderLayer(nn.Module):
                 hidden_states, self.final_layer_norm_id)
         else:
             assert False
+        timer.end(t)
+
         end_time = time.perf_counter_ns()
         outer_ln2_dt = (end_time - start_time) / 1e9
 
         '''
             NOTE(jpyo0803): Pass hidden_states to fc1.
             Matmul should be done on Untrusted GPU side
-            Multiplying the result of matmul by alpha 
+            Multiplying the result of matmul by alpha
             and adding bias should be done on CPU side SGX
 
             Don't forget to Relu here
         '''
 
         start_time = time.perf_counter_ns()
+
+        t = timer.start(f'FC1 ({state})',
+                        f'FC1 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc1(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -786,6 +872,8 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
         else:
             assert False
+        timer.end(t)
+
         end_time = time.perf_counter_ns()
         outer_fc1_relu_dt = (end_time - start_time) / 1e9
 
@@ -796,6 +884,9 @@ class Int8OPTDecoderLayer(nn.Module):
             and adding bias should be done on CPU side SGX
         '''
         start_time = time.perf_counter_ns()
+
+        t = timer.start(f'FC2 ({state})',
+                        f'FC2 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             hidden_states = self.fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
@@ -806,6 +897,8 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         else:
             assert False
+        timer.end(t)
+
         end_time = time.perf_counter_ns()
         outer_fc2_dt = (end_time - start_time) / 1e9
         '''
@@ -814,6 +907,9 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
 
         start_time = time.perf_counter_ns()
+
+        t = timer.start(tag=f'Add Residual 2 ({state})',
+                        category=f'Add Residual 2 ({state})')
         if my_exec_mode == ExecMode.Mode1:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode3:
@@ -827,11 +923,14 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = lsc.Get_Tensor_Float(residual)
         else:
             assert False
+        timer.end(t)
 
         end_time = time.perf_counter_ns()
         outer_resi_add2_dt = (end_time - start_time) / 1e9
 
         start_time = time.perf_counter_ns()
+
+        t = timer.start(tag=f'Post Decoder Layer ({state})', category=f'Post Decoder Layer ({state})')
         outputs = (residual,)
 
         if output_attentions:
@@ -839,6 +938,8 @@ class Int8OPTDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
+        timer.end(t)
+
         end_time = time.perf_counter_ns()
         outer_post_dt = (end_time - start_time) / 1e9
 

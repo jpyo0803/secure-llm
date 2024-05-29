@@ -7,9 +7,13 @@ from torch.nn.functional import pad
 import time
 import csv
 
+import singleton_timer as st
+
+timer = st.SingletonTimer()
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
 
 '''
     NOTE(jpyo0803): Set execution mode
@@ -93,3 +97,5 @@ smoothquant.opt.time_stats.print_summary()
 print(f"Output token length: {generated_ids.shape[1]}")
 assert generated_ids.shape[1] == target_output_token_len
 # print(tokenizer.batch_decode(generated_ids)[0])
+
+st.SingletonTimer().display_summary()
