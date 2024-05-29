@@ -11,6 +11,8 @@ import singleton_timer as st
 
 timer = st.SingletonTimer()
 
+timer.disable()
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
@@ -86,8 +88,10 @@ print(f"Input token length: {model_inputs['input_ids'].shape[1]}")
 assert model_inputs['input_ids'].shape[1] == target_input_token_len
 
 
+
 smoothquant.opt.is_prefill = True
 smoothquant.opt.time_stats.on()
+timer.enable()
 
 target_output_token_len = 2048
 start_time = time.perf_counter_ns()
@@ -101,14 +105,14 @@ print(f"Output token length: {generated_ids.shape[1]}")
 assert generated_ids.shape[1] == target_output_token_len
 # print(tokenizer.batch_decode(generated_ids)[0])
 
-raw_data = st.SingletonTimer().display_summary()
+raw_data = st.SingletonTimer().display_summary(outlier_percent=0.05)
 
 
 data = []
 
-categories = ['Set Hidden States', 'Copy Residual 1', 'Layer Norm 1', 'Get Hidden States Size', 'Q Projection', 'KV Projection', 'Get Past KV', 'Reshape Q, K, V', 'QK^T BMM', 'Apply Attention Mask', 'Softmax', 'Apply Layer Head Mask', 'Reshape Attention Probabilities', 'Post Softmax Quantization',
-              'Transpose V', 'PV BMM', 'Reshape Attention Output', 'Out Projection', 'Add Residual 1', 'Copy Residual 2', 'Layer Norm 2', 'FC1 + ReLU', 'FC2', 'Add Residual 2', 'Post Decoder Layer']
-assert len(categories) == 25
+categories = ['Set Hidden States', 'Copy Residual 1', 'Layer Norm 1', 'Get Hidden States Size', 'Q Projection', 'KV Projection', 'Construct KV Cache', 'Get Past KV', 'Reshape Q, K, V', 'QK^T BMM', 'Apply Attention Mask', 'Softmax', 'Apply Layer Head Mask', 'Reshape Attention Probabilities', 'Post Softmax Quantization',
+              'Transpose V', 'PV BMM', 'Reshape Attention Output', 'Out Projection', 'Add Residual 1', 'Copy Residual 2', 'Layer Norm 2', 'FC1', 'ReLU', 'FC2', 'Add Residual 2', 'Post Decoder Layer']
+assert len(categories) == 27
 
 for state in ['Prefill', 'Generation']:
     for category in categories:

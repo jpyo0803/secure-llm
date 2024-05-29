@@ -284,8 +284,6 @@ class Int8OPTAttention(nn.Module):
         '''
         # get key, value proj
 
-        t = timer.start(tag=f'KV Projection ({state})',
-                        category=f'KV Projection ({state})')
         if is_cross_attention and past_key_value is not None:
             assert False
             # reuse k,v, cross_attentions
@@ -303,26 +301,44 @@ class Int8OPTAttention(nn.Module):
             '''
             # reuse k, v, self_attention
             if my_exec_mode == ExecMode.Mode1:
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
+                key_states = self.k_proj(hidden_states)
+                value_states = self.v_proj(hidden_states)
+                timer.end(t)
+
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
                 key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
                 value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
+                timer.end(t)
             elif my_exec_mode == ExecMode.Mode3:
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                # print("generation my_k_proj_dt : ", my_k_proj_dt)
-                # print("generation my_v_proj_dt : ", my_v_proj_dt)
+                timer.end(t)
 
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
+                timer.end(t)
             elif my_exec_mode == ExecMode.Mode4:
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+                timer.end(t)
 
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
                 key_states = lsc.Get_Tensor_Int8(key_states)
                 value_states = lsc.Get_Tensor_Int8(value_states)
 
@@ -331,10 +347,16 @@ class Int8OPTAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
+                timer.end(t)
             elif my_exec_mode == ExecMode.Mode5:
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+                timer.end(t)
 
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
                 key_states = lsc.Get_Tensor_Int8(key_states)
                 value_states = lsc.Get_Tensor_Int8(value_states)
 
@@ -343,6 +365,7 @@ class Int8OPTAttention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
+                timer.end(t)
             else:
                 assert False
         else:
@@ -353,37 +376,61 @@ class Int8OPTAttention(nn.Module):
             # self_attention
 
             if my_exec_mode == ExecMode.Mode1:
-                key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-                value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
+                key_states = self.k_proj(hidden_states)
+                value_states = self.v_proj(hidden_states)
+                timer.end(t)
+
+                t = timer.start(tag=f'Construct KV Cache ({state})',
+                                category=f'Construct KV Cache ({state})')
+                key_states = self._shape(key_states, -1, bsz)
+                value_states = self._shape(value_states, -1, bsz)
+                timer.end(t)
             elif my_exec_mode == ExecMode.Mode3:
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                # print("prefill my_k_proj_dt : ", my_k_proj_dt)
-                # print("prefill my_v_proj_dt : ", my_v_proj_dt)
+                timer.end(t)
 
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
+                timer.end(t)
             elif my_exec_mode == ExecMode.Mode4:
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+                timer.end(t)
 
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
                 key_states = lsc.Get_Tensor_Int8(key_states)
                 value_states = lsc.Get_Tensor_Int8(value_states)
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
+                timer.end(t)
             elif my_exec_mode == ExecMode.Mode5:
+                t = timer.start(tag=f'KV Projection ({state})',
+                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+                timer.end(t)
 
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
                 key_states = lsc.Get_Tensor_Int8(key_states)
                 value_states = lsc.Get_Tensor_Int8(value_states)
 
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
+                timer.end(t)
             else:
                 assert False
-        timer.end(t)  # End of Key, Value Projection
 
         t = timer.start(tag=f'Get Past KV ({state})',
                         category=f'Get Past KV ({state})')
@@ -653,7 +700,7 @@ class Int8OPTDecoderLayer(nn.Module):
         privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
 
         self.my_fc1 = my_linear.Linear_S8W_S8A_S8B_FP32O_Mixed(
-            self.fc1, privacy_on, relu_on=True)
+            self.fc1, privacy_on)
         self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(
             self.fc2, privacy_on)
 
@@ -856,22 +903,51 @@ class Int8OPTDecoderLayer(nn.Module):
 
         start_time = time.perf_counter_ns()
 
-        t = timer.start(f'FC1 + ReLU ({state})',
-                        f'FC1 + ReLU ({state})')
         if my_exec_mode == ExecMode.Mode1:
+            t = timer.start(tag=f'FC1 ({state})',
+                            category=f'FC1 ({state})')
             hidden_states = self.fc1(hidden_states)
+            timer.end(t)
+
+            t = timer.start(tag=f'ReLU ({state})',
+                            category=f'ReLU ({state})')
+            # assert False, "ReLU is not measured"
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode3:
+            t = timer.start(tag=f'FC1 ({state})',
+                            category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
+            timer.end(t)
+
+            t = timer.start(tag=f'ReLU ({state})',
+                            category=f'ReLU ({state})')
             assert hidden_states.dtype == torch.float32
             hidden_states = torch.nn.functional.relu(hidden_states)
             hidden_states = hidden_states.to(torch.int8)
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode4:
+            t = timer.start(tag=f'FC1 ({state})',
+                            category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
+            timer.end(t)
+
+            t = timer.start(tag=f'ReLU ({state})',
+                            category=f'ReLU ({state})')
+            hidden_states = lsc.ReLU(hidden_states)
+            hidden_states = lsc.Cast_From_Float_To_Int8(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode5:
+            t = timer.start(tag=f'FC1 ({state})',
+                            category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
+            timer.end(t)
+
+            t = timer.start(tag=f'ReLU ({state})', category=f'ReLU ({state})')
+            hidden_states = lsc.ReLU(hidden_states)
+            hidden_states = lsc.Cast_From_Float_To_Int8(hidden_states)
+            timer.end(t)
         else:
             assert False
-        timer.end(t)
 
         end_time = time.perf_counter_ns()
         outer_fc1_relu_dt = (end_time - start_time) / 1e9

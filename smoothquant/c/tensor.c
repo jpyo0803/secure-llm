@@ -1,6 +1,7 @@
 #include "tensor.h"
 
 #include <stdlib.h>
+#include <omp.h>
 
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   struct TensorInt32* tensor =
@@ -15,6 +16,7 @@ struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
 
 struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+  #pragma omp parallel for simd
   for (int i = 0; i < B * M * N; i++) {
     tensor->data[i] = data[i];
   }
@@ -56,6 +58,7 @@ struct TensorFloat* CreateTensorFloat(int B, int M, int N) {
 struct TensorFloat* CreateTensorFloatFromData(float* data, int B, int M,
                                               int N) {
   struct TensorFloat* tensor = CreateTensorFloat(B, M, N);
+  #pragma omp parallel for simd
   for (int i = 0; i < B * M * N; i++) {
     tensor->data[i] = data[i];
   }
@@ -80,6 +83,7 @@ struct TensorInt8* CreateTensorInt8(int B, int M, int N) {
 
 struct TensorInt8* CreateTensorInt8FromData(char* data, int B, int M, int N) {
   struct TensorInt8* tensor = CreateTensorInt8(B, M, N);
+  #pragma omp parallel for simd
   for (int i = 0; i < B * M * N; i++) {
     tensor->data[i] = data[i];
   }
@@ -99,10 +103,12 @@ struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X,
   int N = Y->N;
 
   struct TensorInt32* Z = CreateTensorInt32(B, M, N);
+  #pragma omp parallel for collapse(3)
   for (int b = 0; b < B; b++) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
         int sum = 0;
+        #pragma omp simd reduction(+:sum)
         for (int k = 0; k < K; k++) {
           sum +=
               X->data[b * M * K + m * K + k] * Y->data[b * K * N + k * N + n];
@@ -122,10 +128,13 @@ struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X,
   int N = Y->N;
 
   struct TensorInt32* Z = CreateTensorInt32(B, M, N);
+
+  #pragma omp parallel for collapse(3)
   for (int b = 0; b < B; b++) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
         int sum = 0;
+        #pragma omp simd reduction(+:sum)
         for (int k = 0; k < K; k++) {
           sum += X->data[b * M * K + m * K + k] *
                  (int)Y->data[b * K * N + k * N + n];
@@ -144,6 +153,7 @@ struct TensorInt32* TransposeLastTwoDimsInt32(struct TensorInt32* X) {
 
   struct TensorInt32* Y = CreateTensorInt32(B, N, M);
   // transpose last two dimension for example (B, M, N) -> (B, N, M)
+  #pragma omp parallel for collapse(3)
   for (int b = 0; b < B; b++) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {

@@ -42,7 +42,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             x = lsc.Get_Tensor_Int32(x)
             y = lsc.Get_Tensor_Int32(y)
 
-            y = y.transpose(-1, -2).contiguous()
+            y = y.transpose(-1, -2).contiguous() # make it transposed inside
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             x = lsc.Cast_From_Int8_To_Int32(x)
             y = lsc.Cast_From_Int8_To_Int32(y)
