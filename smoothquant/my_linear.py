@@ -85,7 +85,6 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             if self.relu_on:
                 y = lsc.ReLU(y)  # from float to float
             y = lsc.Cast_From_Float_To_Int8(y)
-            # y = lsc.Get_Tensor_Int8(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             y = lsc.Set_Decrypted_Tensor_Opr1_Int32(
                 y, blind_factor_id, self.linear_layer_id)
@@ -93,7 +92,6 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             if self.relu_on:
                 y = lsc.ReLU(y)
             y = lsc.Cast_From_Float_To_Int8(y)
-            # y = lsc.Get_Tensor_Int8(y)
         else:
             assert False
 

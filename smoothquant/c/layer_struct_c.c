@@ -64,7 +64,7 @@ int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
   int M = src_tensor->M;
   int N = src_tensor->N;
 
-// #pragma omp parallel for collapse(2)
+  // #pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       float sum = 0.0;
@@ -142,7 +142,7 @@ void Ex_Get_Tensor_Dim_Int32(int src_id, int* dim) {
 
 void Ex_Get_Tensor_Int32(int src_id, int* out) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
-// #pragma omp parallel for
+  // #pragma omp parallel for
   for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
     out[i] = src_tensor->data[i];
   }
@@ -163,7 +163,7 @@ int Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
 
   GetCPRNG((unsigned char*)blind_factor->data, blind_factor->num_bytes);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -199,7 +199,7 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
   struct TensorInt32* unblind_factor =
       MatmulS32S8S32(blind_factor, linear_weight);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -228,7 +228,7 @@ int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -261,7 +261,7 @@ int Ex_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -270,6 +270,25 @@ int Ex_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
             beta * bias->data[k];
       }
     }
+  }
+
+  int curr_id = tensor_float_id;
+  tensor_float_list[curr_id] = dst_tensor;
+  tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
+  struct TensorInt32* src_tensor = tensor_int32_list[src_id];
+  float alpha = bmm_param_list[bmm_param_id];
+
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
+
+  struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
+  for (int i = 0; i < B * M * N; i++) {
+    dst_tensor->data[i] = (float)src_tensor->data[i] * alpha;
   }
 
   int curr_id = tensor_float_id;
@@ -287,7 +306,7 @@ int Ex_ReLU(int src_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -314,7 +333,7 @@ int Ex_Softmax(int src_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-// #pragma omp parallel for collapse(2)
+  // #pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       float max_val = src_tensor->data[i * M * N + j * N];
@@ -352,7 +371,7 @@ int Ex_Quantize_Post_Softmax(int src_id) {
 
   struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -376,7 +395,7 @@ int Ex_Cast_From_Float_To_Int8(int src_id) {
 
   struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -401,7 +420,7 @@ int Ex_Cast_From_Float_To_Int32(int src_id) {
 
   struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -426,7 +445,7 @@ int Ex_Cast_From_Int8_To_Int32(int src_id) {
 
   struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
@@ -452,7 +471,7 @@ void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim) {
 void Ex_Get_Tensor_Int8(int src_id, char* out) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
 
-// #pragma omp parallel for
+  // #pragma omp parallel for
   for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
     out[i] = src_tensor->data[i];
   }
@@ -479,7 +498,7 @@ void Ex_Get_Tensor_Dim_Float(int src_id, int* dim) {
 void Ex_Get_Tensor_Float(int src_id, float* out) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-// #pragma omp parallel for
+  // #pragma omp parallel for
   for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
     out[i] = src_tensor->data[i];
   }
@@ -513,7 +532,7 @@ int Ex_Residual_Add(int residual, int hidden_states) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-// #pragma omp parallel for collapse(3)
+  // #pragma omp parallel for collapse(3)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {

@@ -22,8 +22,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             self.alpha = torch.tensor(
                 torch_int_nn_bmm.a.item(), dtype=torch.float32)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            self.alpha = torch.tensor(
-                torch_int_nn_bmm.a.item(), dtype=torch.float32)
+            self.bmm_id = lsc.Set_Bmm_Param(torch_int_nn_bmm)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.bmm_id = lsc.Set_Bmm_Param(torch_int_nn_bmm)
 
@@ -38,12 +37,12 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             x = x.to(torch.int32)
             y = y.to(torch.int32)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            assert x.device == torch.device('cpu')
-            assert y.device == torch.device('cpu')
-            y = y.transpose(-1, -2).contiguous()
+            x = lsc.Cast_From_Int8_To_Int32(x)
+            y = lsc.Cast_From_Int8_To_Int32(y)
+            x = lsc.Get_Tensor_Int32(x)
+            y = lsc.Get_Tensor_Int32(y)
 
-            x = x.to(torch.int32)
-            y = y.to(torch.int32)
+            y = y.transpose(-1, -2).contiguous()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             pass
 
@@ -62,8 +61,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             z = z.to(torch.float32)
             z *= self.alpha
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            z = z.to(torch.float32)
-            z *= self.alpha
+            z = lsc.Set_Tensor_Int32(z)
+            z = lsc.Compute_Epilogue_BMM(z, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             pass
 
@@ -87,7 +86,7 @@ class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             return super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y).to(torch.int8)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            return super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y).to(torch.int8)
+            return lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             return lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
 

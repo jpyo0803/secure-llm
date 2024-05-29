@@ -266,7 +266,6 @@ class Int8OPTAttention(nn.Module):
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
-            query_states = lsc.Get_Tensor_Int8(query_states)
         else:
             assert False
         '''
@@ -391,6 +390,17 @@ class Int8OPTAttention(nn.Module):
 
         src_len = key_states.size(1)
 
+        if my_exec_mode == ExecMode.Mode1:
+            pass
+        elif my_exec_mode == ExecMode.Mode3:
+            pass
+        elif my_exec_mode == ExecMode.Mode4:
+            query_states = lsc.Set_Tensor_Int8(query_states)
+            key_states = lsc.Set_Tensor_Int8(key_states)
+        elif my_exec_mode == ExecMode.Mode5:
+            query_states = lsc.Set_Tensor_Int8(query_states)
+            key_states = lsc.Set_Tensor_Int8(key_states)
+
         '''
             NOTE(jpyo0803): Pass query_states and key_states to qk_bmm.
             Matmul should be done on Untrusted GPU side
@@ -404,10 +414,8 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode4:
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, key_states)
+            attn_weights = lsc.Get_Tensor_Float(attn_weights)
         elif my_exec_mode == ExecMode.Mode5:
-            query_states = lsc.Set_Tensor_Int8(query_states)
-            key_states = lsc.Set_Tensor_Int8(key_states)
-
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, key_states)
             attn_weights = lsc.Get_Tensor_Float(attn_weights)
@@ -449,11 +457,13 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         elif my_exec_mode == ExecMode.Mode4:
-            attn_probs = nn.functional.softmax(attn_weights, dim=-1)
+            attn_weights = lsc.Set_Tensor_Float(attn_weights)
+            attn_probs = lsc.Softmax(attn_weights)
+            attn_probs = lsc.Get_Tensor_Float(attn_probs)
         elif my_exec_mode == ExecMode.Mode5:
             attn_weights = lsc.Set_Tensor_Float(attn_weights)
             attn_probs = lsc.Softmax(attn_weights)
-            # cipher_cpp_lib.Softmax(cast(attn_probs.data_ptr(), POINTER(c_float)), attn_probs.size(0), attn_probs.size(1), attn_probs.size(2))
+            attn_probs = lsc.Get_Tensor_Float(attn_probs)
         else:
             assert False
 
@@ -494,9 +504,10 @@ class Int8OPTAttention(nn.Module):
             attn_probs.mul_(127).round_()
             attn_probs = attn_probs.to(torch.int8)
         elif my_exec_mode == ExecMode.Mode4:
-            attn_probs.mul_(127).round_()
-            attn_probs = attn_probs.to(torch.int8)
+            attn_probs = lsc.Set_Tensor_Float(attn_probs)
+            attn_probs = lsc.Quantize_Post_Softmax(attn_probs)
         elif my_exec_mode == ExecMode.Mode5:
+            attn_probs = lsc.Set_Tensor_Float(attn_probs)
             attn_probs = lsc.Quantize_Post_Softmax(attn_probs)
         else:
             assert False
@@ -513,13 +524,14 @@ class Int8OPTAttention(nn.Module):
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
         elif my_exec_mode == ExecMode.Mode4:
+            value_states = lsc.Set_Tensor_Int8(value_states)
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
+            attn_output = lsc.Get_Tensor_Int8(attn_output)
         elif my_exec_mode == ExecMode.Mode5:
             value_states = lsc.Set_Tensor_Int8(value_states)
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
-
             attn_output = lsc.Get_Tensor_Int8(attn_output)
         else:
             assert False

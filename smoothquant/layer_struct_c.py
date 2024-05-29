@@ -85,6 +85,10 @@ class LayerStructC:
         return cls.lib.Ex_Compute_Epilogue_WS8BFP32(src_id, linear_param_id)
 
     @classmethod
+    def Compute_Epilogue_BMM(cls, src_id, bmm_param_id):
+        return cls.lib.Ex_Compute_Epilogue_BMM(src_id, bmm_param_id)
+
+    @classmethod
     def ReLU(cls, src_id):
         return cls.lib.Ex_ReLU(src_id)
 
