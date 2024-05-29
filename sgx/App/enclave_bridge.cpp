@@ -196,6 +196,7 @@ extern "C"
         sgx_destroy_enclave(eid);
     }
 
+    // Deprecated
     void LayerNorm(unsigned long eid, float* x, float* gamma, float* beta, float eps, int B, int M, int N) {
     	sgx_status_t ret = ecall_layernorm(eid,x,gamma,beta,eps,B,M,N);
 		if (ret != SGX_SUCCESS) {
@@ -204,6 +205,7 @@ extern "C"
 		}
     }
 
+    // Deprecated
     void ReLU(unsigned long eid, float* x, int B, int M, int N) {
     	sgx_status_t ret = ecall_ReLU(eid,x,B,M,N);
 		if (ret != SGX_SUCCESS) {
@@ -212,6 +214,7 @@ extern "C"
 		}
     }
 
+    // Deprecated
     void Softmax(unsigned long eid, float* x, int B, int M, int N) {
     	sgx_status_t ret = ecall_Softmax(eid,x,B,M,N);
 		if (ret != SGX_SUCCESS) {

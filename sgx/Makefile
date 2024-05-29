@@ -87,7 +87,7 @@ else
 endif
 Crypto_Library_Name := sgx_tcrypto
 
-Enclave_Cpp_Files := Enclave/Enclave.cpp Enclave/layer.cpp
+Enclave_Cpp_Files := Enclave/Enclave.cpp Enclave/sgx_layer_struct.cpp Enclave/c/*.c
 # SGXDNN_Cpp_Files := sgxdnn_main.cpp json11.cpp Crypto.cpp sgxaes.cpp aes-stream.cpp
 #SGXDNN_Cpp_Files += aesni_ghash.cpp aesni_key.cpp  aesni-wrap.cpp
 Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx
