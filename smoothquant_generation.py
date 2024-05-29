@@ -9,7 +9,7 @@ import csv
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
 
 '''
     NOTE(jpyo0803): Set execution mode

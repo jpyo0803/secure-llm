@@ -6,7 +6,9 @@ enclave {
     											  
 		public void ecall_layernorm	([user_check]float* x, [user_check]float* gamma, [user_check]float* beta, float eps, int B, int M, int N);
     public void ecall_ReLU	([user_check]float* x,int B, int M, int N);				
-    public void ecall_Softmax	([user_check]float* x,int B, int M, int N);									 									 
+    public void ecall_Softmax	([user_check]float* x,int B, int M, int N);			
+
+    public void ecall_Set_Hidden_States([user_check])				 									 
         
     };
 

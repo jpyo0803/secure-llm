@@ -29,7 +29,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 '''
 
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode3
 
 start_gpu = True if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode2 else False
 
@@ -77,7 +77,8 @@ class Evaluator:
             hit += (pred == label).sum().item()
 
         acc = hit / total
-        lantecy = latency / (len(self.dataset) - 1) # Latency for 1st batch is ignored
+        # Latency for 1st batch is ignored
+        lantecy = latency / (len(self.dataset) - 1)
         return acc, lantecy
 
 
@@ -108,7 +109,7 @@ print("Start Device: ", "CUDA" if start_gpu else "CPU")
 model_smoothquant = Int8OPTForCausalLM.from_pretrained(
     'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float32, device_map='cuda:0' if start_gpu else 'cpu')
 
-model_smoothquant.pre_init() # Need this to initialize the model weights in CUDA
+model_smoothquant.pre_init()  # Need this to initialize the model weights in CUDA
 
 print_model_size(model_smoothquant)
 acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)

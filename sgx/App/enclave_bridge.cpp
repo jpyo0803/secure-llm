@@ -221,8 +221,293 @@ extern "C"
     }
 
     
+    int Sgx_Set_Hidden_States(unsigned long eid, float* hidden_states, int B, int M, int N) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Hidden_States(eid,hidden_states,B,M,N,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
 
+    int Sgx_Copy_Hidden_States(unsigned long eid, int src_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Copy_Hidden_States(eid,src_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
 
+    int Sgx_Set_Layer_Norm_Param(unsigned long eid, float* gamma, float* beta, int N, float eps) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Layer_Norm_Param(eid,gamma,beta,N,eps,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Layer_Norm_Q(unsigned long eid, int src_id, int layer_norm_param_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Layer_Norm_Q(eid,src_id,layer_norm_param_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Set_Linear_Param_WS8BS8(unsigned long eid, char* weight, char* bias, int M, int N, float alpha, float beta) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Linear_Param_WS8BS8(eid,weight,bias,M,N,alpha,beta,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Set_Linear_Param_WS8BFP32(unsigned long eid, char* weight, float* bias, int M, int N, float alpha) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Linear_Param_WS8BFP32(eid,weight,bias,M,N,alpha,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    void Sgx_Get_Tensor_Dim_Int32(unsigned long eid, int src_id, int* dim) {
+        sgx_status_t ret = ecall_Get_Tensor_Dim_Int32(eid,src_id,dim);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+    }
+
+    void Sgx_Get_Tensor_Int32(unsigned long eid, int src_id, int* out) {
+        sgx_status_t ret = ecall_Get_Tensor_Int32(eid,src_id,out);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+    }
+
+    int Sgx_Get_Encrypted_Tensor_Opr1_Int32(unsigned long eid, int src_id, int* out) {
+        int ret_id;
+        sgx_status_t ret = ecall_Get_Encrypted_Tensor_Opr1_Int32(eid,src_id,out,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Set_Tensor_Int32(unsigned long eid, int* data, int B, int M, int N) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Tensor_Int32(eid,data,B,M,N,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Set_Decrypted_Tensor_Opr1_Int32(unsigned long eid, int* data, int B, int M, int N, int blind_factor_id, int linear_param_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Decrypted_Tensor_Opr1_Int32(eid,data,B,M,N,blind_factor_id,linear_param_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Get_Encrypted_Tensor_Opr2_Int32(unsigned long eid, int src_id1, int src_id2, int* out1, int* out2) {
+        int ret_id;
+        sgx_status_t ret = ecall_Get_Encrypted_Tensor_Opr2_Int32(eid,src_id1,src_id2,out1,out2,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Set_Decrypted_Tensor_Opr2_Int32(unsigned long eid, int* data, int B, int M, int N, int unblind_factor_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Decrypted_Tensor_Opr2_Int32(eid,data,B,M,N,unblind_factor_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    void Sgx_Get_Tensor_Dim_Int8(unsigned long eid, int src_id, int* dim) {
+        sgx_status_t ret = ecall_Get_Tensor_Dim_Int8(eid,src_id,dim);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+    }
+
+    void Sgx_Get_Tensor_Int8(unsigned long eid, int src_id, char* out) {
+        sgx_status_t ret = ecall_Get_Tensor_Int8(eid,src_id,out);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+    }
+
+    int Sgx_Set_Tensor_Int8(unsigned long eid, char* data, int B, int M, int N) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Tensor_Int8(eid,data,B,M,N,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    void Sgx_Get_Tensor_Dim_Float(unsigned long eid, int src_id, int* dim) {
+        sgx_status_t ret = ecall_Get_Tensor_Dim_Float(eid,src_id,dim);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+    }
+
+    void Sgx_Get_Tensor_Float(unsigned long eid, int src_id, float* out) {
+        sgx_status_t ret = ecall_Get_Tensor_Float(eid,src_id,out);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+    }
+
+    int Sgx_Set_Tensor_Float(unsigned long eid, float* data, int B, int M, int N) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Tensor_Float(eid,data,B,M,N,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Compute_Epilogue_WS8BS8(unsigned long eid, int src_id, int linear_param_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Compute_Epilogue_WS8BS8(eid,src_id,linear_param_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Compute_Epilogue_WS8BFP32(unsigned long eid, int src_id, int linear_param_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Compute_Epilogue_WS8BFP32(eid,src_id,linear_param_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Compute_Epilogue_BMM(unsigned long eid, int src_id, int bmm_param_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Compute_Epilogue_BMM(eid,src_id,bmm_param_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_ReLU(unsigned long eid, int src_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_ReLU(eid,src_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Softmax(unsigned long eid, int src_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Softmax(eid,src_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Quantize_Post_Softmax(unsigned long eid, int src_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Quantize_Post_Softmax(eid,src_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Cast_From_Float_To_Int8(unsigned long eid, int src_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Cast_From_Float_To_Int8(eid,src_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Cast_From_Float_To_Int32(unsigned long eid, int src_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Cast_From_Float_To_Int32(eid,src_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Cast_From_Int8_To_Int32(unsigned long eid, int src_id) {
+        int ret_id;
+        sgx_status_t ret = ecall_Cast_From_Int8_To_Int32(eid,src_id,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Set_Bmm_Param(unsigned long eid, float alpha) {
+        int ret_id;
+        sgx_status_t ret = ecall_Set_Bmm_Param(eid,alpha,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
+
+    int Sgx_Residual_Add(unsigned long eid, int residual, int hidden_states) {
+        int ret_id;
+        sgx_status_t ret = ecall_Residual_Add(eid,residual,hidden_states,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
 }
 
 /* Application entry */
