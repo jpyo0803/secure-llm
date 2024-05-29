@@ -247,7 +247,8 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             bsz, tgt_len, _ = hidden_states.size()
         elif my_exec_mode == ExecMode.Mode4:
-            bsz, tgt_len, _ = hidden_states.size()
+            # bsz, tgt_len, _ = hidden_states.size()
+            bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             bsz, tgt_len, _ = lsc.Get_Tensor_Dim_Int8(hidden_states)
         '''
@@ -353,6 +354,9 @@ class Int8OPTAttention(nn.Module):
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
+                key_states = lsc.Get_Tensor_Int8(key_states)
+                value_states = lsc.Get_Tensor_Int8(value_states)
+
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
             elif my_exec_mode == ExecMode.Mode5:
@@ -370,6 +374,16 @@ class Int8OPTAttention(nn.Module):
         past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+
+        if my_exec_mode == ExecMode.Mode1:
+            pass
+        elif my_exec_mode == ExecMode.Mode3:
+            pass
+        elif my_exec_mode == ExecMode.Mode4:
+            query_states = lsc.Get_Tensor_Int8(query_states)
+        elif my_exec_mode == ExecMode.Mode5:
+            query_states = lsc.Get_Tensor_Int8(query_states)
+
         query_states = self._shape(
             query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
@@ -535,6 +549,7 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode4:
+            attn_output = lsc.Set_Tensor_Int8(attn_output)
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode5:
             attn_output = lsc.Set_Tensor_Int8(attn_output)
@@ -626,12 +641,11 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
 
         if my_exec_mode == ExecMode.Mode4:
-            pass
-            # hidden_states = lsc.Set_Hidden_States(
-            #     hidden_states)  # actual -> id
+            hidden_states = lsc.Set_Hidden_States(
+                hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states = lsc.Set_Hidden_States(
-                hidden_states)  # actual -> id
+                hidden_states)  # pass
 
         start_time = time.perf_counter_ns()
         if my_exec_mode == ExecMode.Mode1:
@@ -639,9 +653,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual = hidden_states.clone().detach()
         elif my_exec_mode == ExecMode.Mode4:
-            residual = hidden_states.clone().detach()
+            residual = lsc.Copy_Hidden_States(hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode5:
-            residual = lsc.Copy_Hidden_States(hidden_states)  # id -> id
+            residual = lsc.Copy_Hidden_States(hidden_states)  # pass
         else:
             assert False
         end_time = time.perf_counter_ns()
@@ -657,8 +671,9 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = self.self_attn_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.self_attn_layer_norm(hidden_states)
-        elif my_exec_mode == ExecMode.Mode4:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        elif my_exec_mode == ExecMode.Mode4:  # here, makes the accuracy 0.5
+            hidden_states = lsc.Layer_Norm_Q(
+                hidden_states, self.self_attn_layer_norm_id)  # id (float) -> id (int8)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states = lsc.Layer_Norm_Q(
                 hidden_states, self.self_attn_layer_norm_id)  # id (float) -> id (int8)
@@ -693,8 +708,11 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode4:
-            residual.add_(hidden_states.to(residual.dtype))
+            # residual.add_(hidden_states.to(residual.dtype))
+            # hidden_states = lsc.Set_Tensor_Float(hidden_states)
+            hidden_states = lsc.Residual_Add(residual, hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
+            # hidden_states = lsc.Set_Tensor_Float(hidden_states)
             hidden_states = lsc.Residual_Add(residual, hidden_states)
         else:
             assert False
@@ -707,7 +725,8 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = residual.clone().detach()
         elif my_exec_mode == ExecMode.Mode4:
-            hidden_states = residual.clone().detach()
+            residual = lsc.Copy_Hidden_States(hidden_states)
+            # residual = lsc.Get_Tensor_Float(residual)
             # residual = lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             residual = lsc.Copy_Hidden_States(hidden_states)
@@ -725,7 +744,8 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states = self.final_layer_norm(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
-            hidden_states = self.final_layer_norm(hidden_states)
+            hidden_states = lsc.Layer_Norm_Q(
+                hidden_states, self.final_layer_norm_id)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states = lsc.Layer_Norm_Q(
                 hidden_states, self.final_layer_norm_id)
@@ -753,9 +773,7 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = hidden_states.to(torch.int8)
         elif my_exec_mode == ExecMode.Mode4:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            assert hidden_states.dtype == torch.float32
-            hidden_states = torch.nn.functional.relu(hidden_states)
-            hidden_states = hidden_states.to(torch.int8)
+            # hidden_states = lsc.Get_Tensor_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
         else:
@@ -793,7 +811,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode3:
             residual.add_(hidden_states.to(residual.dtype))
         elif my_exec_mode == ExecMode.Mode4:
-            residual.add_(hidden_states.to(residual.dtype))
+            # residual.add_(hidden_states.to(residual.dtype))
+            residual = lsc.Residual_Add(residual, hidden_states)
+            residual = lsc.Get_Tensor_Float(residual)
         elif my_exec_mode == ExecMode.Mode5:
             residual = lsc.Residual_Add(residual, hidden_states)
             residual = lsc.Get_Tensor_Float(residual)
