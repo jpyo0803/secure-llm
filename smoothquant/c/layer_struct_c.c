@@ -101,34 +101,36 @@ int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
 
 int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
                                float alpha, float beta) {
-  int curr_id = linear_param_ws8bs8_id;
+  int curr_id = linear_param_id;
 
-  struct LinearParamWS8BS8* linear_param =
-      (struct LinearParamWS8BS8*)malloc(sizeof(struct LinearParamWS8BS8));
+  struct LinearParam* linear_param =
+      (struct LinearParam*)malloc(sizeof(struct LinearParam));
   linear_param->weight = CreateTensorInt8FromData(weight, 1, M, N);
-  linear_param->bias = CreateTensorInt8FromData(bias, 1, 1, N);
+  linear_param->bias_int8 = CreateTensorInt8FromData(bias, 1, 1, N);
   linear_param->alpha = alpha;
   linear_param->beta = beta;
+  linear_param->is_bias_fp32 = 0;
 
-  linear_param_wb8bs8_list[curr_id] = linear_param;
-  linear_param_ws8bs8_id = (linear_param_ws8bs8_id + 1) % STATIC_LIST_LEN;
+  linear_param_list[curr_id] = linear_param;
+  linear_param_id = (linear_param_id + 1) % STATIC_LIST_LEN;
 
   return curr_id;
 }
 
 int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
                                  float alpha) {
-  int curr_id = linear_param_ws8bfp32_id;
+  int curr_id = linear_param_id;
 
-  struct LinearParamWS8BFP32* linear_param =
-      (struct LinearParamWS8BFP32*)malloc(sizeof(struct LinearParamWS8BFP32));
+  struct LinearParam* linear_param =
+      (struct LinearParam*)malloc(sizeof(struct LinearParam));
   linear_param->weight = CreateTensorInt8FromData(weight, 1, M, N);
-  linear_param->bias = CreateTensorFloatFromData(bias, 1, 1, N);
+  linear_param->bias_float = CreateTensorFloatFromData(bias, 1, 1, N);
   linear_param->alpha = alpha;
   linear_param->beta = 1.0;
+  linear_param->is_bias_fp32 = 1;
 
-  linear_param_ws8bfp32_list[curr_id] = linear_param;
-  linear_param_ws8bfp32_id = (linear_param_ws8bfp32_id + 1) % STATIC_LIST_LEN;
+  linear_param_list[curr_id] = linear_param;
+  linear_param_id = (linear_param_id + 1) % STATIC_LIST_LEN;
 
   return curr_id;
 }
@@ -193,8 +195,7 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
                                        int linear_param_id) {
   // Compute Unblinding factor
   struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
-  struct TensorInt8* linear_weight =
-      linear_param_wb8bs8_list[linear_param_id]->weight;
+  struct TensorInt8* linear_weight = linear_param_list[linear_param_id]->weight;
 
   struct TensorInt32* unblind_factor =
       MatmulS32S8S32(blind_factor, linear_weight);
@@ -203,8 +204,7 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        data[i * M * N + j * N + k] -=
-            unblind_factor->data[i * M * N + j * N + k];
+        data[i * M * N + j * N + k] -= unblind_factor->data[i * N + k];
       }
     }
   }
@@ -214,13 +214,12 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
 
 int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
-  struct LinearParamWS8BS8* linear_param =
-      linear_param_wb8bs8_list[linear_param_id];
+  struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
   float alpha = linear_param->alpha;
 
   float beta = linear_param->beta;
-  struct TensorInt8* bias = linear_param->bias;
+  struct TensorInt8* bias = linear_param->bias_int8;
 
   int B = src_tensor->B;
   int M = src_tensor->M;
@@ -247,13 +246,12 @@ int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
 
 int Ex_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
-  struct LinearParamWS8BFP32* linear_param =
-      linear_param_ws8bfp32_list[linear_param_id];
+  struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
   float alpha = linear_param->alpha;
 
   float beta = linear_param->beta;
-  struct TensorFloat* bias = linear_param->bias;
+  struct TensorFloat* bias = linear_param->bias_float;
 
   int B = src_tensor->B;
   int M = src_tensor->M;
