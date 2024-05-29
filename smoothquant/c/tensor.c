@@ -1,4 +1,5 @@
 #include "tensor.h"
+
 #include <stdlib.h>
 
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
@@ -52,7 +53,8 @@ struct TensorFloat* CreateTensorFloat(int B, int M, int N) {
   return tensor;
 }
 
-struct TensorFloat* CreateTensorFloatFromData(float* data, int B, int M, int N) {
+struct TensorFloat* CreateTensorFloatFromData(float* data, int B, int M,
+                                              int N) {
   struct TensorFloat* tensor = CreateTensorFloat(B, M, N);
   for (int i = 0; i < B * M * N; i++) {
     tensor->data[i] = data[i];
@@ -89,7 +91,8 @@ void DeleteTensorInt8(struct TensorInt8* tensor) {
   free(tensor);
 }
 
-struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X, struct TensorInt32* Y) {
+struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X,
+                                    struct TensorInt32* Y) {
   int B = X->B;
   int M = X->M;
   int K = X->N;
@@ -101,7 +104,8 @@ struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X, struct TensorInt32* Y
       for (int n = 0; n < N; n++) {
         int sum = 0;
         for (int k = 0; k < K; k++) {
-          sum += X->data[b * M * K + m * K + k] * Y->data[b * K * N + k * N + n];
+          sum +=
+              X->data[b * M * K + m * K + k] * Y->data[b * K * N + k * N + n];
         }
         Z->data[b * M * N + m * N + n] = sum;
       }
@@ -110,7 +114,8 @@ struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X, struct TensorInt32* Y
   return Z;
 }
 
-struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X, struct TensorInt8* Y) {
+struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X,
+                                   struct TensorInt8* Y) {
   int B = X->B;
   int M = X->M;
   int K = X->N;
@@ -122,11 +127,29 @@ struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X, struct TensorInt8* Y) 
       for (int n = 0; n < N; n++) {
         int sum = 0;
         for (int k = 0; k < K; k++) {
-          sum += X->data[b * M * K + m * K + k] * (int)Y->data[b * K * N + k * N + n];
+          sum += X->data[b * M * K + m * K + k] *
+                 (int)Y->data[b * K * N + k * N + n];
         }
         Z->data[b * M * N + m * N + n] = sum;
       }
     }
   }
   return Z;
+}
+
+struct TensorInt32* TransposeLastTwoDimsInt32(struct TensorInt32* X) {
+  int B = X->B;
+  int M = X->M;
+  int N = X->N;
+
+  struct TensorInt32* Y = CreateTensorInt32(B, N, M);
+  // transpose last two dimension for example (B, M, N) -> (B, N, M)
+  for (int b = 0; b < B; b++) {
+    for (int m = 0; m < M; m++) {
+      for (int n = 0; n < N; n++) {
+        Y->data[b * N * M + n * M + m] = X->data[b * M * N + m * N + n];
+      }
+    }
+  }
+  return Y;
 }

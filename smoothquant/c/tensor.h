@@ -48,7 +48,10 @@ struct TensorInt8* CreateTensorInt8(int B, int M, int N);
 struct TensorInt8* CreateTensorInt8FromData(char* data, int B, int M, int N);
 void DeleteTensorInt8(struct TensorInt8* tensor);
 
-struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X, struct TensorInt32* Y);
+struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X,
+                                    struct TensorInt32* Y);
 struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X, struct TensorInt8* Y);
+
+struct TensorInt32* TransposeLastTwoDimsInt32(struct TensorInt32* X);
 
 #endif

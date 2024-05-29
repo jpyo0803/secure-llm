@@ -80,6 +80,25 @@ class LayerStructC:
                                                           blind_factor_id, linear_param_id)
 
     @classmethod
+    def Get_Encrypted_Tensor_Opr2_Int32(cls, src_id1, src_id2):
+        B, M, K = cls.Get_Tensor_Dim_Int32(src_id1)
+        _, N, K = cls.Get_Tensor_Dim_Int32(src_id2)
+
+        enc_x = torch.empty((B, M, K), dtype=torch.int32)
+        enc_y = torch.empty((B, K, N), dtype=torch.int32)  # transpose
+
+        unblind_factor_id = cls.lib.Ex_Get_Encrypted_Tensor_Opr2_Int32(src_id1, src_id2, cast(
+            enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)))
+        return enc_x, enc_y, unblind_factor_id
+
+    @classmethod
+    def Set_Decrypted_Tensor_Opr2_Int32(cls, src, unblind_factor_id):
+        return cls.lib.Ex_Set_Decrypted_Tensor_Opr2_Int32(cast(src.data_ptr(), POINTER(c_int32)),
+                                                          src.size(0), src.size(
+                                                              1), src.size(2),
+                                                          unblind_factor_id)
+
+    @classmethod
     def Compute_Epilogue_WS8BS8(cls, src_id, linear_param_id):
         return cls.lib.Ex_Compute_Epilogue_WS8BS8(src_id, linear_param_id)
 

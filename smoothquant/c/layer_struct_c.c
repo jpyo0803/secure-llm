@@ -212,6 +212,88 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
   return Ex_Set_Tensor_Int32(data, B, M, N);
 }
 
+int Ex_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
+                                       int* out2) {
+  struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+  struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+  int B = X->B;
+  int M = X->M;
+  int K = X->N;
+  int N = Y->M;
+
+  struct TensorInt32* Y_trans = TransposeLastTwoDimsInt32(Y);  // B x K x N
+
+  struct TensorInt32* u = CreateTensorInt32(B, 1, K);  // temporary
+  GetCPRNG((unsigned char*)u->data, u->num_bytes);
+
+  struct TensorInt32* v = CreateTensorInt32(B, K, 1);  // temporary
+  GetCPRNG((unsigned char*)v->data, v->num_bytes);
+
+  // Encrypt X
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < K; ++k) {
+        out1[i * M * K + j * K + k] =
+            X->data[i * M * K + j * K + k] + u->data[i * K + k];
+      }
+    }
+  }
+
+  // Encrypt Y^T
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < K; ++j) {
+      for (int k = 0; k < N; ++k) {
+        out2[i * K * N + j * N + k] =
+            Y_trans->data[i * K * N + j * N + k] + v->data[i * K + j];
+      }
+    }
+  }
+
+  struct TensorInt32* xv = MatmulS32S32S32(X, v);  // B x M x 1
+  struct TensorInt32* uy = MatmulS32S32S32(u, Y_trans);
+  struct TensorInt32* uv = MatmulS32S32S32(u, v);
+
+  struct TensorInt32* unblind_factor = CreateTensorInt32(B, M, N);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        unblind_factor->data[i * M * N + j * N + k] =
+            xv->data[i * M + j] + uy->data[i * N + k] + uv->data[i];
+      }
+    }
+  }
+
+  // Cleanup
+  DeleteTensorInt32(u);
+  DeleteTensorInt32(v);
+  DeleteTensorInt32(xv);
+  DeleteTensorInt32(uy);
+  DeleteTensorInt32(uv);
+  DeleteTensorInt32(Y_trans);
+
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = unblind_factor;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
+                                       int unblind_factor_id) {
+  struct TensorInt32* unblind_factor = tensor_int32_list[unblind_factor_id];
+
+  struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+
+  for (int i = 0; i < B * M * N; i++) {
+    tensor->data[i] = data[i] - unblind_factor->data[i];
+  }
+
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = tensor;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
 int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
