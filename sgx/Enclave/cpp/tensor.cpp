@@ -1,6 +1,7 @@
 #include "tensor.h"
 
 #include <stdlib.h>
+#include <immintrin.h>
 
 extern "C" {
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
@@ -16,7 +17,16 @@ struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
 
 struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
-  for (int i = 0; i < B * M * N; i++) {
+  int total_elements = B * M * N;
+
+  int i;
+  for (i = 0; i <= total_elements - 8; i += 8) {
+    __m256i vec = _mm256_loadu_si256((__m256i*)&data[i]);
+    _mm256_storeu_si256((__m256i*)&tensor->data[i], vec);
+  }
+
+  // Handle remaining elements
+  for (; i < total_elements; i++) {
     tensor->data[i] = data[i];
   }
   return tensor;
@@ -57,9 +67,20 @@ struct TensorFloat* CreateTensorFloat(int B, int M, int N) {
 struct TensorFloat* CreateTensorFloatFromData(float* data, int B, int M,
                                               int N) {
   struct TensorFloat* tensor = CreateTensorFloat(B, M, N);
-  for (int i = 0; i < B * M * N; i++) {
+
+  int total_elements = B * M * N;
+
+  int i;
+  for (i = 0; i <= total_elements - 8; i += 8) {
+    __m256 vec = _mm256_loadu_ps(&data[i]);
+    _mm256_storeu_ps(&tensor->data[i], vec);
+  }
+
+  // Handle remaining elements
+  for (; i < total_elements; i++) {
     tensor->data[i] = data[i];
   }
+
   return tensor;
 }
 
@@ -81,9 +102,20 @@ struct TensorInt8* CreateTensorInt8(int B, int M, int N) {
 
 struct TensorInt8* CreateTensorInt8FromData(char* data, int B, int M, int N) {
   struct TensorInt8* tensor = CreateTensorInt8(B, M, N);
-  for (int i = 0; i < B * M * N; i++) {
+
+  int total_elements = B * M * N;
+
+  int i;
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    __m128i vec = _mm_loadu_si128((__m128i*)&data[i]);
+    _mm_storeu_si128((__m128i*)&tensor->data[i], vec);
+  }
+
+  // Handle remaining elements
+  for (; i < total_elements; i++) {
     tensor->data[i] = data[i];
   }
+  
   return tensor;
 }
 
@@ -103,15 +135,43 @@ struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X,
   for (int b = 0; b < B; b++) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        int sum = 0;
-        for (int k = 0; k < K; k++) {
-          sum +=
-              X->data[b * M * K + m * K + k] * Y->data[b * K * N + k * N + n];
+        __m256i sum_vec = _mm256_setzero_si256();  // Initialize sum vector
+        int sum = 0;  // Scalar sum for remaining elements
+
+        int k;
+        for (k = 0; k <= K - 8; k += 8) {
+          __m256i x_vec = _mm256_loadu_si256((__m256i*)&X->data[b * M * K + m * K + k]);
+          __m256i y_vec = _mm256_set_epi32(
+            Y->data[b * K * N + (k + 7) * N + n],
+            Y->data[b * K * N + (k + 6) * N + n],
+            Y->data[b * K * N + (k + 5) * N + n],
+            Y->data[b * K * N + (k + 4) * N + n],
+            Y->data[b * K * N + (k + 3) * N + n],
+            Y->data[b * K * N + (k + 2) * N + n],
+            Y->data[b * K * N + (k + 1) * N + n],
+            Y->data[b * K * N + k * N + n]
+          );
+          __m256i prod_vec = _mm256_mullo_epi32(x_vec, y_vec);
+          sum_vec = _mm256_add_epi32(sum_vec, prod_vec);
         }
+
+        // Horizontal sum of the vector elements
+        int temp[8];
+        _mm256_storeu_si256((__m256i*)temp, sum_vec);
+        for (int i = 0; i < 8; i++) {
+          sum += temp[i];
+        }
+
+        // Handle remaining elements
+        for (; k < K; k++) {
+          sum += X->data[b * M * K + m * K + k] * Y->data[b * K * N + k * N + n];
+        }
+
         Z->data[b * M * N + m * N + n] = sum;
       }
     }
   }
+
   return Z;
 }
 
@@ -123,14 +183,41 @@ struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X,
   int N = Y->N;
 
   struct TensorInt32* Z = CreateTensorInt32(B, M, N);
-  for (int b = 0; b < B; b++) {
+   for (int b = 0; b < B; b++) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        int sum = 0;
-        for (int k = 0; k < K; k++) {
-          sum += X->data[b * M * K + m * K + k] *
-                 (int)Y->data[b * K * N + k * N + n];
+        __m256i sum_vec = _mm256_setzero_si256();  // Initialize sum vector
+        int sum = 0;  // Scalar sum for remaining elements
+
+        int k;
+        for (k = 0; k <= K - 8; k += 8) {
+          __m256i x_vec = _mm256_loadu_si256((__m256i*)&X->data[b * M * K + m * K + k]);
+          __m256i y_vec = _mm256_set_epi32(
+            (int)Y->data[b * K * N + (k + 7) * N + n],
+            (int)Y->data[b * K * N + (k + 6) * N + n],
+            (int)Y->data[b * K * N + (k + 5) * N + n],
+            (int)Y->data[b * K * N + (k + 4) * N + n],
+            (int)Y->data[b * K * N + (k + 3) * N + n],
+            (int)Y->data[b * K * N + (k + 2) * N + n],
+            (int)Y->data[b * K * N + (k + 1) * N + n],
+            (int)Y->data[b * K * N + k * N + n]
+          );
+          __m256i prod_vec = _mm256_mullo_epi32(x_vec, y_vec);
+          sum_vec = _mm256_add_epi32(sum_vec, prod_vec);
         }
+
+        // Horizontal sum of the vector elements
+        int temp[8];
+        _mm256_storeu_si256((__m256i*)temp, sum_vec);
+        for (int i = 0; i < 8; i++) {
+          sum += temp[i];
+        }
+
+        // Handle remaining elements
+        for (; k < K; k++) {
+          sum += X->data[b * M * K + m * K + k] * (int)Y->data[b * K * N + k * N + n];
+        }
+
         Z->data[b * M * N + m * N + n] = sum;
       }
     }
