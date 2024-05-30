@@ -33,7 +33,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 '''
 
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode6
 
 start_gpu = True if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode2 else False
 

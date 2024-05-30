@@ -25,6 +25,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             self.bmm_id = lsc.Set_Bmm_Param(torch_int_nn_bmm)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.bmm_id = lsc.Set_Bmm_Param(torch_int_nn_bmm)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+            self.bmm_id = lsc.Set_Bmm_Param(torch_int_nn_bmm)
 
     def __run(self, x, y):
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
@@ -44,6 +46,11 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
 
             y = y.transpose(-1, -2).contiguous() # make it transposed inside
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
+            x = lsc.Cast_From_Int8_To_Int32(x)
+            y = lsc.Cast_From_Int8_To_Int32(y)
+            x, y, unblind_factor_id = lsc.Get_Encrypted_Tensor_Opr2_Int32(x, y)
+            # y is transposed inside
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             x = lsc.Cast_From_Int8_To_Int32(x)
             y = lsc.Cast_From_Int8_To_Int32(y)
             x, y, unblind_factor_id = lsc.Get_Encrypted_Tensor_Opr2_Int32(x, y)
@@ -69,6 +76,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             z = lsc.Set_Decrypted_Tensor_Opr2_Int32(z, unblind_factor_id)
             z = lsc.Compute_Epilogue_BMM(z, self.bmm_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+            z = lsc.Set_Decrypted_Tensor_Opr2_Int32(z, unblind_factor_id)
+            z = lsc.Compute_Epilogue_BMM(z, self.bmm_id)
 
         return z
 
@@ -92,6 +102,8 @@ class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             return lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
+            return lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             return lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
 
     def __call__(self, x, y):
