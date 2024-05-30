@@ -25,12 +25,15 @@ from ctypes import *
 import time
 
 import smoothquant.layer_struct_c as lsc
+import sgx.sgx_layer_struct as sgx_lsc
 
 import singleton_timer as st
 
 timer = st.SingletonTimer()
 
 lsc = lsc.LayerStructC()
+
+sgx_lsc = sgx_lsc.SgxLayerStructC()
 
 
 class ExecMode(Enum):
