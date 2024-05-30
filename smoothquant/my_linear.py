@@ -9,6 +9,9 @@ import smoothquant.layer_struct_c as lsc
 
 lsc = lsc.LayerStructC()
 
+import sgx.sgx_layer_struct as sgx_lsc
+sgx_lsc = sgx_lsc.SgxLayerStructC()
+
 
 class Linear_S8W_S8A_S8B_FP32O_Mixed:
     # Only perform matmul in GPU with cupy
@@ -52,7 +55,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
             # weight 2D
             # bias 1D
-            self.linear_layer_id = lsc.Set_Linear_Param_WS8BS8(
+            self.linear_layer_id = sgx_lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
         else:
             assert False
@@ -70,8 +73,8 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             x = lsc.Cast_From_Int8_To_Int32(x)
             x, blind_factor_id = lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            x = lsc.Cast_From_Int8_To_Int32(x)
-            x, blind_factor_id = lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+            x = sgx_lsc.Cast_From_Int8_To_Int32(x)
+            x, blind_factor_id = sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
         else:
             assert False
 
@@ -96,9 +99,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
                 y, blind_factor_id, self.linear_layer_id)
             y = lsc.Compute_Epilogue_WS8BS8(y, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            y = lsc.Set_Decrypted_Tensor_Opr1_Int32(
+            y = sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
                 y, blind_factor_id, self.linear_layer_id)
-            y = lsc.Compute_Epilogue_WS8BS8(y, self.linear_layer_id)
+            y = sgx_lsc.Compute_Epilogue_WS8BS8(y, self.linear_layer_id)
         else:
             assert False
 
@@ -126,7 +129,7 @@ class Linear_S8W_S8A_S8B_S8O_Mixed(Linear_S8W_S8A_S8B_FP32O_Mixed):
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             return lsc.Cast_From_Float_To_Int8(super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x))
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            return lsc.Cast_From_Float_To_Int8(super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x))
+            return sgx_lsc.Cast_From_Float_To_Int8(super()._Linear_S8W_S8A_S8B_FP32O_Mixed__run(x))
 
     def __call__(self, x):
         start_time = time.perf_counter_ns()
@@ -166,7 +169,7 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
-            self.linear_layer_id = lsc.Set_Linear_Param_WS8BFP32(
+            self.linear_layer_id = sgx_lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
 
     def __run(self, x):
@@ -182,8 +185,8 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
             x = lsc.Cast_From_Int8_To_Int32(x)
             x, blind_factor_id = lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            x = lsc.Cast_From_Int8_To_Int32(x)
-            x, blind_factor_id = lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+            x = sgx_lsc.Cast_From_Int8_To_Int32(x)
+            x, blind_factor_id = sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
 
         # Main computation
         x = x.to(torch.device('cuda:0'))
@@ -206,9 +209,9 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
                 y, blind_factor_id, self.linear_layer_id)
             y = lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            y = lsc.Set_Decrypted_Tensor_Opr1_Int32(
+            y = sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
                 y, blind_factor_id, self.linear_layer_id)
-            y = lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
+            y = sgx_lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
         return y
 
     def __call__(self, x):

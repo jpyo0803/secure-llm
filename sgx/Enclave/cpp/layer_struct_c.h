@@ -3,7 +3,7 @@
 
 #include <assert.h>
 #include <math.h>
-#include <omp.h>
+// #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 

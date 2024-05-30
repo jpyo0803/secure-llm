@@ -30,23 +30,24 @@ project(layer_cpp)
 
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(OpenMP REQUIRED)
+# find_package(OpenMP REQUIRED)
 
 include_directories(./cpp)
 
 file(GLOB SOURCES "c/*.c")
 add_library(cipher_cpp SHARED ${SOURCES})
 
-# Add OpenMP flags if found
-if (OpenMP_C_FOUND)
-    target_compile_options(cipher_cpp PRIVATE ${OpenMP_C_FLAGS})
-    target_link_libraries(cipher_cpp PUBLIC OpenMP::OpenMP_C)
-endif()
+# # Add OpenMP flags if found
+# if (OpenMP_C_FOUND)
+#     target_compile_options(cipher_cpp PRIVATE ${OpenMP_C_FLAGS})
+#     target_link_libraries(cipher_cpp PUBLIC OpenMP::OpenMP_C)
+# endif()
 
-if (OpenMP_CXX_FOUND)
-    target_compile_options(cipher_cpp PRIVATE ${OpenMP_CXX_FLAGS})
-    target_link_libraries(cipher_cpp PUBLIC OpenMP::OpenMP_CXX)
-endif()
+# if (OpenMP_CXX_FOUND)
+#     target_compile_options(cipher_cpp PRIVATE ${OpenMP_CXX_FLAGS})
+#     target_link_libraries(cipher_cpp PUBLIC OpenMP::OpenMP_CXX)
+# endif()
 
 # Additional compiler options
-target_compile_options(cipher_cpp PRIVATE -maes -fopenmp -march=native)
+# target_compile_options(cipher_cpp PRIVATE -maes -fopenmp -march=native)
+target_compile_options(cipher_cpp PRIVATE -maes -march=native)

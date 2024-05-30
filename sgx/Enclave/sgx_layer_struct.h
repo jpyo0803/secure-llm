@@ -4,7 +4,7 @@
 
 #include <assert.h>
 #include <math.h>
-#include <omp.h>
+// #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -67,6 +67,8 @@ int Sgx_Cast_From_Int8_To_Int32(int src_id);
 int Sgx_Set_Bmm_Param(float alpha);
 
 int Sgx_Residual_Add(int residual, int hidden_states);
+
+
 
 }
 

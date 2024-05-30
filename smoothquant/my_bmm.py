@@ -9,6 +9,9 @@ import smoothquant.opt
 
 lsc = lsc.LayerStructC()
 
+import sgx.sgx_layer_struct as sgx_lsc
+sgx_lsc = sgx_lsc.SgxLayerStructC()
+
 CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
 cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
@@ -26,7 +29,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.bmm_id = lsc.Set_Bmm_Param(torch_int_nn_bmm)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            self.bmm_id = lsc.Set_Bmm_Param(torch_int_nn_bmm)
+            self.bmm_id = sgx_lsc.Set_Bmm_Param(torch_int_nn_bmm)
 
     def __run(self, x, y):
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
@@ -51,12 +54,14 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             x, y, unblind_factor_id = lsc.Get_Encrypted_Tensor_Opr2_Int32(x, y)
             # y is transposed inside
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            x = lsc.Cast_From_Int8_To_Int32(x)
-            y = lsc.Cast_From_Int8_To_Int32(y)
-            x, y, unblind_factor_id = lsc.Get_Encrypted_Tensor_Opr2_Int32(x, y)
+            x = sgx_lsc.Cast_From_Int8_To_Int32(x)
+            y = sgx_lsc.Cast_From_Int8_To_Int32(y)
+            x, y, unblind_factor_id = sgx_lsc.Get_Encrypted_Tensor_Opr2_Int32(x, y)
             # y is transposed inside
 
         # Main computation
+
+        
         x = x.to(torch.device('cuda:0'))
         y = y.to(torch.device('cuda:0'))
         x = cupy.from_dlpack(x)
@@ -77,8 +82,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             z = lsc.Set_Decrypted_Tensor_Opr2_Int32(z, unblind_factor_id)
             z = lsc.Compute_Epilogue_BMM(z, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            z = lsc.Set_Decrypted_Tensor_Opr2_Int32(z, unblind_factor_id)
-            z = lsc.Compute_Epilogue_BMM(z, self.bmm_id)
+            z = sgx_lsc.Set_Decrypted_Tensor_Opr2_Int32(z, unblind_factor_id)
+            z = sgx_lsc.Compute_Epilogue_BMM(z, self.bmm_id)
 
         return z
 
@@ -104,7 +109,7 @@ class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             return lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            return lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
+            return sgx_lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
 
     def __call__(self, x, y):
         start_time = time.perf_counter_ns()

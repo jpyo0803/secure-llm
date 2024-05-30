@@ -668,8 +668,8 @@ void ecall_Sgx_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps,
   *ret_id = Sgx_Set_Layer_Norm_Param(gamma,beta,N,eps);
 }
 
-void ecall_Sgx_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
-  Sgx_Layer_Norm_Q(src_id,layer_norm_param_id);
+void ecall_Sgx_Layer_Norm_Q(int src_id, int layer_norm_param_id, int* ret_id) {
+  *ret_id = Sgx_Layer_Norm_Q(src_id,layer_norm_param_id);
 }
 
 void ecall_Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N, float alpha, float beta, int* ret_id) {

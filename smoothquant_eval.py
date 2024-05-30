@@ -9,6 +9,13 @@ import gc
 from torch.nn.functional import pad
 
 import singleton_timer as st
+import accuracy_measure_tools as amt
+
+import sgx.sgx_layer_struct as sgx_lsc
+
+sgx_lsc = sgx_lsc.SgxLayerStructC()
+
+amt.set_clock_speed()
 
 timer = st.SingletonTimer()
 
@@ -33,7 +40,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 '''
 
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode6
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
 
 start_gpu = True if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode2 else False
 
@@ -120,5 +127,8 @@ acc_smoothquant, lantecy_smoothquant = evaluator.evaluate(model_smoothquant)
 print(
     f'SmoothQuant INT8 accuracy: {acc_smoothquant}, per-sample lantecy: {lantecy_smoothquant:.3f}ms')
 
+amt.reset_clock_speed()
 
 timer.display_summary()
+
+sgx_lsc.Destroy()
