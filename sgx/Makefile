@@ -49,7 +49,7 @@ App_CC_Files :=
 App_Cpp_Files := App/enclave_bridge.cpp
 App_Include_Paths := -IApp -I$(SGX_SDK)/include -I$(TF_INC) -I$(TF_INC)/external/nsync/public
 
-App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths) -fopenmp
+App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths) -fopenmp 
 
 # Three configuration modes - Debug, prerelease, release
 #   Debug - Macro DEBUG enabled.
@@ -87,10 +87,12 @@ else
 endif
 Crypto_Library_Name := sgx_tcrypto
 
-Enclave_Cpp_Files := Enclave/Enclave.cpp Enclave/sgx_layer_struct.cpp Enclave/c/*.c
+My_Cpp_Files := Enclave/cpp/aes_stream.cpp Enclave/cpp/tensor.cpp 
+
+Enclave_Cpp_Files := Enclave/Enclave.cpp Enclave/sgx_layer_struct.cpp $(My_Cpp_Files)
 # SGXDNN_Cpp_Files := sgxdnn_main.cpp json11.cpp Crypto.cpp sgxaes.cpp aes-stream.cpp
 #SGXDNN_Cpp_Files += aesni_ghash.cpp aesni_key.cpp  aesni-wrap.cpp
-Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx
+Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx -IEnclave/cpp -I/usr/lib/gcc/x86_64-linux-gnu/11/include
 # Enclave_Include_Paths += -IInclude -IInclude/eigen3_sgx -I/usr/lib/gcc/x86_64-linux-gnu/5.4.0/include 
 
 CC_BELOW_4_9 := $(shell expr "`$(CC) -dumpversion`" \< "4.9")
@@ -119,7 +121,7 @@ Enclave_Link_Flags := $(SGX_COMMON_CFLAGS) -Wl,--no-undefined -nostdlib -nodefau
 	-Wl,--defsym,__ImageBase=0 -Wl,--gc-sections   \
 	-Wl,--version-script=Enclave/Enclave.lds
 
-Enclave_Cpp_Objects := $(Enclave_Cpp_Files:.cpp=.o)
+Enclave_Cpp_Objects := $(Enclave_Cpp_Files:.cpp=.o) 
 # SGXDNN_Cpp_Objects := $(SGXDNN_Cpp_Files:%.cpp=SGXDNN/bin_sgx/%.o)
 
 Enclave_Name := enclave.so
@@ -235,4 +237,5 @@ $(Signed_Enclave_Name): $(Enclave_Name)
 
 clean:
 	rm -f .config_* $(Enclave_Name) $(Signed_Enclave_Name) $(App_Cpp_Objects) $(App_CC_Objects) App/Enclave_u.* 
-	rm -f $(Enclave_Cpp_Objects) $(SGXDNN_Cpp_Objects) Enclave/Enclave_t.* SGXDNN/bin_sgx/*.o
+	#echo $(Enclave_Cpp_Objects)
+	rm -f $(Enclave_Cpp_Objects) Enclave/Enclave_t.*

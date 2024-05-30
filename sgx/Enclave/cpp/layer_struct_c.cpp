@@ -1,14 +1,9 @@
 #include "layer_struct_c.h"
 
-#include <assert.h>
-#include <math.h>
-#include <omp.h>
-#include <stdio.h>
-#include <stdlib.h>
 
-#include "aes_stream.h"
 
-int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
+extern "C" {
+int Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[curr_id]);
@@ -20,7 +15,7 @@ int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   return curr_id;
 }
 
-int Ex_Copy_Hidden_States(int src_id) {
+int Sgx_Copy_Hidden_States(int src_id) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[curr_id]);
@@ -38,7 +33,7 @@ int Ex_Copy_Hidden_States(int src_id) {
   return curr_id;
 }
 
-int Ex_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
+int Sgx_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
   int curr_id = layer_norm_param_id;
 
   struct LayerNormParam* layer_norm_param =
@@ -52,7 +47,7 @@ int Ex_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
   return curr_id;
 }
 
-int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
+int Sgx_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
   int curr_id = tensor_int8_id;
 
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
@@ -106,7 +101,7 @@ int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
   return curr_id;
 }
 
-int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
+int Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
                                float alpha, float beta) {
   int curr_id = linear_param_id;
 
@@ -124,7 +119,7 @@ int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
   return curr_id;
 }
 
-int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
+int Sgx_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
                                  float alpha) {
   int curr_id = linear_param_id;
 
@@ -142,14 +137,14 @@ int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
   return curr_id;
 }
 
-void Ex_Get_Tensor_Dim_Int32(int src_id, int* dim) {
+void Sgx_Get_Tensor_Dim_Int32(int src_id, int* dim) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   dim[0] = src_tensor->B;
   dim[1] = src_tensor->M;
   dim[2] = src_tensor->N;
 }
 
-void Ex_Get_Tensor_Int32(int src_id, int* out) {
+void Sgx_Get_Tensor_Int32(int src_id, int* out) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   // #pragma omp parallel for simd
   for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
@@ -158,8 +153,8 @@ void Ex_Get_Tensor_Int32(int src_id, int* out) {
 }
 
 // Need to return blind factor id
-int Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
-  Ex_Get_Tensor_Int32(src_id, out);
+int Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
+  Sgx_Get_Tensor_Int32(src_id, out);
 
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
 
@@ -187,7 +182,7 @@ int Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
   return curr_id;
 }
 
-int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
+int Sgx_Set_Tensor_Int32(int* data, int B, int M, int N) {
   int curr_id = tensor_int32_id;
   if (tensor_int32_list[curr_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[curr_id]);
@@ -198,7 +193,7 @@ int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
   return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
+int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
                                        int blind_factor_id,
                                        int linear_param_id) {
   // Compute Unblinding factor
@@ -218,10 +213,10 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
     }
   }
 
-  return Ex_Set_Tensor_Int32(data, B, M, N);
+  return Sgx_Set_Tensor_Int32(data, B, M, N);
 }
 
-int Ex_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
+int Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
                                        int* out2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
@@ -293,7 +288,7 @@ int Ex_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
   return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
+int Sgx_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
                                        int unblind_factor_id) {
   struct TensorInt32* unblind_factor = tensor_int32_list[unblind_factor_id];
 
@@ -310,7 +305,7 @@ int Ex_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
   return curr_id;
 }
 
-int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
+int Sgx_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
@@ -343,7 +338,7 @@ int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
   return curr_id;
 }
 
-int Ex_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
+int Sgx_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
@@ -376,7 +371,7 @@ int Ex_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
   return curr_id;
 }
 
-int Ex_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
+int Sgx_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   float alpha = bmm_param_list[bmm_param_id];
 
@@ -397,7 +392,7 @@ int Ex_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
   return curr_id;
 }
 
-int Ex_ReLU(int src_id) {
+int Sgx_ReLU(int src_id) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
   int B = src_tensor->B;
@@ -425,7 +420,7 @@ int Ex_ReLU(int src_id) {
   return curr_id;
 }
 
-int Ex_Softmax(int src_id) {
+int Sgx_Softmax(int src_id) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
   int B = src_tensor->B;
@@ -466,7 +461,7 @@ int Ex_Softmax(int src_id) {
   return curr_id;
 }
 
-int Ex_Quantize_Post_Softmax(int src_id) {
+int Sgx_Quantize_Post_Softmax(int src_id) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
   int B = src_tensor->B;
@@ -491,7 +486,7 @@ int Ex_Quantize_Post_Softmax(int src_id) {
   tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
-int Ex_Cast_From_Float_To_Int8(int src_id) {
+int Sgx_Cast_From_Float_To_Int8(int src_id) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
   int B = src_tensor->B;
@@ -517,7 +512,7 @@ int Ex_Cast_From_Float_To_Int8(int src_id) {
   return curr_id;
 }
 
-int Ex_Cast_From_Float_To_Int32(int src_id) {
+int Sgx_Cast_From_Float_To_Int32(int src_id) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
   int B = src_tensor->B;
@@ -543,7 +538,7 @@ int Ex_Cast_From_Float_To_Int32(int src_id) {
   return curr_id;
 }
 
-int Ex_Cast_From_Int8_To_Int32(int src_id) {
+int Sgx_Cast_From_Int8_To_Int32(int src_id) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
 
   int B = src_tensor->B;
@@ -569,14 +564,14 @@ int Ex_Cast_From_Int8_To_Int32(int src_id) {
   return curr_id;
 }
 
-void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim) {
+void Sgx_Get_Tensor_Dim_Int8(int src_id, int* dim) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
   dim[0] = src_tensor->B;
   dim[1] = src_tensor->M;
   dim[2] = src_tensor->N;
 }
 
-void Ex_Get_Tensor_Int8(int src_id, char* out) {
+void Sgx_Get_Tensor_Int8(int src_id, char* out) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
 
   // #pragma omp parallel for simd
@@ -585,7 +580,7 @@ void Ex_Get_Tensor_Int8(int src_id, char* out) {
   }
 }
 
-int Ex_Set_Tensor_Int8(char* data, int B, int M, int N) {
+int Sgx_Set_Tensor_Int8(char* data, int B, int M, int N) {
   int curr_id = tensor_int8_id;
   if (tensor_int8_list[curr_id] != NULL) {
     DeleteTensorInt8(tensor_int8_list[curr_id]);
@@ -596,14 +591,14 @@ int Ex_Set_Tensor_Int8(char* data, int B, int M, int N) {
   return curr_id;
 }
 
-void Ex_Get_Tensor_Dim_Float(int src_id, int* dim) {
+void Sgx_Get_Tensor_Dim_Float(int src_id, int* dim) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
   dim[0] = src_tensor->B;
   dim[1] = src_tensor->M;
   dim[2] = src_tensor->N;
 }
 
-void Ex_Get_Tensor_Float(int src_id, float* out) {
+void Sgx_Get_Tensor_Float(int src_id, float* out) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
   // #pragma omp parallel for simd
@@ -612,7 +607,7 @@ void Ex_Get_Tensor_Float(int src_id, float* out) {
   }
 }
 
-int Ex_Set_Tensor_Float(float* data, int B, int M, int N) {
+int Sgx_Set_Tensor_Float(float* data, int B, int M, int N) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[curr_id]);
@@ -623,14 +618,14 @@ int Ex_Set_Tensor_Float(float* data, int B, int M, int N) {
   return curr_id;
 }
 
-int Ex_Set_Bmm_Param(float alpha) {
+int Sgx_Set_Bmm_Param(float alpha) {
   int curr_id = bmm_param_id;
   bmm_param_list[curr_id] = alpha;
   bmm_param_id = (bmm_param_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
 
-int Ex_Residual_Add(int residual, int hidden_states) {
+int Sgx_Residual_Add(int residual, int hidden_states) {
   struct TensorFloat* residual_tensor = tensor_float_list[residual];
   struct TensorFloat* hidden_states_tensor = tensor_float_list[hidden_states];
 
@@ -656,4 +651,5 @@ int Ex_Residual_Add(int residual, int hidden_states) {
   tensor_float_list[curr_id] = dst_tensor;
   tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
+}
 }
