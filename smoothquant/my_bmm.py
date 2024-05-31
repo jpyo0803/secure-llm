@@ -88,6 +88,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             assert False
         timer.end(t)
 
+        t = timer.start(tag=f'{self.module_name}, Generate Decryption Key ({state})', category=f'{self.module_name}, Generate Decryption Key ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
@@ -98,6 +99,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_Opr2_Int32(x_copy, y_copy, blind_factor_u_id, blind_factor_v_id)
         else:
             assert False
+        timer.end(t)
 
         # Main computation
 
