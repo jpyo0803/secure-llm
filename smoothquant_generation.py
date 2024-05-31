@@ -15,8 +15,8 @@ timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
-model_size='1.3B'
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode6
+model_size='125m'
 
 '''
     NOTE(jpyo0803): Set execution mode
@@ -75,7 +75,7 @@ prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: W
 model_inputs = tokenizer([prompt], return_tensors='pt').to(
     'cuda:0' if start_gpu else 'cpu')
 
-target_input_token_len = 128
+target_input_token_len = 1024
 
 pad_len = target_input_token_len - model_inputs['input_ids'].shape[1]
 
@@ -94,7 +94,7 @@ smoothquant.opt.is_prefill = True
 smoothquant.opt.time_stats.on()
 timer.enable()
 
-target_output_token_len = 256
+target_output_token_len = 2048
 start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
     **model_inputs, min_length=target_output_token_len, max_length=target_output_token_len, do_sample=False)
