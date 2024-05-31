@@ -103,19 +103,33 @@ struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X,
   int B = X->B;
   int M = X->M;
   int K = X->N;
-  int N = Y->N;
+  int N = Y->M;
 
   struct TensorInt32* Z = CreateTensorInt32(B, M, N);
-  #pragma omp parallel for collapse(3)
   for (int b = 0; b < B; b++) {
     for (int m = 0; m < M; m++) {
       for (int n = 0; n < N; n++) {
-        int sum = 0;
-        #pragma omp simd reduction(+:sum)
-        for (int k = 0; k < K; k++) {
-          sum +=
-              X->data[b * M * K + m * K + k] * Y->data[b * K * N + k * N + n];
+        __m512i sum_vec = _mm512_setzero_si512();
+        for (int k = 0; k < K; k += 16) {
+            // Load 16 int32 elements from X
+            __m512i x_vec = _mm512_loadu_si512(&X->data[b * M * K + m * K + k]);
+            
+            // Load 16 int32 elements from Y, treating it as if it were transposed
+            __m512i y_vec = _mm512_loadu_si512(&Y->data[b * N * K + n * K + k]);
+
+            // Multiply and accumulate
+            __m512i mul_vec = _mm512_mullo_epi32(x_vec, y_vec);
+            sum_vec = _mm512_add_epi32(sum_vec, mul_vec);
         }
+        
+        // Horizontally add the elements in sum_vec to get the final sum for this element
+        int temp[16];
+        _mm512_storeu_si512((__m512i*)temp, sum_vec);
+        int sum = 0;
+        for (int i = 0; i < 16; ++i) {
+            sum += temp[i];
+        }
+
         Z->data[b * M * N + m * N + n] = sum;
       }
     }
