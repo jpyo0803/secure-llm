@@ -13,7 +13,6 @@ import accuracy_measure_tools as amt
 
 import sgx.sgx_layer_struct as sgx_lsc
 
-sgx_lsc = sgx_lsc.SgxLayerStructC()
 
 amt.set_clock_speed()
 
@@ -131,4 +130,5 @@ amt.reset_clock_speed()
 
 timer.display_summary()
 
-sgx_lsc.Destroy()
+if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+    sgx_lsc.SgxLayerStructC().Destroy()

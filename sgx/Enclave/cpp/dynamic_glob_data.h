@@ -3,7 +3,7 @@
 
 #include "tensor.h"
 
-#define DYNAMIC_LIST_LEN 30
+#define DYNAMIC_LIST_LEN 100
 
 struct TensorFloat* tensor_float_list[DYNAMIC_LIST_LEN];
 int tensor_float_id = 0;
