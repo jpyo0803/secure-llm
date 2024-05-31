@@ -71,6 +71,10 @@ class SgxLayerStructC:
     return out
   
   @classmethod
+  def Set_Tensor_Int32(cls, src):
+    return cls.lib.Sgx_Set_Tensor_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2))
+  
+  @classmethod
   def Get_Encrypted_Tensor_Opr1_Int32(cls, src_id):
     B, M, N = cls.Get_Tensor_Dim_Int32(src_id)
     out = torch.empty((B, M, N), dtype=torch.int32)
@@ -78,12 +82,12 @@ class SgxLayerStructC:
     return out, blind_factor_id
   
   @classmethod
-  def Set_Tensor_Int32(cls, src):
-    return cls.lib.Sgx_Set_Tensor_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2))
-  
+  def Generate_Decryption_Key_Opr1_Int32(cls, blind_factor_id, linear_param_id):
+    return cls.lib.Sgx_Generate_Decryption_Key_Opr1_Int32(cls.eid[0],blind_factor_id, linear_param_id)
+
   @classmethod
-  def Set_Decrypted_Tensor_Opr1_Int32(cls, src, blind_factor_id, linear_param_id):
-    return cls.lib.Sgx_Set_Decrypted_Tensor_Opr1_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), blind_factor_id, linear_param_id)
+  def Set_Decrypted_Tensor_Opr1_Int32(cls, src, decryption_key_id):
+    return cls.lib.Sgx_Set_Decrypted_Tensor_Opr1_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), decryption_key_id)
   
   @classmethod
   def Get_Encrypted_Tensor_Opr2_Int32(cls, src_id1, src_id2):
@@ -91,14 +95,20 @@ class SgxLayerStructC:
     _, N, K = cls.Get_Tensor_Dim_Int32(src_id2)
 
     enc_x = torch.empty((B, M, K), dtype=torch.int32)
-    enc_y = torch.empty((B, K, N), dtype=torch.int32)
+    enc_y = torch.empty((B, N, K), dtype=torch.int32)
 
-    blind_factor_id = cls.lib.Sgx_Get_Encrypted_Tensor_Opr2_Int32(cls.eid[0],src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)))
-    return enc_x, enc_y, blind_factor_id
+    blind_factor_ids = torch.empty(2, dtype=torch.int32)
+
+    cls.lib.Sgx_Get_Encrypted_Tensor_Opr2_Int32(cls.eid[0],src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)), cast(blind_factor_ids.data_ptr(), POINTER(c_int32)))                                                           
+    return enc_x, enc_y, blind_factor_ids[0], blind_factor_ids[1]
   
   @classmethod
-  def Set_Decrypted_Tensor_Opr2_Int32(cls, src, blind_factor_id):
-    return cls.lib.Sgx_Set_Decrypted_Tensor_Opr2_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), blind_factor_id)
+  def Generate_Decryption_Key_Opr2_Int32(cls, src_id1, src_id2, blind_factor_u_id, blind_factor_v_id):
+    return cls.lib.Sgx_Generate_Decryption_Key_Opr2_Int32(cls.eid[0],src_id1, src_id2, c_int32(blind_factor_u_id), c_int32(blind_factor_v_id))
+
+  @classmethod
+  def Set_Decrypted_Tensor_Opr2_Int32(cls, src, decryption_key_id):
+    return cls.lib.Sgx_Set_Decrypted_Tensor_Opr2_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), decryption_key_id)
   
   @classmethod
   def Compute_Epilogue_WS8BS8(cls, src_id, linear_param_id):

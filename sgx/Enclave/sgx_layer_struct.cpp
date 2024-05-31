@@ -155,6 +155,17 @@ void Sgx_Get_Tensor_Int32(int src_id, int* out) {
   }
 }
 
+int Sgx_Set_Tensor_Int32(int* data, int B, int M, int N) {
+  int curr_id = tensor_int32_id;
+  if (tensor_int32_list[curr_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[curr_id]);
+  }
+
+  tensor_int32_list[curr_id] = CreateTensorInt32FromData(data, B, M, N);
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
 // Need to return blind factor id
 int Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
   Sgx_Get_Tensor_Int32(src_id, out);
@@ -185,33 +196,30 @@ int Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
   return curr_id;
 }
 
-int Sgx_Set_Tensor_Int32(int* data, int B, int M, int N) {
-  int curr_id = tensor_int32_id;
-  if (tensor_int32_list[curr_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[curr_id]);
-  }
+int Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
+                                         int linear_param_id) {
+  struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
+  struct TensorInt8* linear_weight = linear_param_list[linear_param_id]->weight;
 
-  tensor_int32_list[curr_id] = CreateTensorInt32FromData(data, B, M, N);
+  struct TensorInt32* decryption_key =
+      MatmulS32S8S32(blind_factor, linear_weight);
+
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = decryption_key;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
 
 int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
-                                       int blind_factor_id,
-                                       int linear_param_id) {
-  // Compute Unblinding factor
-  struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
-  struct TensorInt8* linear_weight = linear_param_list[linear_param_id]->weight;
-
-  struct TensorInt32* unblind_factor =
-      MatmulS32S8S32(blind_factor, linear_weight);
+                                       int decryption_key_id) {
+  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
   // #pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       // #pragma omp simd
       for (int k = 0; k < N; ++k) {
-        data[i * M * N + j * N + k] -= unblind_factor->data[i * N + k];
+        data[i * M * N + j * N + k] -= decryption_key->data[i * N + k];
       }
     }
   }
@@ -219,8 +227,8 @@ int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
   return Sgx_Set_Tensor_Int32(data, B, M, N);
 }
 
-int Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
-                                       int* out2) {
+void Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
+                                       int* out2, int* blind_factor_ids) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
@@ -229,19 +237,15 @@ int Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
   int K = X->N;
   int N = Y->M;
 
-  struct TensorInt32* Y_trans = TransposeLastTwoDimsInt32(Y);  // B x K x N
-
-  struct TensorInt32* u = CreateTensorInt32(B, 1, K);  // temporary
+  struct TensorInt32* u = CreateTensorInt32(B, 1, K);
   GetCPRNG((unsigned char*)u->data, u->num_bytes);
 
-  struct TensorInt32* v = CreateTensorInt32(B, K, 1);  // temporary
+  struct TensorInt32* v = CreateTensorInt32(B, 1, K);
   GetCPRNG((unsigned char*)v->data, v->num_bytes);
 
   // Encrypt X
-  // #pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
-      // #pragma omp simd
       for (int k = 0; k < K; ++k) {
         out1[i * M * K + j * K + k] =
             X->data[i * M * K + j * K + k] + u->data[i * K + k];
@@ -249,57 +253,78 @@ int Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
     }
   }
 
-  // Encrypt Y^T
-  // #pragma omp parallel for collapse(2)
+  // Encrypt Y
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < K; ++j) {
-      // #pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        out2[i * K * N + j * N + k] =
-            Y_trans->data[i * K * N + j * N + k] + v->data[i * K + j];
+    for (int j = 0; j < N; ++j) {
+      for (int k = 0; k < K; ++k) {
+        out2[i * N * K + j * K + k] =
+            Y->data[i * N * K + j * K + k] + v->data[i * K + k];
       }
     }
   }
 
-  struct TensorInt32* xv = MatmulS32S32S32(X, v);  // B x M x 1
-  struct TensorInt32* uy = MatmulS32S32S32(u, Y_trans);
-  struct TensorInt32* uv = MatmulS32S32S32(u, v);
+  blind_factor_ids[0] = tensor_int32_id;
+  tensor_int32_list[blind_factor_ids[0]] = u;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
 
-  struct TensorInt32* unblind_factor = CreateTensorInt32(B, M, N);
-  // #pragma omp parallel for collapse(2)
+  blind_factor_ids[1] = tensor_int32_id;
+  tensor_int32_list[blind_factor_ids[1]] = v;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+}
+
+int Sgx_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
+                                         int blind_factor_u_id,
+                                         int blind_factor_v_id) {
+  struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+  struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+  struct TensorInt32* u = tensor_int32_list[blind_factor_u_id];
+  struct TensorInt32* v = tensor_int32_list[blind_factor_v_id];
+
+  int B = X->B;
+  int M = X->M;
+  int K = X->N;
+  int N = Y->M;
+
+  struct TensorInt32* Y_trans =
+      TransposeLastTwoDimsInt32(Y);  // must be deleted
+  struct TensorInt32* v_trans = TransposeLastTwoDimsInt32(v); 
+
+  struct TensorInt32* xv = MatmulS32S32S32(X, v_trans);  // B x M x 1
+  struct TensorInt32* uy = MatmulS32S32S32(u, Y_trans);
+  struct TensorInt32* uv = MatmulS32S32S32(u, v_trans);
+
+  struct TensorInt32* decryption_key = CreateTensorInt32(B, M, N);
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
-      // #pragma omp simd
       for (int k = 0; k < N; ++k) {
-        unblind_factor->data[i * M * N + j * N + k] =
-            xv->data[i * M + j] + uy->data[i * N + k] + uv->data[i];
+        decryption_key->data[i * M * N + j * N + k] =
+            uv->data[i] + xv->data[i * M + j] + uy->data[i * N + k];
       }
     }
   }
 
-  // Cleanup
-  DeleteTensorInt32(u);
-  DeleteTensorInt32(v);
   DeleteTensorInt32(xv);
   DeleteTensorInt32(uy);
   DeleteTensorInt32(uv);
   DeleteTensorInt32(Y_trans);
+  DeleteTensorInt32(v_trans);
 
   int curr_id = tensor_int32_id;
-  tensor_int32_list[curr_id] = unblind_factor;
+  tensor_int32_list[curr_id] = decryption_key;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
 
 int Sgx_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
-                                       int unblind_factor_id) {
-  struct TensorInt32* unblind_factor = tensor_int32_list[unblind_factor_id];
+                                       int decryption_key_id) {
+  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
   // #pragma omp parallel for simd
   for (int i = 0; i < B * M * N; i++) {
-    tensor->data[i] = data[i] - unblind_factor->data[i];
+    tensor->data[i] = data[i] - decryption_key->data[i];
   }
 
   int curr_id = tensor_int32_id;
@@ -688,20 +713,28 @@ void ecall_Sgx_Get_Tensor_Int32(int src_id, int* out) {
   Sgx_Get_Tensor_Int32(src_id,out);
 }
 
-void ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out, int* ret_id) {
-  *ret_id = Sgx_Get_Encrypted_Tensor_Opr1_Int32(src_id,out);
-}
-
 void ecall_Sgx_Set_Tensor_Int32(int* data, int B, int M, int N, int* ret_id) {
   *ret_id = Sgx_Set_Tensor_Int32(data,B,M,N);
 }
 
-void ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int blind_factor_id, int linear_param_id, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_Opr1_Int32(data,B,M,N,blind_factor_id,linear_param_id);
+void ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out, int* ret_id) {
+  *ret_id = Sgx_Get_Encrypted_Tensor_Opr1_Int32(src_id,out);
 }
 
-void ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1, int* out2, int* ret_id) {
-  *ret_id = Sgx_Get_Encrypted_Tensor_Opr2_Int32(src_id1,src_id2,out1,out2);
+void ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id, int linear_param_id, int* ret_id) {
+  *ret_id = Sgx_Generate_Decryption_Key_Opr1_Int32(blind_factor_id,linear_param_id);
+}
+
+void ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int decryption_key_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_Opr1_Int32(data,B,M,N,decryption_key_id);
+}
+
+void ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
+  Sgx_Get_Encrypted_Tensor_Opr2_Int32(src_id1,src_id2,out1,out2, blind_factor_ids);
+}
+
+void ecall_Sgx_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id, int* ret_id) {
+  *ret_id = Sgx_Generate_Decryption_Key_Opr2_Int32(src_id1,src_id2,blind_factor_u_id,blind_factor_v_id);
 }
 
 void ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N, int unblind_factor_id, int* ret_id) {

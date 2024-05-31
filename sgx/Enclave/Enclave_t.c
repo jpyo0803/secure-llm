@@ -83,12 +83,6 @@ typedef struct ms_ecall_Sgx_Get_Tensor_Int32_t {
 	int* ms_out;
 } ms_ecall_Sgx_Get_Tensor_Int32_t;
 
-typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t {
-	int ms_src_id;
-	int* ms_out;
-	int* ms_ret_id;
-} ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t;
-
 typedef struct ms_ecall_Sgx_Set_Tensor_Int32_t {
 	int* ms_data;
 	int ms_B;
@@ -97,13 +91,24 @@ typedef struct ms_ecall_Sgx_Set_Tensor_Int32_t {
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Tensor_Int32_t;
 
+typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t {
+	int ms_src_id;
+	int* ms_out;
+	int* ms_ret_id;
+} ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t;
+
+typedef struct ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t {
+	int ms_blind_factor_id;
+	int ms_linear_param_id;
+	int* ms_ret_id;
+} ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t;
+
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t {
 	int* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_blind_factor_id;
-	int ms_linear_param_id;
+	int ms_decryption_key_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t;
 
@@ -112,15 +117,23 @@ typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32_t {
 	int ms_src_id2;
 	int* ms_out1;
 	int* ms_out2;
-	int* ms_ret_id;
+	int* ms_blind_factor_ids;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32_t;
+
+typedef struct ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t {
+	int ms_src_id1;
+	int ms_src_id2;
+	int ms_blind_factor_u_id;
+	int ms_blind_factor_v_id;
+	int* ms_ret_id;
+} ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32_t {
 	int* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_unblind_factor_id;
+	int ms_decryption_key_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32_t;
 
@@ -414,29 +427,6 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Tensor_Int32(void* pms)
 	return status;
 }
 
-static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(void* pms)
-{
-	CHECK_REF_POINTER(pms, sizeof(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t));
-	//
-	// fence after pointer checks
-	//
-	sgx_lfence();
-	ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t* ms = SGX_CAST(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t*, pms);
-	ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t __in_ms;
-	if (memcpy_s(&__in_ms, sizeof(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t), ms, sizeof(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t))) {
-		return SGX_ERROR_UNEXPECTED;
-	}
-	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_out = __in_ms.ms_out;
-	int* _tmp_ret_id = __in_ms.ms_ret_id;
-
-
-	ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(__in_ms.ms_src_id, _tmp_out, _tmp_ret_id);
-
-
-	return status;
-}
-
 static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Tensor_Int32(void* pms)
 {
 	CHECK_REF_POINTER(pms, sizeof(ms_ecall_Sgx_Set_Tensor_Int32_t));
@@ -460,6 +450,51 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Tensor_Int32(void* pms)
 	return status;
 }
 
+static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(void* pms)
+{
+	CHECK_REF_POINTER(pms, sizeof(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t));
+	//
+	// fence after pointer checks
+	//
+	sgx_lfence();
+	ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t* ms = SGX_CAST(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t*, pms);
+	ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t __in_ms;
+	if (memcpy_s(&__in_ms, sizeof(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t), ms, sizeof(ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t))) {
+		return SGX_ERROR_UNEXPECTED;
+	}
+	sgx_status_t status = SGX_SUCCESS;
+	int* _tmp_out = __in_ms.ms_out;
+	int* _tmp_ret_id = __in_ms.ms_ret_id;
+
+
+	ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(__in_ms.ms_src_id, _tmp_out, _tmp_ret_id);
+
+
+	return status;
+}
+
+static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(void* pms)
+{
+	CHECK_REF_POINTER(pms, sizeof(ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t));
+	//
+	// fence after pointer checks
+	//
+	sgx_lfence();
+	ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t* ms = SGX_CAST(ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t*, pms);
+	ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t __in_ms;
+	if (memcpy_s(&__in_ms, sizeof(ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t), ms, sizeof(ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t))) {
+		return SGX_ERROR_UNEXPECTED;
+	}
+	sgx_status_t status = SGX_SUCCESS;
+	int* _tmp_ret_id = __in_ms.ms_ret_id;
+
+
+	ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(__in_ms.ms_blind_factor_id, __in_ms.ms_linear_param_id, _tmp_ret_id);
+
+
+	return status;
+}
+
 static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(void* pms)
 {
 	CHECK_REF_POINTER(pms, sizeof(ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t));
@@ -477,7 +512,7 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(void
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
-	ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_blind_factor_id, __in_ms.ms_linear_param_id, _tmp_ret_id);
+	ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_decryption_key_id, _tmp_ret_id);
 
 
 	return status;
@@ -498,10 +533,32 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(void
 	sgx_status_t status = SGX_SUCCESS;
 	int* _tmp_out1 = __in_ms.ms_out1;
 	int* _tmp_out2 = __in_ms.ms_out2;
+	int* _tmp_blind_factor_ids = __in_ms.ms_blind_factor_ids;
+
+
+	ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2, _tmp_blind_factor_ids);
+
+
+	return status;
+}
+
+static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32(void* pms)
+{
+	CHECK_REF_POINTER(pms, sizeof(ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t));
+	//
+	// fence after pointer checks
+	//
+	sgx_lfence();
+	ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t* ms = SGX_CAST(ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t*, pms);
+	ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t __in_ms;
+	if (memcpy_s(&__in_ms, sizeof(ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t), ms, sizeof(ms_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32_t))) {
+		return SGX_ERROR_UNEXPECTED;
+	}
+	sgx_status_t status = SGX_SUCCESS;
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
-	ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2, _tmp_ret_id);
+	ecall_Sgx_Generate_Decryption_Key_Opr2_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, __in_ms.ms_blind_factor_u_id, __in_ms.ms_blind_factor_v_id, _tmp_ret_id);
 
 
 	return status;
@@ -524,7 +581,7 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32(void
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
-	ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_unblind_factor_id, _tmp_ret_id);
+	ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_decryption_key_id, _tmp_ret_id);
 
 
 	return status;
@@ -908,9 +965,9 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Residual_Add(void* pms)
 
 SGX_EXTERNC const struct {
 	size_t nr_ecall;
-	struct {void* ecall_addr; uint8_t is_priv; uint8_t is_switchless;} ecall_table[30];
+	struct {void* ecall_addr; uint8_t is_priv; uint8_t is_switchless;} ecall_table[32];
 } g_ecall_table = {
-	30,
+	32,
 	{
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Hidden_States, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Copy_Hidden_States, 0, 0},
@@ -920,10 +977,12 @@ SGX_EXTERNC const struct {
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Linear_Param_WS8BFP32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Tensor_Dim_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Tensor_Int32, 0, 0},
-		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Tensor_Int32, 0, 0},
+		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32, 0, 0},
+		{(void*)(uintptr_t)sgx_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32, 0, 0},
+		{(void*)(uintptr_t)sgx_ecall_Sgx_Generate_Decryption_Key_Opr2_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Tensor_Dim_Int8, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Tensor_Int8, 0, 0},
@@ -947,14 +1006,14 @@ SGX_EXTERNC const struct {
 
 SGX_EXTERNC const struct {
 	size_t nr_ocall;
-	uint8_t entry_table[4][30];
+	uint8_t entry_table[4][32];
 } g_dyn_entry_table = {
 	4,
 	{
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
 	}
 };
 

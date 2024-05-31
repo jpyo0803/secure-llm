@@ -41,11 +41,13 @@ sgx_status_t ecall_Sgx_Set_Linear_Param_WS8BS8(sgx_enclave_id_t eid, char* weigh
 sgx_status_t ecall_Sgx_Set_Linear_Param_WS8BFP32(sgx_enclave_id_t eid, char* weight, float* bias, int M, int N, float alpha, int* ret_id);
 sgx_status_t ecall_Sgx_Get_Tensor_Dim_Int32(sgx_enclave_id_t eid, int src_id, int* dim);
 sgx_status_t ecall_Sgx_Get_Tensor_Int32(sgx_enclave_id_t eid, int src_id, int* out);
-sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int src_id, int* out, int* ret_id);
 sgx_status_t ecall_Sgx_Set_Tensor_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id);
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int blind_factor_id, int linear_param_id, int* ret_id);
-sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int* ret_id);
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int unblind_factor_id, int* ret_id);
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int src_id, int* out, int* ret_id);
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(sgx_enclave_id_t eid, int blind_factor_id, int linear_param_id, int* ret_id);
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id);
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids);
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_Opr2_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id, int* ret_id);
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr2_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id);
 sgx_status_t ecall_Sgx_Get_Tensor_Dim_Int8(sgx_enclave_id_t eid, int src_id, int* dim);
 sgx_status_t ecall_Sgx_Get_Tensor_Int8(sgx_enclave_id_t eid, int src_id, char* out);
 sgx_status_t ecall_Sgx_Set_Tensor_Int8(sgx_enclave_id_t eid, char* data, int B, int M, int N, int* ret_id);
