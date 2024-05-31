@@ -2,11 +2,11 @@
 
 #include <assert.h>
 #include <math.h>
-#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "aes_stream.h"
+#include <immintrin.h>
 
 int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   int curr_id = tensor_float_id;
@@ -27,13 +27,9 @@ int Ex_Copy_Hidden_States(int src_id) {
   }
 
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
-  tensor_float_list[curr_id] =
-      CreateTensorFloat(src_tensor->B, src_tensor->M, src_tensor->N);
 
-#pragma omp parallel for simd
-  for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
-    tensor_float_list[curr_id]->data[i] = src_tensor->data[i];
-  }
+  tensor_float_list[curr_id] = CreateTensorFloatFromData(src_tensor->data, src_tensor->B, src_tensor->M, src_tensor->N);
+
   tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
@@ -53,57 +49,95 @@ int Ex_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
 }
 
 int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
-  int curr_id = tensor_int8_id;
+    int curr_id = tensor_int8_id;
 
-  struct TensorFloat* src_tensor = tensor_float_list[src_id];
-  struct LayerNormParam* layer_norm_param =
-      layer_norm_param_list[layer_norm_param_id];
+    struct TensorFloat* src_tensor = tensor_float_list[src_id];
+    struct LayerNormParam* layer_norm_param = layer_norm_param_list[layer_norm_param_id];
 
-  struct TensorInt8* dst_tensor =
-      CreateTensorInt8(src_tensor->B, src_tensor->M, src_tensor->N);
+    struct TensorInt8* dst_tensor = CreateTensorInt8(src_tensor->B, src_tensor->M, src_tensor->N);
 
-  int B = src_tensor->B;
-  int M = src_tensor->M;
-  int N = src_tensor->N;
+    int B = src_tensor->B;
+    int M = src_tensor->M;
+    int N = src_tensor->N;
 
-#pragma omp parallel for collapse(2)
-  for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-      float sum = 0.0;
-      float sum_sqr = 0.0;
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            __m512 sum_vec = _mm512_setzero_ps();
+            __m512 sum_sqr_vec = _mm512_setzero_ps();
 
-// Calculate sum and sum of squares
-#pragma omp simd reduction(+ : sum, sum_sqr)
-      for (int k = 0; k < N; ++k) {
-        float tmp = src_tensor->data[i * M * N + j * N + k];
-        sum += tmp;
-        sum_sqr += tmp * tmp;
-      }
+            // Calculate sum and sum of squares
+            for (int k = 0; k <= N - 16; k += 16) {
+                __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
+                sum_vec = _mm512_add_ps(sum_vec, src_vec);
+                sum_sqr_vec = _mm512_fmadd_ps(src_vec, src_vec, sum_sqr_vec);
+            }
 
-      float mean = sum / N;
-      float var = sum_sqr / N - mean * mean;
+            // Horizontally add the elements in sum_vec and sum_sqr_vec
+            float sum = 0.0, sum_sqr = 0.0;
+            float sum_array[16], sum_sqr_array[16];
+            _mm512_storeu_ps(sum_array, sum_vec);
+            _mm512_storeu_ps(sum_sqr_array, sum_sqr_vec);
+            for (int l = 0; l < 16; ++l) {
+                sum += sum_array[l];
+                sum_sqr += sum_sqr_array[l];
+            }
 
-// Normalize and clamp
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        float tmp = src_tensor->data[i * M * N + j * N + k];
-        tmp = (tmp - mean) / sqrtf(var + layer_norm_param->eps) *
-                  layer_norm_param->gamma->data[k] +
-              layer_norm_param->beta->data[k];
-        tmp = roundf(tmp);
-        // Now clamp between -128 and 127
-        if (tmp > 127.0) {
-          tmp = 127.0;
-        } else if (tmp < -128.0) {
-          tmp = -128.0;
+            // Process any remaining elements
+            for (int k = (N / 16) * 16; k < N; ++k) {
+                float tmp = src_tensor->data[i * M * N + j * N + k];
+                sum += tmp;
+                sum_sqr += tmp * tmp;
+            }
+
+            float mean = sum / N;
+            float var = sum_sqr / N - mean * mean;
+            float inv_std = 1.0f / sqrtf(var + layer_norm_param->eps);
+
+            __m512 mean_vec = _mm512_set1_ps(mean);
+            __m512 inv_std_vec = _mm512_set1_ps(inv_std);
+            __m512 gamma_vec, beta_vec;
+
+            // Normalize and clamp
+            for (int k = 0; k <= N - 16; k += 16) {
+                __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
+                __m512 norm_vec = _mm512_sub_ps(src_vec, mean_vec);
+                norm_vec = _mm512_mul_ps(norm_vec, inv_std_vec);
+
+                gamma_vec = _mm512_loadu_ps(&layer_norm_param->gamma->data[k]);
+                beta_vec = _mm512_loadu_ps(&layer_norm_param->beta->data[k]);
+
+                norm_vec = _mm512_fmadd_ps(norm_vec, gamma_vec, beta_vec);
+                norm_vec = _mm512_roundscale_ps(norm_vec, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+
+                // Clamp between -128 and 127
+                __m512i int_vec = _mm512_cvtps_epi32(norm_vec);
+                int_vec = _mm512_max_epi32(int_vec, _mm512_set1_epi32(-128));
+                int_vec = _mm512_min_epi32(int_vec, _mm512_set1_epi32(127));
+
+                // Store the result as int8
+                __m128i int8_vec = _mm512_cvtsepi32_epi8(int_vec);
+                _mm_storeu_si128((__m128i*)&dst_tensor->data[i * M * N + j * N + k], int8_vec);
+            }
+
+            // Process any remaining elements
+            for (int k = (N / 16) * 16; k < N; ++k) {
+                float tmp = src_tensor->data[i * M * N + j * N + k];
+                tmp = (tmp - mean) * inv_std * layer_norm_param->gamma->data[k] + layer_norm_param->beta->data[k];
+                tmp = roundf(tmp);
+
+                // Clamp between -128 and 127
+                if (tmp > 127.0) {
+                    tmp = 127.0;
+                } else if (tmp < -128.0) {
+                    tmp = -128.0;
+                }
+                dst_tensor->data[i * M * N + j * N + k] = (char)tmp;
+            }
         }
-        dst_tensor->data[i * M * N + j * N + k] = (char)tmp;
-      }
     }
-  }
-  tensor_int8_list[curr_id] = dst_tensor;
-  tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
+    tensor_int8_list[curr_id] = dst_tensor;
+    tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
 }
 
 int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
@@ -149,12 +183,23 @@ void Ex_Get_Tensor_Dim_Int32(int src_id, int* dim) {
   dim[2] = src_tensor->N;
 }
 
-void Ex_Get_Tensor_Int32(int src_id, int* out) {
-  struct TensorInt32* src_tensor = tensor_int32_list[src_id];
-#pragma omp parallel for simd
-  for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
-    out[i] = src_tensor->data[i];
-  }
+void Ex_Get_Tensor_Int32(int src_id, int32_t* out) {
+    struct TensorInt32* src_tensor = tensor_int32_list[src_id];
+    int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
+
+    int i;
+    for (i = 0; i <= total_elements - 16; i += 16) {
+        // Load 16 int32 elements from src_tensor
+        __m512i src_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
+
+        // Store 16 int32 elements to out
+        _mm512_storeu_si512((__m512i*)&out[i], src_vec);
+    }
+
+    // Copy any remaining elements (if total_elements is not a multiple of 16)
+    for (; i < total_elements; ++i) {
+        out[i] = src_tensor->data[i];
+    }
 }
 
 int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
@@ -168,34 +213,37 @@ int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
   return curr_id;
 }
 
-// Need to return blind factor id
 int Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
-  Ex_Get_Tensor_Int32(src_id, out);
+    Ex_Get_Tensor_Int32(src_id, out);
 
-  struct TensorInt32* src_tensor = tensor_int32_list[src_id];
+    struct TensorInt32* src_tensor = tensor_int32_list[src_id];
 
-  int B = src_tensor->B;
-  int M = src_tensor->M;
-  int N = src_tensor->N;
+    int B = src_tensor->B;
+    int M = src_tensor->M;
+    int N = src_tensor->N;
 
-  int curr_id = tensor_int32_id;
-  struct TensorInt32* blind_factor = CreateTensorInt32(B, 1, N);
+    int curr_id = tensor_int32_id;
+    struct TensorInt32* blind_factor = CreateTensorInt32(B, 1, N);
 
-  GetCPRNG((unsigned char*)blind_factor->data, blind_factor->num_bytes);
+    GetCPRNG((unsigned char*)blind_factor->data, blind_factor->num_bytes);
 
-#pragma omp parallel for collapse(2)
-  for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        out[i * M * N + j * N + k] += blind_factor->data[i * N + k];
-      }
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            for (int k = 0; k <= N - 16; k += 16) {
+                __m512i out_vec = _mm512_loadu_si512((__m512i*)&out[i * M * N + j * N + k]);
+                __m512i blind_vec = _mm512_loadu_si512((__m512i*)&blind_factor->data[i * N + k]);
+                out_vec = _mm512_add_epi32(out_vec, blind_vec);
+                _mm512_storeu_si512((__m512i*)&out[i * M * N + j * N + k], out_vec);
+            }
+            for (int k = (N / 16) * 16; k < N; ++k) {
+                out[i * M * N + j * N + k] += blind_factor->data[i * N + k];
+            }
+        }
     }
-  }
 
-  tensor_int32_list[curr_id] = blind_factor;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
+    tensor_int32_list[curr_id] = blind_factor;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
 }
 
 int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
@@ -216,14 +264,18 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
                                        int decryption_key_id) {
   struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
-  // #pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-      // #pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        data[i * M * N + j * N + k] -= decryption_key->data[i * N + k];
+      for (int j = 0; j < M; ++j) {
+          for (int k = 0; k <= N - 16; k += 16) {
+              __m512i data_vec = _mm512_loadu_si512((__m512i*)&data[i * M * N + j * N + k]);
+              __m512i key_vec = _mm512_loadu_si512((__m512i*)&decryption_key->data[i * N + k]);
+              data_vec = _mm512_sub_epi32(data_vec, key_vec);
+              _mm512_storeu_si512((__m512i*)&data[i * M * N + j * N + k], data_vec);
+          }
+          for (int k = (N / 16) * 16; k < N; ++k) {
+              data[i * M * N + j * N + k] -= decryption_key->data[i * N + k];
+          }
       }
-    }
   }
 
   return Ex_Set_Tensor_Int32(data, B, M, N);
@@ -247,22 +299,32 @@ void Ex_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
 
   // Encrypt X
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-      for (int k = 0; k < K; ++k) {
-        out1[i * M * K + j * K + k] =
-            X->data[i * M * K + j * K + k] + u->data[i * K + k];
+      for (int j = 0; j < M; ++j) {
+          for (int k = 0; k <= K - 16; k += 16) {
+              __m512i x_vec = _mm512_loadu_si512((__m512i*)&X->data[i * M * K + j * K + k]);
+              __m512i u_vec = _mm512_loadu_si512((__m512i*)&u->data[i * K + k]);
+              __m512i out_vec = _mm512_add_epi32(x_vec, u_vec);
+              _mm512_storeu_si512((__m512i*)&out1[i * M * K + j * K + k], out_vec);
+          }
+          for (int k = (K / 16) * 16; k < K; ++k) {
+              out1[i * M * K + j * K + k] = X->data[i * M * K + j * K + k] + u->data[i * K + k];
+          }
       }
-    }
   }
 
   // Encrypt Y
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < N; ++j) {
-      for (int k = 0; k < K; ++k) {
-        out2[i * N * K + j * K + k] =
-            Y->data[i * N * K + j * K + k] + v->data[i * K + k];
+      for (int j = 0; j < N; ++j) {
+          for (int k = 0; k <= K - 16; k += 16) {
+              __m512i y_vec = _mm512_loadu_si512((__m512i*)&Y->data[i * N * K + j * K + k]);
+              __m512i v_vec = _mm512_loadu_si512((__m512i*)&v->data[i * K + k]);
+              __m512i out_vec = _mm512_add_epi32(y_vec, v_vec);
+              _mm512_storeu_si512((__m512i*)&out2[i * N * K + j * K + k], out_vec);
+          }
+          for (int k = (K / 16) * 16; k < K; ++k) {
+              out2[i * N * K + j * K + k] = Y->data[i * N * K + j * K + k] + v->data[i * K + k];
+          }
       }
-    }
   }
 
   blind_factor_ids[0] = tensor_int32_id;
@@ -293,13 +355,22 @@ int Ex_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
   struct TensorInt32* uv = MatmulS32S32S32(u, v);
 
   struct TensorInt32* decryption_key = CreateTensorInt32(B, M, N);
+
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-      for (int k = 0; k < N; ++k) {
-        decryption_key->data[i * M * N + j * N + k] =
-            uv->data[i] + xv->data[i * M + j] + uy->data[i * N + k];
+      for (int j = 0; j < M; ++j) {
+          for (int k = 0; k <= N - 16; k += 16) {
+              __m512i uv_vec = _mm512_set1_epi32(uv->data[i]);
+              __m512i xv_vec = _mm512_set1_epi32(xv->data[i * M + j]);
+              __m512i uy_vec = _mm512_loadu_si512((__m512i*)&uy->data[i * N + k]);
+              __m512i sum_vec = _mm512_add_epi32(uv_vec, xv_vec);
+              sum_vec = _mm512_add_epi32(sum_vec, uy_vec);
+              _mm512_storeu_si512((__m512i*)&decryption_key->data[i * M * N + j * N + k], sum_vec);
+          }
+          for (int k = (N / 16) * 16; k < N; ++k) {
+              decryption_key->data[i * M * N + j * N + k] =
+                  uv->data[i] + xv->data[i * M + j] + uy->data[i * N + k];
+          }
       }
-    }
   }
 
   DeleteTensorInt32(xv);
@@ -318,9 +389,18 @@ int Ex_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
 
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
-  // #pragma omp parallel for simd
-  for (int i = 0; i < B * M * N; i++) {
-    tensor->data[i] = data[i] - decryption_key->data[i];
+  int total_elements = B * M * N;
+
+  int i;
+  for (i = 0; i <= total_elements - 16; i += 16) {
+      __m512i data_vec = _mm512_loadu_si512((__m512i*)&data[i]);
+      __m512i key_vec = _mm512_loadu_si512((__m512i*)&decryption_key->data[i]);
+      __m512i result_vec = _mm512_sub_epi32(data_vec, key_vec);
+      _mm512_storeu_si512((__m512i*)&tensor->data[i], result_vec);
+  }
+
+  for (; i < total_elements; ++i) {
+      tensor->data[i] = data[i] - decryption_key->data[i];
   }
 
   int curr_id = tensor_int32_id;
@@ -344,10 +424,8 @@ int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-// #pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
-// #pragma omp parallel for simd
       for (int k = 0; k < N; ++k) {
         dst_tensor->data[i * M * N + j * N + k] =
             alpha * src_tensor->data[i * M * N + j * N + k] +
@@ -377,10 +455,8 @@ int Ex_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-#pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
-#pragma omp parallel for simd
       for (int k = 0; k < N; ++k) {
         dst_tensor->data[i * M * N + j * N + k] =
             alpha * src_tensor->data[i * M * N + j * N + k] +
@@ -405,7 +481,6 @@ int Ex_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-#pragma omp parallel for simd
   for (int i = 0; i < B * M * N; i++) {
     dst_tensor->data[i] = (float)src_tensor->data[i] * alpha;
   }
@@ -417,31 +492,32 @@ int Ex_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
 }
 
 int Ex_ReLU(int src_id) {
-  struct TensorFloat* src_tensor = tensor_float_list[src_id];
+    struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-  int B = src_tensor->B;
-  int M = src_tensor->M;
-  int N = src_tensor->N;
+    int B = src_tensor->B;
+    int M = src_tensor->M;
+    int N = src_tensor->N;
 
-  struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
+    struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-#pragma omp parallel for collapse(2)
-  for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        dst_tensor->data[i * M * N + j * N + k] =
-            src_tensor->data[i * M * N + j * N + k] > 0.0
-                ? src_tensor->data[i * M * N + j * N + k]
-                : 0.0;
-      }
+    int total_elements = B * M * N;
+    int i;
+    __m512 zero_vec = _mm512_setzero_ps();
+
+    for (i = 0; i <= total_elements - 16; i += 16) {
+        __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+        __m512 result_vec = _mm512_max_ps(src_vec, zero_vec);
+        _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
     }
-  }
 
-  int curr_id = tensor_float_id;
-  tensor_float_list[curr_id] = dst_tensor;
-  tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
+    for (; i < total_elements; ++i) {
+        dst_tensor->data[i] = src_tensor->data[i] > 0.0 ? src_tensor->data[i] : 0.0;
+    }
+
+    int curr_id = tensor_float_id;
+    tensor_float_list[curr_id] = dst_tensor;
+    tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
 }
 
 int Ex_Softmax(int src_id) {
@@ -453,11 +529,9 @@ int Ex_Softmax(int src_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-#pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       float max_val = src_tensor->data[i * M * N + j * N];
-#pragma omp simd reduction(max : max_val)
       for (int k = 1; k < N; ++k) {
         if (src_tensor->data[i * M * N + j * N + k] > max_val) {
           max_val = src_tensor->data[i * M * N + j * N + k];
@@ -465,14 +539,12 @@ int Ex_Softmax(int src_id) {
       }
 
       float sum = 0.0;
-#pragma omp simd reduction(+ : sum)
       for (int k = 0; k < N; ++k) {
         dst_tensor->data[i * M * N + j * N + k] =
             expf(src_tensor->data[i * M * N + j * N + k] - max_val);
         sum += dst_tensor->data[i * M * N + j * N + k];
       }
 
-#pragma omp simd
       for (int k = 0; k < N; ++k) {
         dst_tensor->data[i * M * N + j * N + k] /= sum;
       }
@@ -486,30 +558,38 @@ int Ex_Softmax(int src_id) {
 }
 
 int Ex_Quantize_Post_Softmax(int src_id) {
-  struct TensorFloat* src_tensor = tensor_float_list[src_id];
+    struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-  int B = src_tensor->B;
-  int M = src_tensor->M;
-  int N = src_tensor->N;
+    int B = src_tensor->B;
+    int M = src_tensor->M;
+    int N = src_tensor->N;
 
-  struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
+    struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
-#pragma omp parallel for collapse(2)
-  for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        dst_tensor->data[i * M * N + j * N + k] =
-            (char)roundf(src_tensor->data[i * M * N + j * N + k] * 127.0);
-      }
+    __m512 scale_vec = _mm512_set1_ps(127.0f);
+
+    int total_elements = B * M * N;
+    int i;
+
+    for (i = 0; i <= total_elements - 16; i += 16) {
+        __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+        __m512 scaled_vec = _mm512_mul_ps(src_vec, scale_vec);
+        __m512i int_vec = _mm512_cvtps_epi32(scaled_vec);
+        __m512i clamped_vec = _mm512_min_epi32(_mm512_max_epi32(int_vec, _mm512_set1_epi32(-128)), _mm512_set1_epi32(127));
+        __m128i result_vec = _mm512_cvtsepi32_epi8(clamped_vec);
+        _mm_storeu_si128((__m128i*)&dst_tensor->data[i], result_vec);
     }
-  }
 
-  int curr_id = tensor_int8_id;
-  tensor_int8_list[curr_id] = dst_tensor;
-  tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
+    for (; i < total_elements; ++i) {
+        dst_tensor->data[i] = (char)roundf(src_tensor->data[i] * 127.0f);
+    }
+
+    int curr_id = tensor_int8_id;
+    tensor_int8_list[curr_id] = dst_tensor;
+    tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
 }
+
 int Ex_Cast_From_Float_To_Int8(int src_id) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
@@ -519,15 +599,25 @@ int Ex_Cast_From_Float_To_Int8(int src_id) {
 
   struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
-#pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        dst_tensor->data[i * M * N + j * N + k] =
-            (char)src_tensor->data[i * M * N + j * N + k];
+      for (int j = 0; j < M; ++j) {
+          for (int k = 0; k < N; k += 16) {
+              // Load 16 float elements from src_tensor
+              __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
+              
+              // Convert float elements to int32
+              __m512i int32_vec = _mm512_cvtps_epi32(src_vec);
+              
+              // Convert int32 elements to int16
+              __m256i int16_vec = _mm512_cvtepi32_epi16(int32_vec);
+              
+              // Convert int16 elements to int8
+              __m128i int8_vec = _mm256_cvtepi16_epi8(int16_vec);
+              
+              // Store 16 int8 elements to dst_tensor
+              _mm_storeu_si128((__m128i*)&dst_tensor->data[i * M * N + j * N + k], int8_vec);
+          }
       }
-    }
   }
 
   int curr_id = tensor_int8_id;
@@ -545,15 +635,19 @@ int Ex_Cast_From_Float_To_Int32(int src_id) {
 
   struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
-#pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        dst_tensor->data[i * M * N + j * N + k] =
-            (int)src_tensor->data[i * M * N + j * N + k];
+      for (int j = 0; j < M; ++j) {
+          for (int k = 0; k < N; k += 16) {
+              // Load 16 float elements from src_tensor
+              __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
+              
+              // Convert float elements to int32
+              __m512i dst_vec = _mm512_cvtps_epi32(src_vec);
+              
+              // Store 16 int32 elements to dst_tensor
+              _mm512_storeu_si512((__m512i*)&dst_tensor->data[i * M * N + j * N + k], dst_vec);
+          }
       }
-    }
   }
 
   int curr_id = tensor_int32_id;
@@ -571,16 +665,26 @@ int Ex_Cast_From_Int8_To_Int32(int src_id) {
 
   struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
-#pragma omp parallel for collapse(2)
-  for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        dst_tensor->data[i * M * N + j * N + k] =
-            (int)src_tensor->data[i * M * N + j * N + k];
-      }
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            for (int k = 0; k < N; k += 64) {
+                // Load 64 int8 elements from src_tensor
+                __m512i src_vec_8 = _mm512_loadu_si512(&src_tensor->data[i * M * N + j * N + k]);
+                
+                // Convert int8 elements to int32
+                __m512i dst_vec_32_1 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(src_vec_8, 0));
+                __m512i dst_vec_32_2 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(src_vec_8, 1));
+                __m512i dst_vec_32_3 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(src_vec_8, 2));
+                __m512i dst_vec_32_4 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(src_vec_8, 3));
+                
+                // Store 64 int32 elements to dst_tensor
+                _mm512_storeu_si512((__m512i*)&dst_tensor->data[i * M * N + j * N + k], dst_vec_32_1);
+                _mm512_storeu_si512((__m512i*)&dst_tensor->data[i * M * N + j * N + k + 16], dst_vec_32_2);
+                _mm512_storeu_si512((__m512i*)&dst_tensor->data[i * M * N + j * N + k + 32], dst_vec_32_3);
+                _mm512_storeu_si512((__m512i*)&dst_tensor->data[i * M * N + j * N + k + 48], dst_vec_32_4);
+            }
+        }
     }
-  }
 
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = dst_tensor;
@@ -597,10 +701,16 @@ void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim) {
 
 void Ex_Get_Tensor_Int8(int src_id, char* out) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
+  int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
-#pragma omp parallel for simd
-  for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
-    out[i] = src_tensor->data[i];
+  int i;
+  for (i = 0; i <= total_elements - 64; i += 64) {
+      __m512i data_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
+      _mm512_storeu_si512((__m512i*)&out[i], data_vec);
+  }
+
+  for (; i < total_elements; ++i) {
+      out[i] = src_tensor->data[i];
   }
 }
 
@@ -622,12 +732,19 @@ void Ex_Get_Tensor_Dim_Float(int src_id, int* dim) {
   dim[2] = src_tensor->N;
 }
 
+
 void Ex_Get_Tensor_Float(int src_id, float* out) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
+  int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
-#pragma omp parallel for simd
-  for (int i = 0; i < src_tensor->B * src_tensor->M * src_tensor->N; i++) {
-    out[i] = src_tensor->data[i];
+  int i;
+  for (i = 0; i <= total_elements - 16; i += 16) {
+      __m512 data_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+      _mm512_storeu_ps(&out[i], data_vec);
+  }
+
+  for (; i < total_elements; ++i) {
+      out[i] = src_tensor->data[i];
   }
 }
 
@@ -650,29 +767,31 @@ int Ex_Set_Bmm_Param(float alpha) {
 }
 
 int Ex_Residual_Add(int residual, int hidden_states) {
-  struct TensorFloat* residual_tensor = tensor_float_list[residual];
-  struct TensorFloat* hidden_states_tensor = tensor_float_list[hidden_states];
+    struct TensorFloat* residual_tensor = tensor_float_list[residual];
+    struct TensorFloat* hidden_states_tensor = tensor_float_list[hidden_states];
 
-  int B = residual_tensor->B;
-  int M = residual_tensor->M;
-  int N = residual_tensor->N;
+    int B = residual_tensor->B;
+    int M = residual_tensor->M;
+    int N = residual_tensor->N;
 
-  struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
+    struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-#pragma omp parallel for collapse(2)
-  for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-#pragma omp simd
-      for (int k = 0; k < N; ++k) {
-        dst_tensor->data[i * M * N + j * N + k] =
-            residual_tensor->data[i * M * N + j * N + k] +
-            hidden_states_tensor->data[i * M * N + j * N + k];
-      }
+    int total_elements = B * M * N;
+    int i;
+
+    for (i = 0; i <= total_elements - 16; i += 16) {
+        __m512 residual_vec = _mm512_loadu_ps(&residual_tensor->data[i]);
+        __m512 hidden_vec = _mm512_loadu_ps(&hidden_states_tensor->data[i]);
+        __m512 result_vec = _mm512_add_ps(residual_vec, hidden_vec);
+        _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
     }
-  }
 
-  int curr_id = tensor_float_id;
-  tensor_float_list[curr_id] = dst_tensor;
-  tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
+    for (; i < total_elements; ++i) {
+        dst_tensor->data[i] = residual_tensor->data[i] + hidden_states_tensor->data[i];
+    }
+
+    int curr_id = tensor_float_id;
+    tensor_float_list[curr_id] = dst_tensor;
+    tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
 }
