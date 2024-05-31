@@ -113,7 +113,7 @@ int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
   struct LinearParam* linear_param =
       (struct LinearParam*)malloc(sizeof(struct LinearParam));
   linear_param->weight = CreateTensorInt8FromData(weight, 1, M, N);
-  linear_param->bias_int8 = CreateTensorInt8FromData(bias, 1, 1, N);
+  linear_param->bias_int8 = CreateTensorInt8FromData(bias, 1, 1, M);
   linear_param->alpha = alpha;
   linear_param->beta = beta;
   linear_param->is_bias_fp32 = 0;
@@ -131,7 +131,7 @@ int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
   struct LinearParam* linear_param =
       (struct LinearParam*)malloc(sizeof(struct LinearParam));
   linear_param->weight = CreateTensorInt8FromData(weight, 1, M, N);
-  linear_param->bias_float = CreateTensorFloatFromData(bias, 1, 1, N);
+  linear_param->bias_float = CreateTensorFloatFromData(bias, 1, 1, M);
   linear_param->alpha = alpha;
   linear_param->beta = 1.0;
   linear_param->is_bias_fp32 = 1;
@@ -350,10 +350,10 @@ int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-#pragma omp parallel for collapse(2)
+// #pragma omp parallel for collapse(2)
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
-#pragma omp parallel for simd
+// #pragma omp parallel for simd
       for (int k = 0; k < N; ++k) {
         dst_tensor->data[i * M * N + j * N + k] =
             alpha * src_tensor->data[i * M * N + j * N + k] +

@@ -8,14 +8,18 @@ import time
 import csv
 
 import singleton_timer as st
+import accuracy_measure_tools as amt
+
+amt.set_clock_speed()
 
 timer = st.SingletonTimer()
+
 
 timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode6
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
 model_size='125m'
 target_input_token_len = 128
 target_output_token_len = 256
@@ -104,7 +108,7 @@ smoothquant.opt.time_stats.print_summary()
 # print Output token length
 print(f"Output token length: {generated_ids.shape[1]}")
 assert generated_ids.shape[1] == target_output_token_len
-# print(tokenizer.batch_decode(generated_ids)[0])
+print(tokenizer.batch_decode(generated_ids)[0])
 
 raw_data = st.SingletonTimer().display_summary(outlier_percent=0.05)
 
@@ -133,3 +137,6 @@ for state in ['Prefill', 'Generation']:
         writer = csv.writer(f)
         writer.writerows(data)
         f.close()
+
+
+amt.reset_clock_speed()

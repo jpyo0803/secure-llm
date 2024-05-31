@@ -50,4 +50,4 @@ add_library(cipher_cpp SHARED ${SOURCES})
 
 # Additional compiler options
 # target_compile_options(cipher_cpp PRIVATE -maes -fopenmp -march=native)
-target_compile_options(cipher_cpp PRIVATE -maes -march=native)
+target_compile_options(cipher_cpp PRIVATE -mavx512f -maes -march=native)
