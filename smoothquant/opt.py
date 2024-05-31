@@ -769,7 +769,12 @@ class Int8OPTDecoderLayer(nn.Module):
         self.my_fc2 = my_linear.Linear_S8W_S8A_FP32B_FP32O_Mixed(
             self.fc2, privacy_on)
 
-        if my_exec_mode == ExecMode.Mode5:
+        if my_exec_mode == ExecMode.Mode4:
+            self.self_attn_layer_norm_id = lsc.Set_Layer_Norm_Param(
+                self.self_attn_layer_norm)
+            self.final_layer_norm_id = lsc.Set_Layer_Norm_Param(
+                self.final_layer_norm)
+        elif my_exec_mode == ExecMode.Mode5:
             self.self_attn_layer_norm_id = lsc.Set_Layer_Norm_Param(
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = lsc.Set_Layer_Norm_Param(
