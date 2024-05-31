@@ -286,13 +286,9 @@ int Sgx_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
   int K = X->N;
   int N = Y->M;
 
-  struct TensorInt32* Y_trans =
-      TransposeLastTwoDimsInt32(Y);  // must be deleted
-  struct TensorInt32* v_trans = TransposeLastTwoDimsInt32(v); 
-
-  struct TensorInt32* xv = MatmulS32S32S32(X, v_trans);  // B x M x 1
-  struct TensorInt32* uy = MatmulS32S32S32(u, Y_trans);
-  struct TensorInt32* uv = MatmulS32S32S32(u, v_trans);
+  struct TensorInt32* xv = MatmulS32S32S32(X, v);  // B x M x 1
+  struct TensorInt32* uy = MatmulS32S32S32(u, Y);
+  struct TensorInt32* uv = MatmulS32S32S32(u, v);
 
   struct TensorInt32* decryption_key = CreateTensorInt32(B, M, N);
   for (int i = 0; i < B; ++i) {
@@ -307,8 +303,6 @@ int Sgx_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
   DeleteTensorInt32(xv);
   DeleteTensorInt32(uy);
   DeleteTensorInt32(uv);
-  DeleteTensorInt32(Y_trans);
-  DeleteTensorInt32(v_trans);
 
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = decryption_key;

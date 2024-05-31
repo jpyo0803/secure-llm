@@ -49,13 +49,11 @@ class SgxLayerStructC:
   
   @classmethod
   def Set_Linear_Param_WS8BS8(cls, linear):
-    weight_transpose = linear.weight.transpose(-2, -1).contiguous()
-    return cls.lib.Sgx_Set_Linear_Param_WS8BS8(cls.eid[0],cast(weight_transpose.data_ptr(), POINTER(c_int8)), cast(linear.bias.data_ptr(), POINTER(c_int8)), weight_transpose.size(0), weight_transpose.size(1), c_float(linear.a.item()), c_float(linear.b.item()))
+    return cls.lib.Sgx_Set_Linear_Param_WS8BS8(cls.eid[0],cast(linear.weight.data_ptr(), POINTER(c_int8)), cast(linear.bias.data_ptr(), POINTER(c_int8)), linear.weight.size(0), linear.weight.size(1), c_float(linear.a.item()), c_float(linear.b.item()))
   
   @classmethod
   def Set_Linear_Param_WS8BFP32(cls, linear):
-    weight_transpose = linear.weight.transpose(-2, -1).contiguous()
-    return cls.lib.Sgx_Set_Linear_Param_WS8BFP32(cls.eid[0],cast(weight_transpose.data_ptr(), POINTER(c_int8)), cast(linear.bias.data_ptr(), POINTER(c_float)), weight_transpose.size(0), weight_transpose.size(1), c_float(linear.a.item()))
+    return cls.lib.Sgx_Set_Linear_Param_WS8BFP32(cls.eid[0],cast(linear.weight.data_ptr(), POINTER(c_int8)), cast(linear.bias.data_ptr(), POINTER(c_float)), linear.weight.size(0), linear.weight.size(1), c_float(linear.a.item()))
   
   @classmethod
   def Get_Tensor_Dim_Int32(cls, src_id):
