@@ -15,8 +15,10 @@ timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode6
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
 model_size='125m'
+target_input_token_len = 128
+target_output_token_len = 256
 
 '''
     NOTE(jpyo0803): Set execution mode
@@ -75,7 +77,6 @@ prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: W
 model_inputs = tokenizer([prompt], return_tensors='pt').to(
     'cuda:0' if start_gpu else 'cpu')
 
-target_input_token_len = 1024
 
 pad_len = target_input_token_len - model_inputs['input_ids'].shape[1]
 
@@ -94,7 +95,6 @@ smoothquant.opt.is_prefill = True
 smoothquant.opt.time_stats.on()
 timer.enable()
 
-target_output_token_len = 2048
 start_time = time.perf_counter_ns()
 generated_ids = model_smoothquant.generate(
     **model_inputs, min_length=target_output_token_len, max_length=target_output_token_len, do_sample=False)
@@ -111,9 +111,16 @@ raw_data = st.SingletonTimer().display_summary(outlier_percent=0.05)
 
 data = []
 
-categories = ['Set Hidden States', 'Copy Residual 1', 'Layer Norm 1', 'Get Hidden States Size', 'Q Projection', 'KV Projection', 'Construct KV Cache', 'Get Past KV', 'Reshape Q, K, V', 'QK^T BMM', 'Apply Attention Mask', 'Softmax', 'Apply Layer Head Mask', 'Reshape Attention Probabilities', 'Post Softmax Quantization',
-              'Transpose V', 'PV BMM', 'Reshape Attention Output', 'Out Projection', 'Add Residual 1', 'Copy Residual 2', 'Layer Norm 2', 'FC1', 'ReLU', 'FC2', 'Add Residual 2', 'Post Decoder Layer']
-assert len(categories) == 27
+categories = ['Set Hidden States', 'Copy Residual 1', 'Layer Norm 1', 'Get Hidden States Size', 'Q Proj, Cast From Int8 To Int32', 'Q Proj, Process Input Tensor Before Offload', 'Q Proj, Host to Device', 'Q Proj, GPU Computation', 'Q Proj, Device to Host',
+              'Q Proj, Process Output Tensor After Offload', 'Q Proj, Compute Epilogue', 'K Proj, Cast From Int8 To Int32', 'K Proj, Process Input Tensor Before Offload',
+               'K Proj, Host to Device', 'K Proj, GPU Computation', 'K Proj, Device to Host', 'K Proj, Process Output Tensor After Offload', 'K Proj, Compute Epilogue', 'V Proj, Cast From Int8 To Int32', 'V Proj, Process Input Tensor Before Offload',
+               'V Proj, Host to Device', 'V Proj, GPU Computation', 'V Proj, Device to Host', 'V Proj, Process Output Tensor After Offload', 'V Proj, Compute Epilogue','Construct KV Cache', 'Get Past KV', 'Reshape Q, K, V', 
+               'QK BMM, Cast From Int8 To Int32', 'QK BMM, Process Input Tensors Before Offload', 'QK BMM, Host to Device', 'QK BMM, GPU Computation', 'QK BMM, Device to Host', 'QK BMM, Process Output Tensors After Offload', 'QK BMM, Compute Epilogue', 'Apply Attention Mask', 'Softmax', 'Apply Layer Head Mask', 'Reshape Attention Probabilities', 'Post Softmax Quantization',
+              'Transpose V', 'PV BMM, Cast From Int8 To Int32', 'PV BMM, Process Input Tensors Before Offload', 'PV BMM, Host to Device', 'PV BMM, GPU Computation', 'PV BMM, Device to Host', 'PV BMM, Process Output Tensors After Offload', 'PV BMM, Compute Epilogue', 'Reshape Attention Output', 
+              'Out Proj, Cast From Int8 To Int32', 'Out Proj, Process Input Tensor Before Offload', 'Out Proj, Host to Device', 'Out Proj, GPU Computation', 'Out Proj, Device to Host', 'Out Proj, Process Output Tensor After Offload', 'Out Proj, Compute Epilogue', 'Add Residual 1', 'Copy Residual 2', 'Layer Norm 2', 
+              'FC1, Cast From Int8 To Int32', 'FC1, Process Input Tensor Before Offload', 'FC1, Host to Device', 'FC1, GPU Computation', 'FC1, Device to Host', 'FC1, Process Output Tensor After Offload', 'FC1, Compute Epilogue', 'ReLU', 
+              'FC2, Cast From Int8 To Int32', 'FC2, Process Input Tensor Before Offload', 'FC2, Host to Device', 'FC2, GPU Computation', 'FC2, Device to Host', 'FC2, Process Output Tensor After Offload', 'FC2, Compute Epilogue', 'Add Residual 2', 'Post Decoder Layer']
+assert len(categories) == 76
 
 for state in ['Prefill', 'Generation']:
     for category in categories:

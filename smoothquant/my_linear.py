@@ -8,6 +8,9 @@ from ctypes import *
 import smoothquant.layer_struct_c as lsc
 import sgx.sgx_layer_struct as sgx_lsc
 
+import singleton_timer as st
+
+timer = st.SingletonTimer()
 
 class Linear_S8W_S8A_S8B_FP32O_Mixed:
     # Only perform matmul in GPU with cupy
@@ -15,7 +18,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
     def __init__(self, torch_int_nn_linear, privacy_on, module_name=None):
         self.privacy_on = privacy_on
         self.module_name = module_name
-        print(f'{module_name} is created')
+        # print(f'{module_name} is created')
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             self.lsc = lsc.LayerStructC()
@@ -66,6 +69,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             assert False
 
     def __run(self, x):
+        state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
+
+        t = timer.start(tag=f'{self.module_name}, Cast From Int8 To Int32 ({state})', category=f'{self.module_name}, Cast From Int8 To Int32 ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
@@ -73,23 +79,71 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             x = x.to(torch.int32)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             x = self.lsc.Cast_From_Int8_To_Int32(x)
-            x = self.lsc.Get_Tensor_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             x = self.lsc.Cast_From_Int8_To_Int32(x)
-            x, blind_factor_id = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             x = self.sgx_lsc.Cast_From_Int8_To_Int32(x)
+        else:
+            assert False
+        timer.end(t)
+
+        t = timer.start(tag=f'{self.module_name}, Process Input Tensor Before Offload ({state})', category=f'{self.module_name}, Process Input Tensor Before Offload ({state})')
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
+            x = self.lsc.Get_Tensor_Int32(x)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
+            x, blind_factor_id = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             x, blind_factor_id = self.sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
         else:
             assert False
+        timer.end(t)
 
         # Main computation
+        torch.cuda.synchronize() # wait for all previous computation
+        t = timer.start(tag=f'{self.module_name}, Host to Device ({state})', category=f'{self.module_name}, Host to Device ({state})')
         x = x.to(torch.device('cuda:0'))
-        x = cupy.from_dlpack(x)
-        y = cupy.matmul(x, self.weight)
-        y = torch.from_dlpack(y)
-        y = y.to(torch.device('cpu'))
+        torch.cuda.synchronize()
+        timer.end(t)
 
+        x = cupy.from_dlpack(x) # torch to cupy
+
+        cupy.cuda.Stream.null.synchronize() 
+        t = timer.start(tag=f'{self.module_name}, GPU Computation ({state})', category=f'{self.module_name}, GPU Computation ({state})')
+        y = cupy.matmul(x, self.weight)
+        cupy.cuda.Stream.null.synchronize() 
+        timer.end(t)
+
+        y = torch.from_dlpack(y) # cupy to torch
+
+        torch.cuda.synchronize()
+        t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
+        y = y.to(torch.device('cpu'))
+        torch.cuda.synchronize()
+        timer.end(t)
+
+
+        t = timer.start(tag=f'{self.module_name}, Process Output Tensor After Offload ({state})', category=f'{self.module_name}, Process Output Tensor After Offload ({state})')
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
+            y = self.lsc.Set_Tensor_Int32(y)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
+            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(
+                y, blind_factor_id, self.linear_layer_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
+                y, blind_factor_id, self.linear_layer_id)
+        else:
+            assert False
+        timer.end(t)
+
+        t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
@@ -97,18 +151,14 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             y *= self.alpha
             y += self.beta * self.bias
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            y = self.lsc.Set_Tensor_Int32(y)
             y = self.lsc.Compute_Epilogue_WS8BS8(y, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, blind_factor_id, self.linear_layer_id)
             y = self.lsc.Compute_Epilogue_WS8BS8(y, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, blind_factor_id, self.linear_layer_id)
             y = self.sgx_lsc.Compute_Epilogue_WS8BS8(y, self.linear_layer_id)
         else:
             assert False
+        timer.end(t)
 
         return y
 
@@ -148,7 +198,7 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
     def __init__(self, torch_int_nn_linear, privacy_on, module_name=None):
         self.privacy_on = privacy_on
         self.module_name = module_name
-        print(f'{module_name} is created')
+        # print(f'{module_name} is created')
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             self.lsc = lsc.LayerStructC()
@@ -187,6 +237,9 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
                 torch_int_nn_linear)
 
     def __run(self, x):
+        state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
+
+        t = timer.start(tag=f'{self.module_name}, Cast From Int8 To Int32 ({state})', category=f'{self.module_name}, Cast From Int8 To Int32 ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
@@ -194,21 +247,71 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
             x = x.to(torch.int32)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             x = self.lsc.Cast_From_Int8_To_Int32(x)
-            x = self.lsc.Get_Tensor_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             x = self.lsc.Cast_From_Int8_To_Int32(x)
-            x, blind_factor_id = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             x = self.sgx_lsc.Cast_From_Int8_To_Int32(x)
+        else:
+            assert False
+        timer.end(t)
+
+        t = timer.start(f'{self.module_name}, Process Input Tensor Before Offload ({state})', category=f'{self.module_name}, Process Input Tensor Before Offload ({state})')
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
+            x = self.lsc.Get_Tensor_Int32(x)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
+            x, blind_factor_id = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             x, blind_factor_id = self.sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
-
+        else:
+            assert False
+        timer.end(t)
+        
         # Main computation
-        x = x.to(torch.device('cuda:0'))
-        x = cupy.from_dlpack(x)
-        y = cupy.matmul(x, self.weight)
-        y = torch.from_dlpack(y)
-        y = y.to(torch.device('cpu'))
 
+        torch.cuda.synchronize() # wait for all previous computation
+        t = timer.start(tag=f'{self.module_name}, Host to Device ({state})', category=f'{self.module_name}, Host to Device ({state})')
+        x = x.to(torch.device('cuda:0'))
+        torch.cuda.synchronize()
+        timer.end(t)
+
+        x = cupy.from_dlpack(x)
+
+        cupy.cuda.Stream.null.synchronize()
+        t = timer.start(tag=f'{self.module_name}, GPU Computation ({state})', category=f'{self.module_name}, GPU Computation ({state})')
+        y = cupy.matmul(x, self.weight)
+        cupy.cuda.Stream.null.synchronize()
+        timer.end(t)
+
+        y = torch.from_dlpack(y)
+
+        torch.cuda.synchronize()
+        t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
+        y = y.to(torch.device('cpu'))
+        torch.cuda.synchronize()
+        timer.end(t)
+
+        t = timer.start(tag=f'{self.module_name}, Process Output Tensor After Offload ({state})', category=f'{self.module_name}, Process Output Tensor After Offload ({state})')
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
+            pass
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
+            y = self.lsc.Set_Tensor_Int32(y)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
+            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(
+                y, blind_factor_id, self.linear_layer_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
+                y, blind_factor_id, self.linear_layer_id)
+        else:
+            assert False
+        timer.end(t)
+
+        t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
@@ -216,16 +319,18 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
             y *= self.alpha
             y += self.bias
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            y = self.lsc.Set_Tensor_Int32(y)
             y = self.lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
+            pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, blind_factor_id, self.linear_layer_id)
             y = self.lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
+            pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, blind_factor_id, self.linear_layer_id)
             y = self.sgx_lsc.Compute_Epilogue_WS8BFP32(y, self.linear_layer_id)
+            pass
+        else:
+            assert False
+        timer.end(t)
+
         return y
 
     def __call__(self, x):

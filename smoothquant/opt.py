@@ -277,10 +277,11 @@ class Int8OPTAttention(nn.Module):
             Multiplying the result of matmul by alpha and adding bias should be done on CPU side SGX
         '''
         # get query proj
-        t = timer.start(tag=f'Q Projection ({state})',
-                        category=f'Q Projection ({state})')
         if my_exec_mode == ExecMode.Mode1:
+            t = timer.start(tag=f'Q Projection ({state})',
+                            category=f'Q Projection ({state})')
             query_states = self.q_proj(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode3:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
@@ -291,7 +292,6 @@ class Int8OPTAttention(nn.Module):
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         else:
             assert False
-        timer.end(t)
         '''
             NOTE(jpyo0803): Get Key, Value projection.
         '''
@@ -314,9 +314,12 @@ class Int8OPTAttention(nn.Module):
             '''
             # reuse k, v, self_attention
             if my_exec_mode == ExecMode.Mode1:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
+                t = timer.start(tag=f'K Projection ({state})',
+                                category=f'K Projection ({state})')
                 key_states = self.k_proj(hidden_states)
+                timer.end(t)
+                t = timer.start(tag=f'V Projection ({state})',
+                                category=f'V Projection ({state})')
                 value_states = self.v_proj(hidden_states)
                 timer.end(t)
 
@@ -329,11 +332,8 @@ class Int8OPTAttention(nn.Module):
                     [past_key_value[1], value_states], dim=2)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode3:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -344,11 +344,8 @@ class Int8OPTAttention(nn.Module):
                     [past_key_value[1], value_states], dim=2)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode4:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -362,11 +359,8 @@ class Int8OPTAttention(nn.Module):
                     [past_key_value[1], value_states], dim=2)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode5:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -380,11 +374,8 @@ class Int8OPTAttention(nn.Module):
                     [past_key_value[1], value_states], dim=2)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode6:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -407,9 +398,12 @@ class Int8OPTAttention(nn.Module):
             # self_attention
 
             if my_exec_mode == ExecMode.Mode1:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
+                t = timer.start(tag=f'K Projection ({state})',
+                                category=f'K Projection ({state})')
                 key_states = self.k_proj(hidden_states)
+                timer.end(t)
+                t = timer.start(tag=f'V Projection ({state})',
+                                category=f'V Projection ({state})')
                 value_states = self.v_proj(hidden_states)
                 timer.end(t)
 
@@ -419,11 +413,8 @@ class Int8OPTAttention(nn.Module):
                 value_states = self._shape(value_states, -1, bsz)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode3:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -431,11 +422,8 @@ class Int8OPTAttention(nn.Module):
                 value_states = self._shape(value_states, -1, bsz)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode4:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -446,11 +434,8 @@ class Int8OPTAttention(nn.Module):
                 value_states = self._shape(value_states, -1, bsz)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode5:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -461,11 +446,8 @@ class Int8OPTAttention(nn.Module):
                 value_states = self._shape(value_states, -1, bsz)
                 timer.end(t)
             elif my_exec_mode == ExecMode.Mode6:
-                t = timer.start(tag=f'KV Projection ({state})',
-                                category=f'KV Projection ({state})')
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
-                timer.end(t)
 
                 t = timer.start(
                     tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
@@ -527,10 +509,11 @@ class Int8OPTAttention(nn.Module):
             Matmul should be done on Untrusted GPU side
         '''
 
-        t = timer.start(tag=f'QK^T BMM ({state})',
-                        category=f'QK^T BMM ({state})')
         if my_exec_mode == ExecMode.Mode1:
+            t = timer.start(tag=f'QK^T BMM ({state})',
+                            category=f'QK^T BMM ({state})')
             attn_weights = self.qk_bmm(query_states, key_states)
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode3:
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, key_states)
@@ -548,7 +531,6 @@ class Int8OPTAttention(nn.Module):
             attn_weights = self.sgx_lsc.Get_Tensor_Float(attn_weights)
         else:
             assert False
-        timer.end(t)
 
         t = timer.start(tag=f'Apply Attention Mask ({state})',
                         category=f'Apply Attention Mask ({state})')
@@ -671,10 +653,11 @@ class Int8OPTAttention(nn.Module):
             NOTE(jpyo0803): Pass attn_probs and value_states to pv_bmm.
             Matmul should be done on Untrusted GPU side
         '''
-        t = timer.start(tag=f'PV BMM ({state})',
-                        category=f'PV BMM ({state})')
         if my_exec_mode == ExecMode.Mode1:
+            t = timer.start(tag=f'PV BMM ({state})',
+                            category=f'PV BMM ({state})')
             attn_output = self.pv_bmm(attn_probs, value_states)
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode3:
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
@@ -695,7 +678,6 @@ class Int8OPTAttention(nn.Module):
             attn_output = self.sgx_lsc.Get_Tensor_Int8(attn_output)
         else:
             assert False
-        timer.end(t)
 
 
         t = timer.start(tag=f'Reshape Attention Output ({state})',
@@ -722,10 +704,11 @@ class Int8OPTAttention(nn.Module):
             Multiplying the result of matmul by alpha and adding bias should be done on CPU side SGX
         '''
 
-        t = timer.start(tag=f'Out Projection ({state})',
-                        category=f'Out Projection ({state})')
         if my_exec_mode == ExecMode.Mode1:
+            t = timer.start(tag=f'Out Projection ({state})',
+                            category=f'Out Projection ({state})')
             attn_output = self.out_proj(attn_output)
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode3:
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode4:
@@ -739,7 +722,6 @@ class Int8OPTAttention(nn.Module):
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         else:
             assert False
-        timer.end(t)
 
         return attn_output, attn_probs_reshaped, past_key_value
 
@@ -1021,10 +1003,10 @@ class Int8OPTDecoderLayer(nn.Module):
             # assert False, "ReLU is not measured"
             timer.end(t)
         elif my_exec_mode == ExecMode.Mode3:
-            t = timer.start(tag=f'FC1 ({state})',
-                            category=f'FC1 ({state})')
+            # t = timer.start(tag=f'FC1 ({state})',
+            #                 category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            timer.end(t)
+            # timer.end(t)
 
             t = timer.start(tag=f'ReLU ({state})',
                             category=f'ReLU ({state})')
@@ -1033,10 +1015,10 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = hidden_states.to(torch.int8)
             timer.end(t)
         elif my_exec_mode == ExecMode.Mode4:
-            t = timer.start(tag=f'FC1 ({state})',
-                            category=f'FC1 ({state})')
+            # t = timer.start(tag=f'FC1 ({state})',
+            #                 category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            timer.end(t)
+            # timer.end(t)
 
             t = timer.start(tag=f'ReLU ({state})',
                             category=f'ReLU ({state})')
@@ -1044,20 +1026,20 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = self.lsc.Cast_From_Float_To_Int8(hidden_states)
             timer.end(t)
         elif my_exec_mode == ExecMode.Mode5:
-            t = timer.start(tag=f'FC1 ({state})',
-                            category=f'FC1 ({state})')
+            # t = timer.start(tag=f'FC1 ({state})',
+            #                 category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            timer.end(t)
+            # timer.end(t)
 
             t = timer.start(tag=f'ReLU ({state})', category=f'ReLU ({state})')
             hidden_states = self.lsc.ReLU(hidden_states)
             hidden_states = self.lsc.Cast_From_Float_To_Int8(hidden_states)
             timer.end(t)
         elif my_exec_mode == ExecMode.Mode6:
-            t = timer.start(tag=f'FC1 ({state})',
-                            category=f'FC1 ({state})')
+            # t = timer.start(tag=f'FC1 ({state})',
+            #                 category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
-            timer.end(t)
+            # timer.end(t)
 
             t = timer.start(tag=f'ReLU ({state})', category=f'ReLU ({state})')
             hidden_states = self.sgx_lsc.ReLU(hidden_states)
@@ -1076,10 +1058,11 @@ class Int8OPTDecoderLayer(nn.Module):
         '''
         start_time = time.perf_counter_ns()
 
-        t = timer.start(f'FC2 ({state})',
-                        f'FC2 ({state})')
         if my_exec_mode == ExecMode.Mode1:
+            t = timer.start(f'FC2 ({state})',
+                            f'FC2 ({state})')
             hidden_states = self.fc2(hidden_states)
+            timer.end(t)
         elif my_exec_mode == ExecMode.Mode3:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode4:
@@ -1090,7 +1073,6 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         else:
             assert False
-        timer.end(t)
         end_time = time.perf_counter_ns()
         outer_fc2_dt = (end_time - start_time) / 1e9
         '''
