@@ -95,9 +95,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             x = self.lsc.Get_Tensor_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            x, blind_factor_id = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+            x = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            x, blind_factor_id = self.sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+            x = self.sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x, self.linear_layer_id)
         else:
             assert False
         timer.end(t)
@@ -110,9 +110,11 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            decryption_key_id = self.lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
+            pass
+            # decryption_key_id = self.lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
+            pass
+            # decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
         else:
             assert False
         timer.end(t)
@@ -149,11 +151,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             y = self.lsc.Set_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, decryption_key_id)
+            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, decryption_key_id)
+            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
         else:
             assert False
         timer.end(t)
@@ -278,9 +278,9 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             x = self.lsc.Get_Tensor_Int32(x)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            x, blind_factor_id = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+            x = self.lsc.Get_Encrypted_Tensor_Opr1_Int32(x, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            x, blind_factor_id = self.sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x)
+            x = self.sgx_lsc.Get_Encrypted_Tensor_Opr1_Int32(x, self.linear_layer_id)
         else:
             assert False
         timer.end(t)
@@ -293,9 +293,11 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            decryption_key_id = self.lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
+            pass
+            # decryption_key_id = self.lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
+            pass
+            # decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_Opr1_Int32(blind_factor_id, self.linear_layer_id)
         else:
             assert False
         timer.end(t)
@@ -333,11 +335,9 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             y = self.lsc.Set_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, decryption_key_id)
+            y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(
-                y, decryption_key_id)
+            y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
         else:
             assert False
         timer.end(t)

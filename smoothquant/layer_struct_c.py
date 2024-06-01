@@ -63,23 +63,22 @@ class LayerStructC:
         return cls.lib.Ex_Set_Tensor_Int32(cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2))
 
     @classmethod
-    def Get_Encrypted_Tensor_Opr1_Int32(cls, src_id):
+    def Get_Encrypted_Tensor_Opr1_Int32(cls, src_id, linear_param_id):
         B, M, N = cls.Get_Tensor_Dim_Int32(src_id)
         out = torch.empty((B, M, N), dtype=torch.int32)
-        blind_factor_id = cls.lib.Ex_Get_Encrypted_Tensor_Opr1_Int32(
-            src_id, cast(out.data_ptr(), POINTER(c_int32)))
-        return out, blind_factor_id
+        cls.lib.Ex_Get_Encrypted_Tensor_Opr1_Int32(
+            src_id, linear_param_id, cast(out.data_ptr(), POINTER(c_int32)))
+        return out
 
     @classmethod
     def Generate_Decryption_Key_Opr1_Int32(cls, blind_factor_id, linear_param_id):
         return cls.lib.Ex_Generate_Decryption_Key_Opr1_Int32(blind_factor_id, linear_param_id)
 
     @classmethod
-    def Set_Decrypted_Tensor_Opr1_Int32(cls, src, decryption_key_id):
+    def Set_Decrypted_Tensor_Opr1_Int32(cls, src, linear_param_id):
         return cls.lib.Ex_Set_Decrypted_Tensor_Opr1_Int32(cast(src.data_ptr(), POINTER(c_int32)),
                                                           src.size(0), src.size(
-                                                              1), src.size(2),
-                                                          decryption_key_id)
+                                                              1), src.size(2), linear_param_id)
 
     @classmethod
     def Get_Encrypted_Tensor_Opr2_Int32(cls, src_id1, src_id2):

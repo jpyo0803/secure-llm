@@ -36,6 +36,19 @@ struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N) {
     return tensor;
 }
 
+struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M, int N) {
+    struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+    int total_elements = B * M * N;
+
+    // Generate random int32 elements in the range [low, high]
+    for (int i = 0; i < total_elements; ++i) {
+        tensor->data[i] = low + rand() % (high - low + 1);
+    }
+
+    return tensor;
+  
+}
+
 void DeleteTensorInt32(struct TensorInt32* tensor) {
   free(tensor->data);
   free(tensor);
