@@ -363,10 +363,18 @@ void Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
       }
   }
 
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+
   blind_factor_ids[0] = tensor_int32_id;
   tensor_int32_list[blind_factor_ids[0]] = u;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
 
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+  
   blind_factor_ids[1] = tensor_int32_id;
   tensor_int32_list[blind_factor_ids[1]] = v;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
