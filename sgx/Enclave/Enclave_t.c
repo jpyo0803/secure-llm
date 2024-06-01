@@ -93,8 +93,8 @@ typedef struct ms_ecall_Sgx_Set_Tensor_Int32_t {
 
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t {
 	int ms_src_id;
+	int ms_linear_param_id;
 	int* ms_out;
-	int* ms_ret_id;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t;
 
 typedef struct ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t {
@@ -108,7 +108,7 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t {
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_decryption_key_id;
+	int ms_linear_param_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t;
 
@@ -464,10 +464,9 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(void
 	}
 	sgx_status_t status = SGX_SUCCESS;
 	int* _tmp_out = __in_ms.ms_out;
-	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
-	ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(__in_ms.ms_src_id, _tmp_out, _tmp_ret_id);
+	ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(__in_ms.ms_src_id, __in_ms.ms_linear_param_id, _tmp_out);
 
 
 	return status;
@@ -512,7 +511,7 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(void
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
-	ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_decryption_key_id, _tmp_ret_id);
+	ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_linear_param_id, _tmp_ret_id);
 
 
 	return status;

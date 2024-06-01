@@ -20,7 +20,7 @@ timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
 model_size='1.3B'
 target_input_token_len = 1024
 target_output_token_len = 2048

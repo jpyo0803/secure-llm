@@ -149,6 +149,16 @@ int Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
   linear_param->alpha = alpha;
   linear_param->beta = beta;
   linear_param->is_bias_fp32 = 0;
+  linear_param->chosen_keys = NULL;
+
+  // Generate blind factors
+  linear_param->obfuscation_ratio = 10; // tentative, should be controllable outside
+  linear_param->blind_factors_set = CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
+  for (int i = 0; i < linear_param->obfuscation_ratio; ++i) {
+      GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N], N * sizeof(int));
+  }
+  linear_param->precomputed_unblind_factors = MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
+  // dimension should be (1, obfuscation_ratio, M)
 
   linear_param_list[curr_id] = linear_param;
   linear_param_id = (linear_param_id + 1) % STATIC_LIST_LEN;
@@ -167,6 +177,15 @@ int Sgx_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
   linear_param->alpha = alpha;
   linear_param->beta = 1.0;
   linear_param->is_bias_fp32 = 1;
+  linear_param->chosen_keys = NULL;
+
+  // Generate blind factors
+  linear_param->obfuscation_ratio = 10; // tentative, should be controllable outside
+  linear_param->blind_factors_set = CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
+  for (int i = 0; i < linear_param->obfuscation_ratio; ++i) {
+      GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N], N * sizeof(int));
+  }
+  linear_param->precomputed_unblind_factors = MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
 
   linear_param_list[curr_id] = linear_param;
   linear_param_id = (linear_param_id + 1) % STATIC_LIST_LEN;
@@ -211,41 +230,42 @@ int Sgx_Set_Tensor_Int32(int* data, int B, int M, int N) {
   return curr_id;
 }
 
-int Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
+void Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id, int* out) {
     Sgx_Get_Tensor_Int32(src_id, out);
-
     struct TensorInt32* src_tensor = tensor_int32_list[src_id];
+    struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
     int B = src_tensor->B;
     int M = src_tensor->M;
     int N = src_tensor->N;
 
-    if (tensor_int32_list[tensor_int32_id] != NULL) {
-        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    // // // must choose random blind factors
+    if (linear_param->chosen_keys != NULL) {
+        DeleteTensorInt32(linear_param->chosen_keys);
     }
+    linear_param->chosen_keys = CreateTensorInt32FromRandom(0, linear_param->obfuscation_ratio - 1, B, 1, M);
 
     int curr_id = tensor_int32_id;
-    struct TensorInt32* blind_factor = CreateTensorInt32(B, 1, N);
-
-    GetCPRNG((unsigned char*)blind_factor->data, blind_factor->num_bytes);
+    int blind_b = linear_param->blind_factors_set->B;
+    int blind_m = linear_param->blind_factors_set->M;
+    int blind_n = linear_param->blind_factors_set->N;
 
     for (int i = 0; i < B; ++i) {
         for (int j = 0; j < M; ++j) {
+            int chosen_value = linear_param->chosen_keys->data[i * M + j];
+            int* blind_factor = &linear_param->blind_factors_set->data[chosen_value * N];
+
             for (int k = 0; k <= N - 16; k += 16) {
-                __m512i out_vec = _mm512_loadu_si512((__m512i*)&out[i * M * N + j * N + k]);
-                __m512i blind_vec = _mm512_loadu_si512((__m512i*)&blind_factor->data[i * N + k]);
-                out_vec = _mm512_add_epi32(out_vec, blind_vec);
-                _mm512_storeu_si512((__m512i*)&out[i * M * N + j * N + k], out_vec);
+              __m512i out_vec = _mm512_loadu_si512((__m512i*)&out[i * M * N + j * N + k]);
+              __m512i blind_vec = _mm512_loadu_si512((__m512i*)&blind_factor[k]);
+              out_vec = _mm512_add_epi32(out_vec, blind_vec);
+              _mm512_storeu_si512((__m512i*)&out[i * M * N + j * N + k], out_vec);
             }
             for (int k = (N / 16) * 16; k < N; ++k) {
-                out[i * M * N + j * N + k] += blind_factor->data[i * N + k];
+                out[i * M * N + j * N + k] += blind_factor[k];
             }
         }
     }
-
-    tensor_int32_list[curr_id] = blind_factor;
-    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
 }
 
 
@@ -267,20 +287,29 @@ int Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
   return curr_id;
 }
 
-int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
-                                       int decryption_key_id) {
-  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linear_param_id) {
+  struct LinearParam* linear_param = linear_param_list[linear_param_id];
+  struct TensorInt32* chosen_keys = linear_param->chosen_keys;
+  struct TensorInt32* unblind_factors = linear_param->precomputed_unblind_factors;
+  int obf_ratio = linear_param->obfuscation_ratio;
+  int bf_m = unblind_factors->M;
+  int bf_n = unblind_factors->N;
+
+  int chosen_key_n = chosen_keys->N;
+  // dimension should be (1, obfuscation_ratio, M)
 
   for (int i = 0; i < B; ++i) {
       for (int j = 0; j < M; ++j) {
+          int chosen_value = linear_param->chosen_keys->data[i * M + j];
+          int* unblind_factor = &unblind_factors->data[chosen_value * N];
           for (int k = 0; k <= N - 16; k += 16) {
               __m512i data_vec = _mm512_loadu_si512((__m512i*)&data[i * M * N + j * N + k]);
-              __m512i key_vec = _mm512_loadu_si512((__m512i*)&decryption_key->data[i * N + k]);
+              __m512i key_vec = _mm512_loadu_si512((__m512i*)&unblind_factor[i * N + k]);
               data_vec = _mm512_sub_epi32(data_vec, key_vec);
               _mm512_storeu_si512((__m512i*)&data[i * M * N + j * N + k], data_vec);
           }
           for (int k = (N / 16) * 16; k < N; ++k) {
-              data[i * M * N + j * N + k] -= decryption_key->data[i * N + k];
+              data[i * M * N + j * N + k] -= unblind_factor[i * N + k];
           }
       }
   }
@@ -873,16 +902,16 @@ void ecall_Sgx_Set_Tensor_Int32(int* data, int B, int M, int N, int* ret_id) {
   *ret_id = Sgx_Set_Tensor_Int32(data,B,M,N);
 }
 
-void ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out, int* ret_id) {
-  *ret_id = Sgx_Get_Encrypted_Tensor_Opr1_Int32(src_id,out);
+void ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id, int* out) {
+  Sgx_Get_Encrypted_Tensor_Opr1_Int32(src_id, linear_param_id,out);
 }
 
 void ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id, int linear_param_id, int* ret_id) {
   *ret_id = Sgx_Generate_Decryption_Key_Opr1_Int32(blind_factor_id,linear_param_id);
 }
 
-void ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int decryption_key_id, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_Opr1_Int32(data,B,M,N,decryption_key_id);
+void ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linear_param_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_Opr1_Int32(data,B,M,N,linear_param_id);
 }
 
 void ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {

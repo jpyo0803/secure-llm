@@ -310,14 +310,12 @@ extern "C"
         return ret_id;
     }
 
-    int Sgx_Get_Encrypted_Tensor_Opr1_Int32(unsigned long eid, int src_id, int* out) {
-        int ret_id;
-        sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(eid,src_id,out,&ret_id);
+    void Sgx_Get_Encrypted_Tensor_Opr1_Int32(unsigned long eid, int src_id, int linear_param_id, int* out) {
+        sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(eid,src_id, linear_param_id,out);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;
         }
-        return ret_id;
     }
 
     int Sgx_Generate_Decryption_Key_Opr1_Int32(unsigned long eid, int blind_factor_id, int linear_param_id) {
@@ -330,9 +328,9 @@ extern "C"
         return ret_id;
     }
 
-    int Sgx_Set_Decrypted_Tensor_Opr1_Int32(unsigned long eid, int* data, int B, int M, int N, int decryption_key_id) {
+    int Sgx_Set_Decrypted_Tensor_Opr1_Int32(unsigned long eid, int* data, int B, int M, int N, int linear_param_id) {
         int ret_id;
-        sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(eid,data,B,M,N,decryption_key_id,&ret_id);
+        sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(eid,data,B,M,N,linear_param_id,&ret_id);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;

@@ -67,8 +67,8 @@ typedef struct ms_ecall_Sgx_Set_Tensor_Int32_t {
 
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t {
 	int ms_src_id;
+	int ms_linear_param_id;
 	int* ms_out;
-	int* ms_ret_id;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t;
 
 typedef struct ms_ecall_Sgx_Generate_Decryption_Key_Opr1_Int32_t {
@@ -82,7 +82,7 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t {
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_decryption_key_id;
+	int ms_linear_param_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t;
 
@@ -370,13 +370,13 @@ sgx_status_t ecall_Sgx_Set_Tensor_Int32(sgx_enclave_id_t eid, int* data, int B, 
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int src_id, int* out, int* ret_id)
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int src_id, int linear_param_id, int* out)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32_t ms;
 	ms.ms_src_id = src_id;
+	ms.ms_linear_param_id = linear_param_id;
 	ms.ms_out = out;
-	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 9, &ocall_table_Enclave, &ms);
 	return status;
 }
@@ -392,7 +392,7 @@ sgx_status_t ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(sgx_enclave_id_t eid, 
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int linear_param_id, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32_t ms;
@@ -400,7 +400,7 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int
 	ms.ms_B = B;
 	ms.ms_M = M;
 	ms.ms_N = N;
-	ms.ms_decryption_key_id = decryption_key_id;
+	ms.ms_linear_param_id = linear_param_id;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 11, &ocall_table_Enclave, &ms);
 	return status;

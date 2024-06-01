@@ -22,10 +22,10 @@ enclave {
     /*void*/ public void ecall_Sgx_Get_Tensor_Int32(int src_id, [user_check]int* out);
     public void ecall_Sgx_Set_Tensor_Int32([user_check]int* data, int B, int M, int N, [user_check]int* ret_id);
     
-    public void ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, [user_check]int* out, [user_check]int* ret_id);
+    public void ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id, [user_check]int* out);
     public void ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id, int linear_param_id, [user_check]int *ret_id);
     public void ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32([user_check]int* data, int B, int M, int N,
-                                          int decryption_key_id, [user_check]int* ret_id);
+                                          int linear_param_id, [user_check]int* ret_id);
 
     // This will return unblind factor id to unblind factor
     public void ecall_Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, [user_check]int* out1,

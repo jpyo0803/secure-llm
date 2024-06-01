@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <immintrin.h>
+#include <sgx_trts.h>
 
 extern "C" {
 
@@ -36,6 +37,21 @@ struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N) {
     }
 
     return tensor;
+}
+
+struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M, int N) {
+    struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+    int total_elements = B * M * N;
+
+    // Generate random int32 elements in the range [low, high]
+    for (int i = 0; i < total_elements; ++i) {
+        uint32_t rand_val;
+        sgx_read_rand((unsigned char*)&rand_val, sizeof(rand_val));
+        tensor->data[i] = low + (rand_val % (high - low + 1));
+    }
+
+    return tensor;
+  
 }
 
 void DeleteTensorInt32(struct TensorInt32* tensor) {

@@ -20,8 +20,14 @@ struct LinearParam {
   float beta;
 
   int is_bias_fp32;
+
+  int obfuscation_ratio;
+  struct TensorInt32* blind_factors_set; // Sample from here, row-wise blind factor
+  struct TensorInt32* precomputed_unblind_factors;
+
+  struct TensorInt32* chosen_keys;
 }* linear_param_list[STATIC_LIST_LEN];
-int linear_param_id = 0;
+int linear_param_id = 0; 
 
 float bmm_param_list[STATIC_LIST_LEN];
 int bmm_param_id = 0;
