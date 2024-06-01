@@ -220,6 +220,10 @@ int Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int* out) {
     int M = src_tensor->M;
     int N = src_tensor->N;
 
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+
     int curr_id = tensor_int32_id;
     struct TensorInt32* blind_factor = CreateTensorInt32(B, 1, N);
 
@@ -249,6 +253,10 @@ int Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
                                           int linear_param_id) {
   struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
   struct TensorInt8* linear_weight = linear_param_list[linear_param_id]->weight;
+
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
 
   struct TensorInt32* decryption_key =
       MatmulS32S8S32(blind_factor, linear_weight);
@@ -353,6 +361,10 @@ int Sgx_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
   struct TensorInt32* uy = MatmulS32S32S32(u, Y);
   struct TensorInt32* uv = MatmulS32S32S32(u, v);
 
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+
   struct TensorInt32* decryption_key = CreateTensorInt32(B, M, N);
 
   for (int i = 0; i < B; ++i) {
@@ -384,9 +396,13 @@ int Sgx_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
 
 int Sgx_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
                                        int decryption_key_id) {
-  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
 
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+  
+  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
   int total_elements = B * M * N;
 
@@ -409,6 +425,10 @@ int Sgx_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
 }
 
 int Sgx_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
+  if (tensor_float_list[tensor_float_id] != NULL) {
+    DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+  }
+
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
@@ -440,6 +460,10 @@ int Sgx_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
 }
 
 int Sgx_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
+  if (tensor_float_list[tensor_float_id] != NULL) {
+    DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+  }
+
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
@@ -471,6 +495,10 @@ int Sgx_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
 }
 
 int Sgx_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
+  if (tensor_float_list[tensor_float_id] != NULL) {
+    DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+  }
+
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   float alpha = bmm_param_list[bmm_param_id];
 
@@ -491,6 +519,10 @@ int Sgx_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
 }
 
 int Sgx_ReLU(int src_id) {
+    if (tensor_float_list[tensor_float_id] != NULL) {
+        DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+    }
+
     struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
     int B = src_tensor->B;
@@ -521,6 +553,10 @@ int Sgx_ReLU(int src_id) {
 
 
 int Sgx_Softmax(int src_id) {
+  if (tensor_float_list[tensor_float_id] != NULL) {
+    DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+  }
+
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
   int B = src_tensor->B;
@@ -559,6 +595,10 @@ int Sgx_Softmax(int src_id) {
 }
 
 int Sgx_Quantize_Post_Softmax(int src_id) {
+    if (tensor_int8_list[tensor_int8_id] != NULL) {
+        DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
+    }
+
     struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
     int B = src_tensor->B;
@@ -592,6 +632,10 @@ int Sgx_Quantize_Post_Softmax(int src_id) {
 }
 
 int Sgx_Cast_From_Float_To_Int8(int src_id) {
+    if (tensor_int8_list[tensor_int8_id] != NULL) {
+        DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
+    }
+
     struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
     int B = src_tensor->B;
@@ -622,6 +666,10 @@ int Sgx_Cast_From_Float_To_Int8(int src_id) {
 }
 
 int Sgx_Cast_From_Float_To_Int32(int src_id) {
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+
     struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
     int B = src_tensor->B;
@@ -650,6 +698,10 @@ int Sgx_Cast_From_Float_To_Int32(int src_id) {
 }
 
 int Sgx_Cast_From_Int8_To_Int32(int src_id) {
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+
     struct TensorInt8* src_tensor = tensor_int8_list[src_id];
 
     int B = src_tensor->B;
@@ -752,6 +804,10 @@ int Sgx_Set_Bmm_Param(float alpha) {
 }
 
 int Sgx_Residual_Add(int residual, int hidden_states) {
+    if (tensor_float_list[tensor_float_id] != NULL) {
+        DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+    }
+
     struct TensorFloat* residual_tensor = tensor_float_list[residual];
     struct TensorFloat* hidden_states_tensor = tensor_float_list[hidden_states];
 
