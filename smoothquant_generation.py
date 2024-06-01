@@ -22,8 +22,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode4
 model_size='125m'
-target_input_token_len = 1024
-target_output_token_len = 2048
+target_input_token_len = 128
+target_output_token_len = 256
+num_batches = 10
 
 '''
     NOTE(jpyo0803): Set execution mode
@@ -68,8 +69,8 @@ dummy_prompt = (
 dummy_model_inputs = tokenizer([dummy_prompt], return_tensors='pt').to(
     'cuda:0' if start_gpu else 'cpu')
 
-dummy = model_smoothquant.generate(
-    **dummy_model_inputs, max_new_tokens=128, do_sample=False)
+# dummy = model_smoothquant.generate(
+#     **dummy_model_inputs, max_new_tokens=128, do_sample=False)
 
 '''
     NOTE(jpyo0803): Above is warmup
@@ -79,7 +80,10 @@ prompt = ("A chat between a curious human and the Statue of Liberty.\n\nHuman: W
           "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
           "there?")
 
-model_inputs = tokenizer([prompt], return_tensors='pt').to(
+prompts = [prompt] * num_batches
+
+
+model_inputs = tokenizer(prompts, return_tensors='pt').to(
     'cuda:0' if start_gpu else 'cpu')
 
 
@@ -134,7 +138,7 @@ for state in ['Prefill', 'Generation']:
         sub_data = [key, num_samples, min_time, max_time, avg_time, total_time]
         data.append(sub_data)
 
-        f = open(f'sq_gen_{model_size}_{target_input_token_len}_{target_output_token_len}_mode{smoothquant.opt.my_exec_mode.value}_optane.csv', 'w')
+        f = open(f'sq_gen_{model_size}_{target_input_token_len}_{target_output_token_len}_mode{smoothquant.opt.my_exec_mode.value}_batch{num_batches}_optane.csv', 'w')
         writer = csv.writer(f)
         writer.writerows(data)
         f.close()
