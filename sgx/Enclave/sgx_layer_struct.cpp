@@ -1147,6 +1147,334 @@ int Sgx_Residual_Add(int residual, int hidden_states) {
     return curr_id;
 }
 
+
+void Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+    struct TensorInt32* u = CreateTensorInt32(X->B, 1, X->N);
+    GetCPRNG((unsigned char*)u->data, u->num_bytes);
+
+    struct TensorInt32* v = CreateTensorInt32(X->B, 1, Y->N);
+    GetCPRNG((unsigned char*)v->data, v->num_bytes);
+
+    // Encrypt X with AVX-512
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            int k;
+            for (k = 0; k <= X->N - 16; k += 16) {  // Process 16 elements at a time
+                __m512i x_data = _mm512_loadu_si512(&X->data[i * X->M * X->N + j * X->N + k]);
+                __m512i u_data = _mm512_loadu_si512(&u->data[i * X->N + k]);
+                __m512i result = _mm512_add_epi32(x_data, u_data);
+                _mm512_storeu_si512(&out1[i * X->M * X->N + j * X->N + k], result);
+            }
+            for (; k < X->N; ++k) {  // Process remaining elements
+                out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+            }
+        }
+    }
+
+    // Encrypt Y with AVX-512
+    for (int i = 0; i < Y->B; ++i) {
+        for (int j = 0; j < Y->M; ++j) {
+            int k;
+            for (k = 0; k <= Y->N - 16; k += 16) {  // Process 16 elements at a time
+                __m512i y_data = _mm512_loadu_si512(&Y->data[i * Y->M * Y->N + j * Y->N + k]);
+                __m512i v_data = _mm512_loadu_si512(&v->data[i * Y->N + k]);
+                __m512i result = _mm512_add_epi32(y_data, v_data);
+                _mm512_storeu_si512(&out2[i * Y->M * Y->N + j * Y->N + k], result);
+            }
+            for (; k < Y->N; ++k) {  // Process remaining elements
+                out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->N + k];
+            }
+        }
+    }
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    tensor_int32_list[tensor_int32_id] = u;
+    blind_factor_ids[0] = tensor_int32_id;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    tensor_int32_list[tensor_int32_id] = v;
+    blind_factor_ids[1] = tensor_int32_id;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+}
+
+int Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
+                                        int blind_factor_u_id,
+                                        int blind_factor_v_id) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
+
+    struct TensorInt32* u = tensor_int32_list[blind_factor_u_id];
+    struct TensorInt32* v = tensor_int32_list[blind_factor_v_id];
+
+    struct TensorInt32* uy = MatmulS32S32S32(u, Y);  // B, 1, Y_M
+    struct TensorInt32* xv = MatmulS32S32S32(X, v);  // B, X_M, 1
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+
+    struct TensorInt32* uv = MatmulS32S32S32(u, v);  // B x 1 x 1
+
+    struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            int k;
+            for (k = 0; k <= Y->M - 16; k += 16) {  // Process 16 elements at a time
+                __m512i uv_data = _mm512_set1_epi32(uv->data[i]);
+                __m512i xv_data = _mm512_set1_epi32(xv->data[i * X->M + j]);
+                __m512i uy_data = _mm512_loadu_si512(&uy->data[i * Y->M + k]);
+                __m512i result = _mm512_add_epi32(_mm512_add_epi32(uv_data, xv_data), uy_data);
+                _mm512_storeu_si512(&decryption_key->data[i * X->M * Y->M + j * Y->M + k], result);
+            }
+            for (; k < Y->M; ++k) {  // Process remaining elements
+                decryption_key->data[i * X->M * Y->M + j * Y->M + k] =
+                    uv->data[i] + xv->data[i * X->M + j] + uy->data[i * Y->M + k];
+            }
+        }
+    }
+
+    DeleteTensorInt32(uy);
+    DeleteTensorInt32(xv);
+    DeleteTensorInt32(uv);
+
+    int curr_id = tensor_int32_id;
+    tensor_int32_list[curr_id] = decryption_key;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+int Sgx_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N, int decryption_key_id) {
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+
+    struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            int k;
+            for (k = 0; k <= N - 16; k += 16) {  // Process 16 elements at a time
+                __m512i data_vec = _mm512_loadu_si512(&data[i * M * N + j * N + k]);
+                __m512i key_vec = _mm512_loadu_si512(&decryption_key->data[i * M * N + j * N + k]);
+                __m512i result = _mm512_sub_epi32(data_vec, key_vec);
+                _mm512_storeu_si512(&tensor->data[i * M * N + j * N + k], result);
+            }
+            for (; k < N; ++k) {  // Process remaining elements
+                tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - decryption_key->data[i * M * N + j * N + k];
+            }
+        }
+    }
+
+    int curr_id = tensor_int32_id;
+    tensor_int32_list[curr_id] = tensor;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+void Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+    struct TensorInt32* u = CreateTensorInt32(X->B, 1, X->N);
+    GetCPRNG((unsigned char*)u->data, u->num_bytes);
+    struct TensorInt32* v = CreateTensorInt32(X->B, 1, Y->M);
+    GetCPRNG((unsigned char*)v->data, v->num_bytes);
+
+    // Encrypt X with AVX-512
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            int k;
+            for (k = 0; k <= X->N - 16; k += 16) {  // Process 16 elements at a time
+                __m512i x_data = _mm512_loadu_si512(&X->data[i * X->M * X->N + j * X->N + k]);
+                __m512i u_data = _mm512_loadu_si512(&u->data[i * X->N + k]);
+                __m512i result = _mm512_add_epi32(x_data, u_data);
+                _mm512_storeu_si512(&out1[i * X->M * X->N + j * X->N + k], result);
+            }
+            for (; k < X->N; ++k) {  // Process remaining elements
+                out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+            }
+        }
+    }
+
+    // Encrypt Y with AVX-512
+    for (int i = 0; i < Y->B; ++i) {
+        for (int j = 0; j < Y->M; ++j) {
+            int k;
+            for (k = 0; k <= Y->N - 16; k += 16) {  // Process 16 elements at a time
+                __m512i y_data = _mm512_loadu_si512(&Y->data[i * Y->M * Y->N + j * Y->N + k]);
+                __m512i v_data = _mm512_set1_epi32(v->data[i * Y->M + j]);
+                __m512i result = _mm512_add_epi32(y_data, v_data);
+                _mm512_storeu_si512(&out2[i * Y->M * Y->N + j * Y->N + k], result);
+            }
+            for (; k < Y->N; ++k) {  // Process remaining elements
+                out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->M + j];
+            }
+        }
+    }
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    tensor_int32_list[tensor_int32_id] = u;
+    blind_factor_ids[0] = tensor_int32_id;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    tensor_int32_list[tensor_int32_id] = v;
+    blind_factor_ids[1] = tensor_int32_id;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+}
+
+int Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
+                                        int blind_factor_u_id,
+                                        int blind_factor_v_id) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
+
+    struct TensorInt32* u = tensor_int32_list[blind_factor_u_id];
+    struct TensorInt32* v = tensor_int32_list[blind_factor_v_id];
+
+    struct TensorInt32* uy = MatmulS32S32S32(u, Y);  // B, 1, Y_M
+
+    struct TensorInt32* xv = CreateTensorInt32(X->B, X->M, Y->M);
+
+    // Vectorize the sum calculation and multiplication for xv
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            int sum = 0;
+            int k;
+            for (k = 0; k <= X->N - 16; k += 16) {
+                __m512i x_data = _mm512_loadu_si512(&X->data[i * X->M * X->N + j * X->N + k]);
+                __m512i sum_vec = _mm512_set1_epi32(0);
+                sum_vec = _mm512_add_epi32(sum_vec, x_data);
+                sum += _mm512_reduce_add_epi32(sum_vec);
+            }
+            for (; k < X->N; ++k) {
+                sum += X->data[i * X->M * X->N + j * X->N + k];
+            }
+            for (int k = 0; k < Y->M; ++k) {
+                xv->data[i * X->M * Y->M + j * Y->M + k] = sum * v->data[i * Y->M + k];
+            }
+        }
+    }
+
+    struct TensorInt32* uv = CreateTensorInt32(X->B, 1, Y->M);
+    for (int i = 0; i < X->B; ++i) {
+        int sum = 0;
+        int j;
+        for (j = 0; j <= X->N - 16; j += 16) {
+            __m512i u_data = _mm512_loadu_si512(&u->data[i * X->N + j]);
+            __m512i sum_vec = _mm512_set1_epi32(0);
+            sum_vec = _mm512_add_epi32(sum_vec, u_data);
+            sum += _mm512_reduce_add_epi32(sum_vec);
+        }
+        for (; j < X->N; ++j) {
+            sum += u->data[i * X->N + j];
+        }
+        for (int k = 0; k < Y->M; ++k) {
+            uv->data[i * Y->M + k] = sum * v->data[i * Y->M + k];
+        }
+    }
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+
+    struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+
+    // Vectorize the decryption key generation
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            int k;
+            for (k = 0; k <= Y->M - 16; k += 16) {
+                __m512i uv_data = _mm512_loadu_si512(&uv->data[i * Y->M + k]);
+                __m512i xv_data = _mm512_loadu_si512(&xv->data[i * X->M * Y->M + j * Y->M + k]);
+                __m512i uy_data = _mm512_loadu_si512(&uy->data[i * Y->M + k]);
+                __m512i result = _mm512_add_epi32(_mm512_add_epi32(uv_data, xv_data), uy_data);
+                _mm512_storeu_si512(&decryption_key->data[i * X->M * Y->M + j * Y->M + k], result);
+            }
+            for (; k < Y->M; ++k) {
+                decryption_key->data[i * X->M * Y->M + j * Y->M + k] =
+                    uv->data[i * Y->M + k] + xv->data[i * X->M * Y->M + j * Y->M + k] + uy->data[i * Y->M + k];
+            }
+        }
+    }
+
+    DeleteTensorInt32(uy);
+    DeleteTensorInt32(xv);
+    DeleteTensorInt32(uv);
+
+    int curr_id = tensor_int32_id;
+    tensor_int32_list[curr_id] = decryption_key;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+int Sgx_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N, int decryption_key_id) {
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+
+    struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < M; ++j) {
+            int k;
+            for (k = 0; k <= N - 16; k += 16) {  // Process 16 elements at a time
+                __m512i data_vec = _mm512_loadu_si512(&data[i * M * N + j * N + k]);
+                __m512i key_vec = _mm512_loadu_si512(&decryption_key->data[i * M * N + j * N + k]);
+                __m512i result = _mm512_sub_epi32(data_vec, key_vec);
+                _mm512_storeu_si512(&tensor->data[i * M * N + j * N + k], result);
+            }
+            for (; k < N; ++k) {  // Process remaining elements
+                tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - decryption_key->data[i * M * N + j * N + k];
+            }
+        }
+    }
+
+    int curr_id = tensor_int32_id;
+    tensor_int32_list[curr_id] = tensor;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
+  Sgx_Get_Encrypted_Tensor_QK_Int32(src_id1,src_id2,out1,out2,blind_factor_ids);
+}
+
+void ecall_Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id, int* ret_id) {
+  *ret_id = Sgx_Generate_Decryption_Key_QK_Int32(src_id1,src_id2,blind_factor_u_id,blind_factor_v_id);
+}
+
+void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N, int decryption_key_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_QK_Int32(data,B,M,N,decryption_key_id);
+}
+
+void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
+  Sgx_Get_Encrypted_Tensor_PV_Int32(src_id1,src_id2,out1,out2,blind_factor_ids);
+}
+
+void ecall_Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id, int* ret_id) {
+  *ret_id = Sgx_Generate_Decryption_Key_PV_Int32(src_id1,src_id2,blind_factor_u_id,blind_factor_v_id);
+}
+
+void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N, int decryption_key_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_PV_Int32(data,B,M,N,decryption_key_id);
+}
+
 void ecall_Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N, int* ret_id) {
   *ret_id = Sgx_Set_Hidden_States(hidden_states,B,M,N);
 }

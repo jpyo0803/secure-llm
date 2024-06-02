@@ -186,6 +186,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             test_y = self.lsc.Get_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
+            test_y = self.sgx_lsc.Get_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
             test_y = self.lsc.Get_Tensor_Int32(y)
@@ -196,7 +197,6 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             assert False
         timer.end(t)
 
-        print(f'Linear ID={self.linear_layer_id}, sum = {torch.sum(test_y)}, state={state}')
 
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
