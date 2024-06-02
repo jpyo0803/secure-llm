@@ -18,7 +18,6 @@ CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
 cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
 
-
 class BMM_S8X_S8Y_FP32Z_Mixed:
     def __init__(self, torch_int_nn_bmm, privacy_on, module_name=None):
         self.privacy_on = privacy_on
@@ -79,7 +78,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         else:
             assert False
         timer.end(t)
-
+        
         t = timer.start(tag=f'{self.module_name}, Process Input Tensors Before Offload ({state})', category=f'{self.module_name}, Process Input Tensors Before Offload ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             pass
@@ -99,9 +98,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             y_copy = y
 
             if self.is_pv_bmm:
-                x, y = self.lsc.Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(x, y)
+                x, y = self.lsc.Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(x, y, self.bmm_id)
             else:
-                x, y = self.lsc.Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(x, y)
+                x, y = self.lsc.Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(x, y, self.bmm_id)
         else:
             assert False
         timer.end(t)
@@ -117,9 +116,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_Opr2_Int32(x_copy, y_copy, blind_factor_u_id, blind_factor_v_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             if self.is_pv_bmm:
-                decryption_key_id = self.lsc.Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(x_copy, y_copy)
+                decryption_key_id = self.lsc.Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(x_copy, y_copy, self.bmm_id)
             else:
-                decryption_key_id = self.lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_copy, y_copy)
+                decryption_key_id = self.lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_copy, y_copy, self.bmm_id)
         else:
             assert False
 
