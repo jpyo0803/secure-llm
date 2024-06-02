@@ -919,7 +919,9 @@ class Int8OPTDecoderLayer(nn.Module):
         state = 'Prefill' if is_prefill else 'Generation'
         t = timer.start(tag=f'Set Hidden States ({state})',
                         category=f'Set Hidden States ({state})')
-        if my_exec_mode == ExecMode.Mode4:
+        if my_exec_mode == ExecMode.Mode1:
+            pass
+        elif my_exec_mode == ExecMode.Mode4:
             hidden_states = self.lsc.Set_Hidden_States(
                 hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode5:
