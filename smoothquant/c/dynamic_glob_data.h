@@ -17,7 +17,4 @@ int tensor_uint32_id = 0;
 struct TensorInt8* tensor_int8_list[DYNAMIC_LIST_LEN];
 int tensor_int8_id = 0;
 
-struct TensorInt32* unblind_factor_opr2[DYNAMIC_LIST_LEN];
-int unblind_factor_opr2_id = 0;
-
 #endif

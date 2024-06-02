@@ -39,16 +39,6 @@ int Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
                                           int linear_param_id);
 int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linear_param_id);
 
-
-// This will return unblind factor id to unblind factor
-void Sgx_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
-                                        int* out2, int* blind_factor_ids);
-int Sgx_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
-                                          int blind_factor_u_id,
-                                          int blind_factor_v_id);
-int Sgx_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
-                                        int decryption_key_id);
-
 void Sgx_Get_Tensor_Dim_Int8(int src_id, int* dim);
 void Sgx_Get_Tensor_Int8(int src_id, char* out);
 int Sgx_Set_Tensor_Int8(char* data, int B, int M, int N);
