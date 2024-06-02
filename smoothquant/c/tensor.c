@@ -207,3 +207,23 @@ struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X,
   }
   return Z;
 }
+
+struct VectorInt32* CreateVectorInt32(int N) {
+  struct VectorInt32* vec = (struct VectorInt32*)malloc(sizeof(struct VectorInt32));
+  vec->num_bytes = N * sizeof(int); // num bytes being used
+  vec->data = (int*)aligned_alloc(64, N * sizeof(int));
+  vec->N = N; // actual number of elements
+
+  // Is it correct to set capacity to N when you used "aligned_alloc"?
+  vec->capacity = N;
+  return vec;
+}
+
+// I want PushBack function for VectorInt32, which increases its capacity by 2x if needed in 64 byte aligned memory
+void PushBack(struct VectorInt32* vec, int value) {
+  if (vec->N == vec->capacity) {
+    vec->capacity *= 2;
+    vec->data = (int*)realloc(vec->data, vec->capacity * sizeof(int));
+  }
+  vec->data[vec->N++] = value;
+}

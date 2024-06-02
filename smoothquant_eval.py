@@ -66,6 +66,8 @@ class Evaluator:
         end = torch.cuda.Event(enable_timing=True)
         latency = 0
         for i, batch in enumerate(self.dataset):
+            model.pre_init()
+
             print(f'Processing {i+1}-th Batch')
             if start_gpu:
                 input_ids = batch['input_ids'].cuda().unsqueeze(0)
@@ -119,7 +121,6 @@ print("Start Device: ", "CUDA" if start_gpu else "CPU")
 model_smoothquant = Int8OPTForCausalLM.from_pretrained(
     'mit-han-lab/opt-125m-smoothquant', torch_dtype=torch.float32, device_map='cuda:0' if start_gpu else 'cpu')
 
-model_smoothquant.pre_init()  # Need this to initialize the model weights in CUDA
 
 
 print_model_size(model_smoothquant)

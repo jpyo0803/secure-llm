@@ -33,6 +33,17 @@ struct TensorInt8 {
   unsigned int num_bytes;
 };
 
+struct VectorInt32 {
+  int* data;
+  int N;
+  unsigned int num_bytes;
+
+  int capacity;
+};
+
+struct VectorInt32* CreateVectorInt32(int N);
+void PushBack(struct VectorInt32* vec, int value);
+
 struct TensorInt32* CreateTensorInt32(int B, int M, int N);
 struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N);
 struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M, int N);

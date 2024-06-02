@@ -1,10 +1,11 @@
 #include "layer_struct_c.h"
 
 #include <assert.h>
+#include <immintrin.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <immintrin.h>
+
 #include "aes_stream.h"
 
 int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
@@ -27,7 +28,8 @@ int Ex_Copy_Hidden_States(int src_id) {
 
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-  tensor_float_list[curr_id] = CreateTensorFloatFromData(src_tensor->data, src_tensor->B, src_tensor->M, src_tensor->N);
+  tensor_float_list[curr_id] = CreateTensorFloatFromData(
+      src_tensor->data, src_tensor->B, src_tensor->M, src_tensor->N);
 
   tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
@@ -48,95 +50,102 @@ int Ex_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
 }
 
 int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
-    int curr_id = tensor_int8_id;
+  int curr_id = tensor_int8_id;
 
-    struct TensorFloat* src_tensor = tensor_float_list[src_id];
-    struct LayerNormParam* layer_norm_param = layer_norm_param_list[layer_norm_param_id];
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
+  struct LayerNormParam* layer_norm_param =
+      layer_norm_param_list[layer_norm_param_id];
 
-    struct TensorInt8* dst_tensor = CreateTensorInt8(src_tensor->B, src_tensor->M, src_tensor->N);
+  struct TensorInt8* dst_tensor =
+      CreateTensorInt8(src_tensor->B, src_tensor->M, src_tensor->N);
 
-    int B = src_tensor->B;
-    int M = src_tensor->M;
-    int N = src_tensor->N;
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
 
-    for (int i = 0; i < B; ++i) {
-        for (int j = 0; j < M; ++j) {
-            __m512 sum_vec = _mm512_setzero_ps();
-            __m512 sum_sqr_vec = _mm512_setzero_ps();
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      __m512 sum_vec = _mm512_setzero_ps();
+      __m512 sum_sqr_vec = _mm512_setzero_ps();
 
-            // Calculate sum and sum of squares
-            for (int k = 0; k <= N - 16; k += 16) {
-                __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
-                sum_vec = _mm512_add_ps(sum_vec, src_vec);
-                sum_sqr_vec = _mm512_fmadd_ps(src_vec, src_vec, sum_sqr_vec);
-            }
+      // Calculate sum and sum of squares
+      for (int k = 0; k <= N - 16; k += 16) {
+        __m512 src_vec =
+            _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
+        sum_vec = _mm512_add_ps(sum_vec, src_vec);
+        sum_sqr_vec = _mm512_fmadd_ps(src_vec, src_vec, sum_sqr_vec);
+      }
 
-            // Horizontally add the elements in sum_vec and sum_sqr_vec
-            float sum = 0.0, sum_sqr = 0.0;
-            float sum_array[16], sum_sqr_array[16];
-            _mm512_storeu_ps(sum_array, sum_vec);
-            _mm512_storeu_ps(sum_sqr_array, sum_sqr_vec);
-            for (int l = 0; l < 16; ++l) {
-                sum += sum_array[l];
-                sum_sqr += sum_sqr_array[l];
-            }
+      // Horizontally add the elements in sum_vec and sum_sqr_vec
+      float sum = 0.0, sum_sqr = 0.0;
+      float sum_array[16], sum_sqr_array[16];
+      _mm512_storeu_ps(sum_array, sum_vec);
+      _mm512_storeu_ps(sum_sqr_array, sum_sqr_vec);
+      for (int l = 0; l < 16; ++l) {
+        sum += sum_array[l];
+        sum_sqr += sum_sqr_array[l];
+      }
 
-            // Process any remaining elements
-            for (int k = (N / 16) * 16; k < N; ++k) {
-                float tmp = src_tensor->data[i * M * N + j * N + k];
-                sum += tmp;
-                sum_sqr += tmp * tmp;
-            }
+      // Process any remaining elements
+      for (int k = (N / 16) * 16; k < N; ++k) {
+        float tmp = src_tensor->data[i * M * N + j * N + k];
+        sum += tmp;
+        sum_sqr += tmp * tmp;
+      }
 
-            float mean = sum / N;
-            float var = sum_sqr / N - mean * mean;
-            float inv_std = 1.0f / sqrtf(var + layer_norm_param->eps);
+      float mean = sum / N;
+      float var = sum_sqr / N - mean * mean;
+      float inv_std = 1.0f / sqrtf(var + layer_norm_param->eps);
 
-            __m512 mean_vec = _mm512_set1_ps(mean);
-            __m512 inv_std_vec = _mm512_set1_ps(inv_std);
-            __m512 gamma_vec, beta_vec;
+      __m512 mean_vec = _mm512_set1_ps(mean);
+      __m512 inv_std_vec = _mm512_set1_ps(inv_std);
+      __m512 gamma_vec, beta_vec;
 
-            // Normalize and clamp
-            for (int k = 0; k <= N - 16; k += 16) {
-                __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
-                __m512 norm_vec = _mm512_sub_ps(src_vec, mean_vec);
-                norm_vec = _mm512_mul_ps(norm_vec, inv_std_vec);
+      // Normalize and clamp
+      for (int k = 0; k <= N - 16; k += 16) {
+        __m512 src_vec =
+            _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
+        __m512 norm_vec = _mm512_sub_ps(src_vec, mean_vec);
+        norm_vec = _mm512_mul_ps(norm_vec, inv_std_vec);
 
-                gamma_vec = _mm512_loadu_ps(&layer_norm_param->gamma->data[k]);
-                beta_vec = _mm512_loadu_ps(&layer_norm_param->beta->data[k]);
+        gamma_vec = _mm512_loadu_ps(&layer_norm_param->gamma->data[k]);
+        beta_vec = _mm512_loadu_ps(&layer_norm_param->beta->data[k]);
 
-                norm_vec = _mm512_fmadd_ps(norm_vec, gamma_vec, beta_vec);
-                norm_vec = _mm512_roundscale_ps(norm_vec, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        norm_vec = _mm512_fmadd_ps(norm_vec, gamma_vec, beta_vec);
+        norm_vec = _mm512_roundscale_ps(
+            norm_vec, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
 
-                // Clamp between -128 and 127
-                __m512i int_vec = _mm512_cvtps_epi32(norm_vec);
-                int_vec = _mm512_max_epi32(int_vec, _mm512_set1_epi32(-128));
-                int_vec = _mm512_min_epi32(int_vec, _mm512_set1_epi32(127));
+        // Clamp between -128 and 127
+        __m512i int_vec = _mm512_cvtps_epi32(norm_vec);
+        int_vec = _mm512_max_epi32(int_vec, _mm512_set1_epi32(-128));
+        int_vec = _mm512_min_epi32(int_vec, _mm512_set1_epi32(127));
 
-                // Store the result as int8
-                __m128i int8_vec = _mm512_cvtsepi32_epi8(int_vec);
-                _mm_storeu_si128((__m128i*)&dst_tensor->data[i * M * N + j * N + k], int8_vec);
-            }
+        // Store the result as int8
+        __m128i int8_vec = _mm512_cvtsepi32_epi8(int_vec);
+        _mm_storeu_si128((__m128i*)&dst_tensor->data[i * M * N + j * N + k],
+                         int8_vec);
+      }
 
-            // Process any remaining elements
-            for (int k = (N / 16) * 16; k < N; ++k) {
-                float tmp = src_tensor->data[i * M * N + j * N + k];
-                tmp = (tmp - mean) * inv_std * layer_norm_param->gamma->data[k] + layer_norm_param->beta->data[k];
-                tmp = roundf(tmp);
+      // Process any remaining elements
+      for (int k = (N / 16) * 16; k < N; ++k) {
+        float tmp = src_tensor->data[i * M * N + j * N + k];
+        tmp = (tmp - mean) * inv_std * layer_norm_param->gamma->data[k] +
+              layer_norm_param->beta->data[k];
+        tmp = roundf(tmp);
 
-                // Clamp between -128 and 127
-                if (tmp > 127.0) {
-                    tmp = 127.0;
-                } else if (tmp < -128.0) {
-                    tmp = -128.0;
-                }
-                dst_tensor->data[i * M * N + j * N + k] = (char)tmp;
-            }
+        // Clamp between -128 and 127
+        if (tmp > 127.0) {
+          tmp = 127.0;
+        } else if (tmp < -128.0) {
+          tmp = -128.0;
         }
+        dst_tensor->data[i * M * N + j * N + k] = (char)tmp;
+      }
     }
-    tensor_int8_list[curr_id] = dst_tensor;
-    tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
+  }
+  tensor_int8_list[curr_id] = dst_tensor;
+  tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
 }
 
 int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
@@ -153,12 +162,16 @@ int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
   linear_param->chosen_keys = NULL;
 
   // Generate blind factors
-  linear_param->obfuscation_ratio = 10; // tentative, should be controllable outside
-  linear_param->blind_factors_set = CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
+  linear_param->obfuscation_ratio =
+      10;  // tentative, should be controllable outside
+  linear_param->blind_factors_set =
+      CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
   for (int i = 0; i < linear_param->obfuscation_ratio; ++i) {
-      GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N], N * sizeof(int));
+    GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N],
+             N * sizeof(int));
   }
-  linear_param->precomputed_unblind_factors = MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
+  linear_param->precomputed_unblind_factors =
+      MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
   // dimension should be (1, obfuscation_ratio, M)
 
   linear_param_list[curr_id] = linear_param;
@@ -181,12 +194,16 @@ int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
   linear_param->chosen_keys = NULL;
 
   // Generate blind factors
-  linear_param->obfuscation_ratio = 10; // tentative, should be controllable outside
-  linear_param->blind_factors_set = CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
+  linear_param->obfuscation_ratio =
+      10;  // tentative, should be controllable outside
+  linear_param->blind_factors_set =
+      CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
   for (int i = 0; i < linear_param->obfuscation_ratio; ++i) {
-      GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N], N * sizeof(int));
+    GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N],
+             N * sizeof(int));
   }
-  linear_param->precomputed_unblind_factors = MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
+  linear_param->precomputed_unblind_factors =
+      MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
 
   linear_param_list[curr_id] = linear_param;
   linear_param_id = (linear_param_id + 1) % STATIC_LIST_LEN;
@@ -202,22 +219,22 @@ void Ex_Get_Tensor_Dim_Int32(int src_id, int* dim) {
 }
 
 void Ex_Get_Tensor_Int32(int src_id, int* out) {
-    struct TensorInt32* src_tensor = tensor_int32_list[src_id];
-    int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
+  struct TensorInt32* src_tensor = tensor_int32_list[src_id];
+  int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
-    int i;
-    for (i = 0; i <= total_elements - 16; i += 16) {
-        // Load 16 int32 elements from src_tensor
-        __m512i src_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
+  int i;
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    // Load 16 int32 elements from src_tensor
+    __m512i src_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
 
-        // Store 16 int32 elements to out
-        _mm512_storeu_si512((__m512i*)&out[i], src_vec);
-    }
+    // Store 16 int32 elements to out
+    _mm512_storeu_si512((__m512i*)&out[i], src_vec);
+  }
 
-    // Copy any remaining elements (if total_elements is not a multiple of 16)
-    for (; i < total_elements; ++i) {
-        out[i] = src_tensor->data[i];
-    }
+  // Copy any remaining elements (if total_elements is not a multiple of 16)
+  for (; i < total_elements; ++i) {
+    out[i] = src_tensor->data[i];
+  }
 }
 
 int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
@@ -231,44 +248,47 @@ int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
   return curr_id;
 }
 
-void Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id, int* out) {
-    Ex_Get_Tensor_Int32(src_id, out);
-    struct TensorInt32* src_tensor = tensor_int32_list[src_id];
-    struct LinearParam* linear_param = linear_param_list[linear_param_id];
+void Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id,
+                                        int* out) {
+  Ex_Get_Tensor_Int32(src_id, out);
+  struct TensorInt32* src_tensor = tensor_int32_list[src_id];
+  struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
-    int B = src_tensor->B;
-    int M = src_tensor->M;
-    int N = src_tensor->N;
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
 
-    // // // must choose random blind factors
-    if (linear_param->chosen_keys != NULL) {
-        DeleteTensorInt32(linear_param->chosen_keys);
+  // // // must choose random blind factors
+  if (linear_param->chosen_keys != NULL) {
+    DeleteTensorInt32(linear_param->chosen_keys);
+  }
+  linear_param->chosen_keys = CreateTensorInt32FromRandom(
+      0, linear_param->obfuscation_ratio - 1, B, 1, M);
+
+  int curr_id = tensor_int32_id;
+  int blind_b = linear_param->blind_factors_set->B;
+  int blind_m = linear_param->blind_factors_set->M;
+  int blind_n = linear_param->blind_factors_set->N;
+
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      int chosen_value = linear_param->chosen_keys->data[i * M + j];
+      int* blind_factor =
+          &linear_param->blind_factors_set->data[chosen_value * N];
+
+      for (int k = 0; k <= N - 16; k += 16) {
+        __m512i out_vec =
+            _mm512_loadu_si512((__m512i*)&out[i * M * N + j * N + k]);
+        __m512i blind_vec = _mm512_loadu_si512((__m512i*)&blind_factor[k]);
+        out_vec = _mm512_add_epi32(out_vec, blind_vec);
+        _mm512_storeu_si512((__m512i*)&out[i * M * N + j * N + k], out_vec);
+      }
+      for (int k = (N / 16) * 16; k < N; ++k) {
+        out[i * M * N + j * N + k] += blind_factor[k];
+      }
     }
-    linear_param->chosen_keys = CreateTensorInt32FromRandom(0, linear_param->obfuscation_ratio - 1, B, 1, M);
-
-    int curr_id = tensor_int32_id;
-    int blind_b = linear_param->blind_factors_set->B;
-    int blind_m = linear_param->blind_factors_set->M;
-    int blind_n = linear_param->blind_factors_set->N;
-
-    for (int i = 0; i < B; ++i) {
-        for (int j = 0; j < M; ++j) {
-            int chosen_value = linear_param->chosen_keys->data[i * M + j];
-            int* blind_factor = &linear_param->blind_factors_set->data[chosen_value * N];
-
-            for (int k = 0; k <= N - 16; k += 16) {
-              __m512i out_vec = _mm512_loadu_si512((__m512i*)&out[i * M * N + j * N + k]);
-              __m512i blind_vec = _mm512_loadu_si512((__m512i*)&blind_factor[k]);
-              out_vec = _mm512_add_epi32(out_vec, blind_vec);
-              _mm512_storeu_si512((__m512i*)&out[i * M * N + j * N + k], out_vec);
-            }
-            for (int k = (N / 16) * 16; k < N; ++k) {
-                out[i * M * N + j * N + k] += blind_factor[k];
-            }
-        }
-    }
+  }
 }
-
 
 int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
                                           int linear_param_id) {
@@ -288,10 +308,12 @@ int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
   return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linear_param_id) {
+int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
+                                       int linear_param_id) {
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
   struct TensorInt32* chosen_keys = linear_param->chosen_keys;
-  struct TensorInt32* unblind_factors = linear_param->precomputed_unblind_factors;
+  struct TensorInt32* unblind_factors =
+      linear_param->precomputed_unblind_factors;
   int obf_ratio = linear_param->obfuscation_ratio;
   int bf_m = unblind_factors->M;
   int bf_n = unblind_factors->N;
@@ -300,19 +322,21 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linea
   // dimension should be (1, obfuscation_ratio, M)
 
   for (int i = 0; i < B; ++i) {
-      for (int j = 0; j < M; ++j) {
-          int chosen_value = linear_param->chosen_keys->data[i * M + j];
-          int* unblind_factor = &unblind_factors->data[chosen_value * N];
-          for (int k = 0; k <= N - 16; k += 16) {
-              __m512i data_vec = _mm512_loadu_si512((__m512i*)&data[i * M * N + j * N + k]);
-              __m512i key_vec = _mm512_loadu_si512((__m512i*)&unblind_factor[i * N + k]);
-              data_vec = _mm512_sub_epi32(data_vec, key_vec);
-              _mm512_storeu_si512((__m512i*)&data[i * M * N + j * N + k], data_vec);
-          }
-          for (int k = (N / 16) * 16; k < N; ++k) {
-              data[i * M * N + j * N + k] -= unblind_factor[i * N + k];
-          }
+    for (int j = 0; j < M; ++j) {
+      int chosen_value = linear_param->chosen_keys->data[i * M + j];
+      int* unblind_factor = &unblind_factors->data[chosen_value * N];
+      for (int k = 0; k <= N - 16; k += 16) {
+        __m512i data_vec =
+            _mm512_loadu_si512((__m512i*)&data[i * M * N + j * N + k]);
+        __m512i key_vec =
+            _mm512_loadu_si512((__m512i*)&unblind_factor[i * N + k]);
+        data_vec = _mm512_sub_epi32(data_vec, key_vec);
+        _mm512_storeu_si512((__m512i*)&data[i * M * N + j * N + k], data_vec);
       }
+      for (int k = (N / 16) * 16; k < N; ++k) {
+        data[i * M * N + j * N + k] -= unblind_factor[i * N + k];
+      }
+    }
   }
 
   return Ex_Set_Tensor_Int32(data, B, M, N);
@@ -336,32 +360,36 @@ void Ex_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
 
   // Encrypt X
   for (int i = 0; i < B; ++i) {
-      for (int j = 0; j < M; ++j) {
-          for (int k = 0; k <= K - 16; k += 16) {
-              __m512i x_vec = _mm512_loadu_si512((__m512i*)&X->data[i * M * K + j * K + k]);
-              __m512i u_vec = _mm512_loadu_si512((__m512i*)&u->data[i * K + k]);
-              __m512i out_vec = _mm512_add_epi32(x_vec, u_vec);
-              _mm512_storeu_si512((__m512i*)&out1[i * M * K + j * K + k], out_vec);
-          }
-          for (int k = (K / 16) * 16; k < K; ++k) {
-              out1[i * M * K + j * K + k] = X->data[i * M * K + j * K + k] + u->data[i * K + k];
-          }
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k <= K - 16; k += 16) {
+        __m512i x_vec =
+            _mm512_loadu_si512((__m512i*)&X->data[i * M * K + j * K + k]);
+        __m512i u_vec = _mm512_loadu_si512((__m512i*)&u->data[i * K + k]);
+        __m512i out_vec = _mm512_add_epi32(x_vec, u_vec);
+        _mm512_storeu_si512((__m512i*)&out1[i * M * K + j * K + k], out_vec);
       }
+      for (int k = (K / 16) * 16; k < K; ++k) {
+        out1[i * M * K + j * K + k] =
+            X->data[i * M * K + j * K + k] + u->data[i * K + k];
+      }
+    }
   }
 
   // Encrypt Y
   for (int i = 0; i < B; ++i) {
-      for (int j = 0; j < N; ++j) {
-          for (int k = 0; k <= K - 16; k += 16) {
-              __m512i y_vec = _mm512_loadu_si512((__m512i*)&Y->data[i * N * K + j * K + k]);
-              __m512i v_vec = _mm512_loadu_si512((__m512i*)&v->data[i * K + k]);
-              __m512i out_vec = _mm512_add_epi32(y_vec, v_vec);
-              _mm512_storeu_si512((__m512i*)&out2[i * N * K + j * K + k], out_vec);
-          }
-          for (int k = (K / 16) * 16; k < K; ++k) {
-              out2[i * N * K + j * K + k] = Y->data[i * N * K + j * K + k] + v->data[i * K + k];
-          }
+    for (int j = 0; j < N; ++j) {
+      for (int k = 0; k <= K - 16; k += 16) {
+        __m512i y_vec =
+            _mm512_loadu_si512((__m512i*)&Y->data[i * N * K + j * K + k]);
+        __m512i v_vec = _mm512_loadu_si512((__m512i*)&v->data[i * K + k]);
+        __m512i out_vec = _mm512_add_epi32(y_vec, v_vec);
+        _mm512_storeu_si512((__m512i*)&out2[i * N * K + j * K + k], out_vec);
       }
+      for (int k = (K / 16) * 16; k < K; ++k) {
+        out2[i * N * K + j * K + k] =
+            Y->data[i * N * K + j * K + k] + v->data[i * K + k];
+      }
+    }
   }
 
   if (tensor_int32_list[tensor_int32_id] != NULL) {
@@ -371,7 +399,7 @@ void Ex_Get_Encrypted_Tensor_Opr2_Int32(int src_id1, int src_id2, int* out1,
   blind_factor_ids[0] = tensor_int32_id;
   tensor_int32_list[blind_factor_ids[0]] = u;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  
+
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
@@ -406,20 +434,21 @@ int Ex_Generate_Decryption_Key_Opr2_Int32(int src_id1, int src_id2,
   struct TensorInt32* decryption_key = CreateTensorInt32(B, M, N);
 
   for (int i = 0; i < B; ++i) {
-      for (int j = 0; j < M; ++j) {
-          for (int k = 0; k <= N - 16; k += 16) {
-              __m512i uv_vec = _mm512_set1_epi32(uv->data[i]);
-              __m512i xv_vec = _mm512_set1_epi32(xv->data[i * M + j]);
-              __m512i uy_vec = _mm512_loadu_si512((__m512i*)&uy->data[i * N + k]);
-              __m512i sum_vec = _mm512_add_epi32(uv_vec, xv_vec);
-              sum_vec = _mm512_add_epi32(sum_vec, uy_vec);
-              _mm512_storeu_si512((__m512i*)&decryption_key->data[i * M * N + j * N + k], sum_vec);
-          }
-          for (int k = (N / 16) * 16; k < N; ++k) {
-              decryption_key->data[i * M * N + j * N + k] =
-                  uv->data[i] + xv->data[i * M + j] + uy->data[i * N + k];
-          }
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k <= N - 16; k += 16) {
+        __m512i uv_vec = _mm512_set1_epi32(uv->data[i]);
+        __m512i xv_vec = _mm512_set1_epi32(xv->data[i * M + j]);
+        __m512i uy_vec = _mm512_loadu_si512((__m512i*)&uy->data[i * N + k]);
+        __m512i sum_vec = _mm512_add_epi32(uv_vec, xv_vec);
+        sum_vec = _mm512_add_epi32(sum_vec, uy_vec);
+        _mm512_storeu_si512(
+            (__m512i*)&decryption_key->data[i * M * N + j * N + k], sum_vec);
       }
+      for (int k = (N / 16) * 16; k < N; ++k) {
+        decryption_key->data[i * M * N + j * N + k] =
+            uv->data[i] + xv->data[i * M + j] + uy->data[i * N + k];
+      }
+    }
   }
 
   DeleteTensorInt32(xv);
@@ -439,27 +468,316 @@ int Ex_Set_Decrypted_Tensor_Opr2_Int32(int* data, int B, int M, int N,
   }
 
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
-  
+
   struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
   int total_elements = B * M * N;
 
   int i;
   for (i = 0; i <= total_elements - 16; i += 16) {
-      __m512i data_vec = _mm512_loadu_si512((__m512i*)&data[i]);
-      __m512i key_vec = _mm512_loadu_si512((__m512i*)&decryption_key->data[i]);
-      __m512i result_vec = _mm512_sub_epi32(data_vec, key_vec);
-      _mm512_storeu_si512((__m512i*)&tensor->data[i], result_vec);
+    __m512i data_vec = _mm512_loadu_si512((__m512i*)&data[i]);
+    __m512i key_vec = _mm512_loadu_si512((__m512i*)&decryption_key->data[i]);
+    __m512i result_vec = _mm512_sub_epi32(data_vec, key_vec);
+    _mm512_storeu_si512((__m512i*)&tensor->data[i], result_vec);
   }
 
   for (; i < total_elements; ++i) {
-      tensor->data[i] = data[i] - decryption_key->data[i];
+    tensor->data[i] = data[i] - decryption_key->data[i];
   }
 
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = tensor;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
+}
+
+// Handle blind / unblind factors inside
+void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+                                                   int* out1, int* out2) {
+  struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+  struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+  // Generate blind factors if first time
+  if (qk_blind_factor_u == NULL) {
+    qk_blind_factor_u = CreateTensorInt32(X->B, 1, X->N);
+    GetCPRNG((unsigned char*)qk_blind_factor_u->data,
+             qk_blind_factor_u->num_bytes);
+
+    qk_blind_factor_v = CreateTensorInt32(X->B, 1, Y->N);
+    GetCPRNG((unsigned char*)qk_blind_factor_v->data,
+             qk_blind_factor_v->num_bytes);
+  }
+
+  // Encrypt X
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        out1[i * X->M * X->N + j * X->N + k] =
+            X->data[i * X->M * X->N + j * X->N + k] +
+            qk_blind_factor_u->data[i * X->N + k];
+      }
+    }
+  }
+
+  // Encrypt Y
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        out2[i * Y->M * Y->N + j * Y->N + k] =
+            Y->data[i * Y->M * Y->N + j * Y->N + k] +
+            qk_blind_factor_v->data[i * Y->N + k];
+      }
+    }
+  }
+}
+
+int Ex_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2) {
+  struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
+  struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
+
+  struct TensorInt32* uy = MatmulS32S32S32(qk_blind_factor_u, Y);  // B, 1, Y_M
+  struct TensorInt32* xv = MatmulS32S32S32(X, qk_blind_factor_v);  // B, X_M, 1
+
+  if (qk_uv_dot == NULL) {
+    qk_uv_dot =
+        MatmulS32S32S32(qk_blind_factor_u, qk_blind_factor_v);  // B x 1 x 1
+    qk_uy_unblind_factor_accum = uy;
+  } else {
+    // concat uy to qk_uy_unblind_factor_accum, to the last dimension of
+    // qk_uy_unblind_factor_accum
+    struct TensorInt32* new_uy = CreateTensorInt32(
+        qk_uy_unblind_factor_accum->B, 1, qk_uy_unblind_factor_accum->N + 1);
+    for (int i = 0; i < qk_uy_unblind_factor_accum->B; ++i) {
+      for (int j = 0; j < qk_uy_unblind_factor_accum->N; ++j) {
+        new_uy->data[i * (qk_uy_unblind_factor_accum->N + 1) + j] =
+            qk_uy_unblind_factor_accum
+                ->data[i * qk_uy_unblind_factor_accum->N + j];
+      }
+      new_uy->data[i * (qk_uy_unblind_factor_accum->N + 1) +
+                   qk_uy_unblind_factor_accum->N] = uy->data[i];
+    }
+
+    DeleteTensorInt32(qk_uy_unblind_factor_accum);
+    qk_uy_unblind_factor_accum = new_uy;
+  }
+
+  struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < Y->M; ++k) {
+        decryption_key->data[i * X->M * Y->M + j * Y->M + k] =
+            qk_uv_dot->data[i] + xv->data[i * X->M + j] +
+            qk_uy_unblind_factor_accum
+                ->data[i * qk_uy_unblind_factor_accum->N + k];
+      }
+    }
+  }
+
+  int curr_id = tensor_int32_id;
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+  tensor_int32_list[curr_id] = decryption_key;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
+                                                  int N,
+                                                  int decryption_key_id) {
+  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+
+  struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        tensor->data[i * M * N + j * N + k] =
+            data[i * M * N + j * N + k] -
+            decryption_key->data[i * M * N + j * N + k];
+      }
+    }
+  }
+
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = tensor;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+                                                   int* out1, int* out2) {
+  struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+  struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+  // Generate blind factors if first time
+  if (pv_blind_factor_u == NULL) {
+    pv_blind_factor_u = CreateTensorInt32(X->B, 1, X->N);
+    GetCPRNG((unsigned char*)pv_blind_factor_u->data,
+             pv_blind_factor_u->num_bytes);
+
+    pv_blind_factor_v = CreateTensorInt32(X->B, 1, Y->M);
+    GetCPRNG((unsigned char*)pv_blind_factor_v->data,
+             pv_blind_factor_v->num_bytes);
+  } else {
+    // Copy all previous values of pv_blind_factor_u and append new random value
+    struct TensorInt32* new_blind_factor_u =
+        CreateTensorInt32(pv_blind_factor_u->B, 1, pv_blind_factor_u->N + 1);
+    for (int i = 0; i < pv_blind_factor_u->B; ++i) {
+      for (int j = 0; j < pv_blind_factor_u->N; ++j) {
+        new_blind_factor_u->data[i * (pv_blind_factor_u->N + 1) + j] =
+            pv_blind_factor_u->data[i * pv_blind_factor_u->N + j];
+      }
+      GetCPRNG(
+          (unsigned char*)&new_blind_factor_u
+              ->data[i * (pv_blind_factor_u->N + 1) + pv_blind_factor_u->N],
+          sizeof(int));
+    }
+  }
+
+  // Encrypt X
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        out1[i * X->M * X->N + j * X->N + k] =
+            X->data[i * X->M * X->N + j * X->N + k] +
+            pv_blind_factor_u->data[i * X->N + k];
+      }
+    }
+  }
+
+  // Encrypt Y
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        out2[i * Y->M * Y->N + j * Y->N + k] =
+            Y->data[i * Y->M * Y->N + j * Y->N + k] +
+            pv_blind_factor_v->data[i * Y->M + j];
+      }
+    }
+  }
+}
+
+int Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2) {
+  struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
+  struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
+
+  struct TensorInt32* xv = CreateTensorInt32(X->B, X->M, Y->M);
+  
+  // xv[i][j][k] = sum(x[i][j][*]) * v[i][k]
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += X->data[i * X->M * X->N + j * X->N + k];
+      }
+
+      for (int k = 0; k < Y->M; ++k) {
+        xv->data[i * X->M * Y->M + j * Y->M + k] =
+            sum * pv_blind_factor_v->data[i * Y->M + k];
+      }
+    }
+  }
+
+  if (pv_uv_unblind_factor_accum == NULL) {
+    pv_uy_unblind_factor_accum =
+        MatmulS32S32S32(pv_blind_factor_u, Y);                      // B, 1, Y_M
+    pv_uv_unblind_factor_accum = CreateTensorInt32(X->B, 1, Y->M);  // B, 1, Y_M
+
+    for (int i = 0; i < X->B; ++i) {
+      int sum = 0;
+      for (int j = 0; j < X->N; ++j) {
+        sum += pv_blind_factor_u->data[i * X->N + j];
+      }
+
+      for (int j = 0; j < Y->M; ++j) {
+        pv_uv_unblind_factor_accum->data[i * Y->M + j] =
+            sum * pv_blind_factor_v->data[i * Y->M + j];
+      }
+    }
+  } else {
+    // Update pv_uy_unblind_factor_accum
+    // Get the last random number from pv_blind_factor_u and elementwisely
+    // multiply to Y and add it to pv_uy_unblind_factor_accum
+    for (int i = 0; i < X->B; ++i) {
+      for (int j = 0; j < Y->M; ++j) {
+        pv_uy_unblind_factor_accum->data[i * Y->M + j] +=
+            pv_blind_factor_u->data[i * X->N + X->N - 1] *
+            Y->data[i * Y->M + j];
+        // likewise same for uv
+        pv_uv_unblind_factor_accum->data[i * Y->M + j] +=
+            pv_blind_factor_u->data[i * X->N + X->N - 1] *
+            pv_blind_factor_v->data[i * Y->M + j];
+      }
+    }
+  }
+
+  struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < Y->M; ++k) {
+        decryption_key->data[i * X->M * Y->M + j * Y->M + k] =
+            xv->data[i * X->M * Y->M + j * Y->M + k] +
+            pv_uy_unblind_factor_accum->data[i * Y->M + k] +
+            pv_uv_unblind_factor_accum->data[i * Y->M + k];
+      }
+    }
+  }
+
+  int curr_id = tensor_int32_id;
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+  tensor_int32_list[curr_id] = decryption_key;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
+int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M,
+                                                  int N,
+                                                  int decryption_key_id) {
+  struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        tensor->data[i * M * N + j * N + k] =
+            data[i * M * N + j * N + k] -
+            tensor_int32_list[decryption_key_id]->data[i * M * N + j * N + k];
+      }
+    }
+  }
+
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = tensor;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+void Ex_Pre_Init() {
+  if (qk_blind_factor_u != NULL) {
+    DeleteTensorInt32(qk_blind_factor_u);
+    DeleteTensorInt32(qk_blind_factor_v);
+    DeleteTensorInt32(qk_uy_unblind_factor_accum);
+    DeleteTensorInt32(qk_uv_dot);
+
+    DeleteTensorInt32(pv_blind_factor_u);
+    DeleteTensorInt32(pv_blind_factor_v);
+    DeleteTensorInt32(pv_uy_unblind_factor_accum);
+    DeleteTensorInt32(pv_uv_unblind_factor_accum);
+  }
+  qk_blind_factor_u = NULL;
+  qk_blind_factor_v = NULL;
+  qk_uy_unblind_factor_accum = NULL;
+  qk_uv_dot = NULL;
+
+  pv_blind_factor_u = NULL;
+  pv_blind_factor_v = NULL;
+  pv_uy_unblind_factor_accum = NULL;
+  pv_uv_unblind_factor_accum = NULL;
 }
 
 int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
@@ -557,38 +875,37 @@ int Ex_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
 }
 
 int Ex_ReLU(int src_id) {
-    if (tensor_float_list[tensor_float_id] != NULL) {
-        DeleteTensorFloat(tensor_float_list[tensor_float_id]);
-    }
+  if (tensor_float_list[tensor_float_id] != NULL) {
+    DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+  }
 
-    struct TensorFloat* src_tensor = tensor_float_list[src_id];
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-    int B = src_tensor->B;
-    int M = src_tensor->M;
-    int N = src_tensor->N;
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
 
-    struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
+  struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-    int total_elements = B * M * N;
-    int i;
-    __m512 zero_vec = _mm512_setzero_ps();
+  int total_elements = B * M * N;
+  int i;
+  __m512 zero_vec = _mm512_setzero_ps();
 
-    for (i = 0; i <= total_elements - 16; i += 16) {
-        __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-        __m512 result_vec = _mm512_max_ps(src_vec, zero_vec);
-        _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
-    }
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+    __m512 result_vec = _mm512_max_ps(src_vec, zero_vec);
+    _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
+  }
 
-    for (; i < total_elements; ++i) {
-        dst_tensor->data[i] = src_tensor->data[i] > 0.0 ? src_tensor->data[i] : 0.0;
-    }
+  for (; i < total_elements; ++i) {
+    dst_tensor->data[i] = src_tensor->data[i] > 0.0 ? src_tensor->data[i] : 0.0;
+  }
 
-    int curr_id = tensor_float_id;
-    tensor_float_list[curr_id] = dst_tensor;
-    tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
+  int curr_id = tensor_float_id;
+  tensor_float_list[curr_id] = dst_tensor;
+  tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
 }
-
 
 int Ex_Softmax(int src_id) {
   if (tensor_float_list[tensor_float_id] != NULL) {
@@ -619,7 +936,6 @@ int Ex_Softmax(int src_id) {
         sum += dst_tensor->data[i * M * N + j * N + k];
       }
 
-
       for (int k = 0; k < N; ++k) {
         dst_tensor->data[i * M * N + j * N + k] /= sum;
       }
@@ -633,138 +949,142 @@ int Ex_Softmax(int src_id) {
 }
 
 int Ex_Quantize_Post_Softmax(int src_id) {
-    if (tensor_int8_list[tensor_int8_id] != NULL) {
-        DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
-    }
+  if (tensor_int8_list[tensor_int8_id] != NULL) {
+    DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
+  }
 
-    struct TensorFloat* src_tensor = tensor_float_list[src_id];
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-    int B = src_tensor->B;
-    int M = src_tensor->M;
-    int N = src_tensor->N;
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
 
-    struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
+  struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
-    __m512 scale_vec = _mm512_set1_ps(127.0f);
+  __m512 scale_vec = _mm512_set1_ps(127.0f);
 
-    int total_elements = B * M * N;
-    int i;
+  int total_elements = B * M * N;
+  int i;
 
-    for (i = 0; i <= total_elements - 16; i += 16) {
-        __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-        __m512 scaled_vec = _mm512_mul_ps(src_vec, scale_vec);
-        __m512i int_vec = _mm512_cvtps_epi32(scaled_vec);
-        __m512i clamped_vec = _mm512_min_epi32(_mm512_max_epi32(int_vec, _mm512_set1_epi32(-128)), _mm512_set1_epi32(127));
-        __m128i result_vec = _mm512_cvtsepi32_epi8(clamped_vec);
-        _mm_storeu_si128((__m128i*)&dst_tensor->data[i], result_vec);
-    }
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+    __m512 scaled_vec = _mm512_mul_ps(src_vec, scale_vec);
+    __m512i int_vec = _mm512_cvtps_epi32(scaled_vec);
+    __m512i clamped_vec =
+        _mm512_min_epi32(_mm512_max_epi32(int_vec, _mm512_set1_epi32(-128)),
+                         _mm512_set1_epi32(127));
+    __m128i result_vec = _mm512_cvtsepi32_epi8(clamped_vec);
+    _mm_storeu_si128((__m128i*)&dst_tensor->data[i], result_vec);
+  }
 
-    for (; i < total_elements; ++i) {
-        dst_tensor->data[i] = (char)roundf(src_tensor->data[i] * 127.0f);
-    }
+  for (; i < total_elements; ++i) {
+    dst_tensor->data[i] = (char)roundf(src_tensor->data[i] * 127.0f);
+  }
 
-    int curr_id = tensor_int8_id;
-    tensor_int8_list[curr_id] = dst_tensor;
-    tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
+  int curr_id = tensor_int8_id;
+  tensor_int8_list[curr_id] = dst_tensor;
+  tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
 }
 
 int Ex_Cast_From_Float_To_Int8(int src_id) {
-    if (tensor_int8_list[tensor_int8_id] != NULL) {
-        DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
-    }
+  if (tensor_int8_list[tensor_int8_id] != NULL) {
+    DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
+  }
 
-    struct TensorFloat* src_tensor = tensor_float_list[src_id];
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-    int B = src_tensor->B;
-    int M = src_tensor->M;
-    int N = src_tensor->N;
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
 
-    struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
+  struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
-    int total_elements = B * M * N;
-    int i;
-    
-    for (i = 0; i <= total_elements - 16; i += 16) {
-        __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-        __m512i int_vec = _mm512_cvtps_epi32(src_vec);
-        __m512i clamped_vec = _mm512_max_epi32(_mm512_set1_epi32(-128), _mm512_min_epi32(int_vec, _mm512_set1_epi32(127)));
-        __m128i result_vec = _mm512_cvtsepi32_epi8(clamped_vec);
-        _mm_storeu_si128((__m128i*)&dst_tensor->data[i], result_vec);
-    }
+  int total_elements = B * M * N;
+  int i;
 
-    for (; i < total_elements; ++i) {
-        dst_tensor->data[i] = (char)src_tensor->data[i];
-    }
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+    __m512i int_vec = _mm512_cvtps_epi32(src_vec);
+    __m512i clamped_vec =
+        _mm512_max_epi32(_mm512_set1_epi32(-128),
+                         _mm512_min_epi32(int_vec, _mm512_set1_epi32(127)));
+    __m128i result_vec = _mm512_cvtsepi32_epi8(clamped_vec);
+    _mm_storeu_si128((__m128i*)&dst_tensor->data[i], result_vec);
+  }
 
-    int curr_id = tensor_int8_id;
-    tensor_int8_list[curr_id] = dst_tensor;
-    tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
+  for (; i < total_elements; ++i) {
+    dst_tensor->data[i] = (char)src_tensor->data[i];
+  }
+
+  int curr_id = tensor_int8_id;
+  tensor_int8_list[curr_id] = dst_tensor;
+  tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
 }
 
 int Ex_Cast_From_Float_To_Int32(int src_id) {
-    if (tensor_int32_list[tensor_int32_id] != NULL) {
-        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-    }
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
 
-    struct TensorFloat* src_tensor = tensor_float_list[src_id];
+  struct TensorFloat* src_tensor = tensor_float_list[src_id];
 
-    int B = src_tensor->B;
-    int M = src_tensor->M;
-    int N = src_tensor->N;
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
 
-    struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
+  struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
-    int total_elements = B * M * N;
-    int i;
+  int total_elements = B * M * N;
+  int i;
 
-    for (i = 0; i <= total_elements - 16; i += 16) {
-        __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-        __m512i int_vec = _mm512_cvtps_epi32(src_vec);
-        _mm512_storeu_si512((__m512i*)&dst_tensor->data[i], int_vec);
-    }
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+    __m512i int_vec = _mm512_cvtps_epi32(src_vec);
+    _mm512_storeu_si512((__m512i*)&dst_tensor->data[i], int_vec);
+  }
 
-    for (; i < total_elements; ++i) {
-        dst_tensor->data[i] = (char)src_tensor->data[i];
-    }
+  for (; i < total_elements; ++i) {
+    dst_tensor->data[i] = (char)src_tensor->data[i];
+  }
 
-    int curr_id = tensor_int32_id;
-    tensor_int32_list[curr_id] = dst_tensor;
-    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = dst_tensor;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
 }
 
 int Ex_Cast_From_Int8_To_Int32(int src_id) {
-    if (tensor_int32_list[tensor_int32_id] != NULL) {
-        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-    }
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
 
-    struct TensorInt8* src_tensor = tensor_int8_list[src_id];
+  struct TensorInt8* src_tensor = tensor_int8_list[src_id];
 
-    int B = src_tensor->B;
-    int M = src_tensor->M;
-    int N = src_tensor->N;
+  int B = src_tensor->B;
+  int M = src_tensor->M;
+  int N = src_tensor->N;
 
-    struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
+  struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
-    int total_elements = B * M * N;
-    int i;
+  int total_elements = B * M * N;
+  int i;
 
-    for (i = 0; i <= total_elements - 16; i += 16) {
-        __m128i src_vec = _mm_loadu_si128((__m128i*)&src_tensor->data[i]);
-        __m512i int_vec = _mm512_cvtepi8_epi32(src_vec);
-        _mm512_storeu_si512((__m512i*)&dst_tensor->data[i], int_vec);
-    }
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    __m128i src_vec = _mm_loadu_si128((__m128i*)&src_tensor->data[i]);
+    __m512i int_vec = _mm512_cvtepi8_epi32(src_vec);
+    _mm512_storeu_si512((__m512i*)&dst_tensor->data[i], int_vec);
+  }
 
-    for (; i < total_elements; ++i) {
-        dst_tensor->data[i] = (char)src_tensor->data[i];
-    }
+  for (; i < total_elements; ++i) {
+    dst_tensor->data[i] = (char)src_tensor->data[i];
+  }
 
-    int curr_id = tensor_int32_id;
-    tensor_int32_list[curr_id] = dst_tensor;
-    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = dst_tensor;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
 }
 
 void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim) {
@@ -780,12 +1100,12 @@ void Ex_Get_Tensor_Int8(int src_id, char* out) {
 
   int i;
   for (i = 0; i <= total_elements - 64; i += 64) {
-      __m512i data_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
-      _mm512_storeu_si512((__m512i*)&out[i], data_vec);
+    __m512i data_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
+    _mm512_storeu_si512((__m512i*)&out[i], data_vec);
   }
 
   for (; i < total_elements; ++i) {
-      out[i] = src_tensor->data[i];
+    out[i] = src_tensor->data[i];
   }
 }
 
@@ -807,19 +1127,18 @@ void Ex_Get_Tensor_Dim_Float(int src_id, int* dim) {
   dim[2] = src_tensor->N;
 }
 
-
 void Ex_Get_Tensor_Float(int src_id, float* out) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
   int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
   int i;
   for (i = 0; i <= total_elements - 16; i += 16) {
-      __m512 data_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-      _mm512_storeu_ps(&out[i], data_vec);
+    __m512 data_vec = _mm512_loadu_ps(&src_tensor->data[i]);
+    _mm512_storeu_ps(&out[i], data_vec);
   }
 
   for (; i < total_elements; ++i) {
-      out[i] = src_tensor->data[i];
+    out[i] = src_tensor->data[i];
   }
 }
 
@@ -842,35 +1161,36 @@ int Ex_Set_Bmm_Param(float alpha) {
 }
 
 int Ex_Residual_Add(int residual, int hidden_states) {
-    if (tensor_float_list[tensor_float_id] != NULL) {
-        DeleteTensorFloat(tensor_float_list[tensor_float_id]);
-    }
+  if (tensor_float_list[tensor_float_id] != NULL) {
+    DeleteTensorFloat(tensor_float_list[tensor_float_id]);
+  }
 
-    struct TensorFloat* residual_tensor = tensor_float_list[residual];
-    struct TensorFloat* hidden_states_tensor = tensor_float_list[hidden_states];
+  struct TensorFloat* residual_tensor = tensor_float_list[residual];
+  struct TensorFloat* hidden_states_tensor = tensor_float_list[hidden_states];
 
-    int B = residual_tensor->B;
-    int M = residual_tensor->M;
-    int N = residual_tensor->N;
+  int B = residual_tensor->B;
+  int M = residual_tensor->M;
+  int N = residual_tensor->N;
 
-    struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
+  struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-    int total_elements = B * M * N;
-    int i;
+  int total_elements = B * M * N;
+  int i;
 
-    for (i = 0; i <= total_elements - 16; i += 16) {
-        __m512 residual_vec = _mm512_loadu_ps(&residual_tensor->data[i]);
-        __m512 hidden_vec = _mm512_loadu_ps(&hidden_states_tensor->data[i]);
-        __m512 result_vec = _mm512_add_ps(residual_vec, hidden_vec);
-        _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
-    }
+  for (i = 0; i <= total_elements - 16; i += 16) {
+    __m512 residual_vec = _mm512_loadu_ps(&residual_tensor->data[i]);
+    __m512 hidden_vec = _mm512_loadu_ps(&hidden_states_tensor->data[i]);
+    __m512 result_vec = _mm512_add_ps(residual_vec, hidden_vec);
+    _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
+  }
 
-    for (; i < total_elements; ++i) {
-        dst_tensor->data[i] = residual_tensor->data[i] + hidden_states_tensor->data[i];
-    }
+  for (; i < total_elements; ++i) {
+    dst_tensor->data[i] =
+        residual_tensor->data[i] + hidden_states_tensor->data[i];
+  }
 
-    int curr_id = tensor_float_id;
-    tensor_float_list[curr_id] = dst_tensor;
-    tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
-    return curr_id;
+  int curr_id = tensor_float_id;
+  tensor_float_list[curr_id] = dst_tensor;
+  tensor_float_id = (tensor_float_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
 }
