@@ -33,6 +33,13 @@ double SGX_UBRIDGE(SGX_NOCONVENTION, ocall_get_time, (void));
 void SGX_UBRIDGE(SGX_NOCONVENTION, ocall_end_clock, (const char* str));
 #endif
 
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int layer_id);
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int layer_id, int* ret_id);
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id);
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int layer_id);
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int layer_id, int* ret_id);
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id);
+sgx_status_t ecall_Sgx_Pre_Init(sgx_enclave_id_t eid);
 sgx_status_t ecall_Sgx_Set_Hidden_States(sgx_enclave_id_t eid, float* hidden_states, int B, int M, int N, int* ret_id);
 sgx_status_t ecall_Sgx_Copy_Hidden_States(sgx_enclave_id_t eid, int src_id, int* ret_id);
 sgx_status_t ecall_Sgx_Set_Layer_Norm_Param(sgx_enclave_id_t eid, float* gamma, float* beta, int N, float eps, int* ret_id);

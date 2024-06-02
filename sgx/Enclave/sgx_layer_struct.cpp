@@ -6,6 +6,381 @@
 
 extern "C" {
 
+// Handle blind / unblind factors inside
+// Handle blind / unblind factors inside
+void Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+                                                   int* out1, int* out2,
+                                                   int layer_id) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+    // Generate blind factors if first time
+    if (qk_blind_factor_u_list[layer_id] == NULL) {
+        qk_blind_factor_u_list[layer_id] = CreateTensorInt32(X->B, 1, X->N);
+        GetCPRNG((unsigned char*)qk_blind_factor_u_list[layer_id]->data,
+                 qk_blind_factor_u_list[layer_id]->num_bytes);
+
+        qk_blind_factor_v_list[layer_id] = CreateTensorInt32(X->B, 1, Y->N);
+        GetCPRNG((unsigned char*)qk_blind_factor_v_list[layer_id]->data,
+                 qk_blind_factor_v_list[layer_id]->num_bytes);
+    }
+
+    // Encrypt X
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            for (int k = 0; k < X->N; k += 16) {
+                __m512i x_data = _mm512_loadu_si512(&X->data[i * X->M * X->N + j * X->N + k]);
+                __m512i u_data = _mm512_loadu_si512(&qk_blind_factor_u_list[layer_id]->data[i * X->N + k]);
+                __m512i result = _mm512_add_epi32(x_data, u_data);
+                _mm512_storeu_si512(&out1[i * X->M * X->N + j * X->N + k], result);
+            }
+        }
+    }
+
+    // Encrypt Y
+    for (int i = 0; i < Y->B; ++i) {
+        for (int j = 0; j < Y->M; ++j) {
+            for (int k = 0; k < Y->N; k += 16) {
+                __m512i y_data = _mm512_loadu_si512(&Y->data[i * Y->M * Y->N + j * Y->N + k]);
+                __m512i v_data = _mm512_loadu_si512(&qk_blind_factor_v_list[layer_id]->data[i * Y->N + k]);
+                __m512i result = _mm512_add_epi32(y_data, v_data);
+                _mm512_storeu_si512(&out2[i * Y->M * Y->N + j * Y->N + k], result);
+            }
+        }
+    }
+}
+
+int Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
+
+    struct TensorInt32* uy = MatmulS32S32S32(qk_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
+    struct TensorInt32* xv = MatmulS32S32S32(X, qk_blind_factor_v_list[layer_id]);  // B, X_M, 1
+
+    if (qk_uv_dot_list[layer_id] == NULL) {
+        qk_uv_dot_list[layer_id] = MatmulS32S32S32(qk_blind_factor_u_list[layer_id], qk_blind_factor_v_list[layer_id]);  // B x 1 x 1
+        qk_uy_unblind_factor_accum_list[layer_id] = uy;
+    } else {
+        // concat uy to qk_uy_unblind_factor_accum
+        struct TensorInt32* new_uy = CreateTensorInt32(qk_uy_unblind_factor_accum_list[layer_id]->B, 1,
+                                                       qk_uy_unblind_factor_accum_list[layer_id]->N + 1);
+        int B = qk_uy_unblind_factor_accum_list[layer_id]->B;
+        int N = qk_uy_unblind_factor_accum_list[layer_id]->N;
+
+        for (int i = 0; i < B; ++i) {
+            // Copy existing data
+            for (int j = 0; j <= N - 16; j += 16) {
+                __m512i data_chunk = _mm512_loadu_si512(&qk_uy_unblind_factor_accum_list[layer_id]->data[i * N + j]);
+                _mm512_storeu_si512(&new_uy->data[i * (N + 1) + j], data_chunk);
+            }
+            for (int j = (N / 16) * 16; j < N; ++j) {
+                new_uy->data[i * (N + 1) + j] = qk_uy_unblind_factor_accum_list[layer_id]->data[i * N + j];
+            }
+            new_uy->data[i * (N + 1) + N] = uy->data[i];
+        }
+
+        DeleteTensorInt32(qk_uy_unblind_factor_accum_list[layer_id]);
+        qk_uy_unblind_factor_accum_list[layer_id] = new_uy;
+    }
+
+    struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+    int B = X->B;
+    int X_M = X->M;
+    int Y_M = Y->M;
+    int accum_N = qk_uy_unblind_factor_accum_list[layer_id]->N;
+
+    for (int i = 0; i < B; ++i) {
+        for (int j = 0; j < X_M; ++j) {
+            for (int k = 0; k <= Y_M - 16; k += 16) {
+                __m512i uv_dot_data = _mm512_set1_epi32(qk_uv_dot_list[layer_id]->data[i]);
+                __m512i xv_data = _mm512_set1_epi32(xv->data[i * X_M + j]);
+                __m512i uy_accum_data = _mm512_loadu_si512(&qk_uy_unblind_factor_accum_list[layer_id]->data[i * accum_N + k]);
+                __m512i result = _mm512_add_epi32(uv_dot_data, xv_data);
+                result = _mm512_add_epi32(result, uy_accum_data);
+                _mm512_storeu_si512(&decryption_key->data[i * X_M * Y_M + j * Y_M + k], result);
+            }
+            for (int k = (Y_M / 16) * 16; k < Y_M; ++k) {
+                decryption_key->data[i * X_M * Y_M + j * Y_M + k] =
+                    qk_uv_dot_list[layer_id]->data[i] +
+                    xv->data[i * X_M + j] +
+                    qk_uy_unblind_factor_accum_list[layer_id]->data[i * accum_N + k];
+            }
+        }
+    }
+
+    int curr_id = tensor_int32_id;
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    tensor_int32_list[curr_id] = decryption_key;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
+                                                  int N,
+                                                  int decryption_key_id) {
+    struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+
+    struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+    int total_elements = B * M * N;
+
+    // Process data in chunks of 16 integers using AVX-512
+    for (int idx = 0; idx <= total_elements - 16; idx += 16) {
+        __m512i data_chunk = _mm512_loadu_si512(&data[idx]);
+        __m512i decryption_key_chunk = _mm512_loadu_si512(&decryption_key->data[idx]);
+        __m512i result_chunk = _mm512_sub_epi32(data_chunk, decryption_key_chunk);
+        _mm512_storeu_si512(&tensor->data[idx], result_chunk);
+    }
+
+    // Process any remaining elements
+    for (int idx = (total_elements / 16) * 16; idx < total_elements; ++idx) {
+        tensor->data[idx] = data[idx] - decryption_key->data[idx];
+    }
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    int curr_id = tensor_int32_id;
+    tensor_int32_list[curr_id] = tensor;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int* out1, int* out2, int layer_id) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+    // Generate blind factors if first time
+    if (pv_blind_factor_u_list[layer_id] == NULL) {
+        pv_blind_factor_u_list[layer_id] = CreateTensorInt32(X->B, 1, X->N);
+        GetCPRNG((unsigned char*)pv_blind_factor_u_list[layer_id]->data, pv_blind_factor_u_list[layer_id]->num_bytes);
+
+        pv_blind_factor_v_list[layer_id] = CreateTensorInt32(X->B, 1, Y->M);
+        GetCPRNG((unsigned char*)pv_blind_factor_v_list[layer_id]->data, pv_blind_factor_v_list[layer_id]->num_bytes);
+    } else {
+        // Copy all previous values of pv_blind_factor_u and append new random value
+        struct TensorInt32* new_blind_factor_u = CreateTensorInt32(pv_blind_factor_u_list[layer_id]->B, 1,
+                                                                  pv_blind_factor_u_list[layer_id]->N + 1);
+        int B = pv_blind_factor_u_list[layer_id]->B;
+        int N = pv_blind_factor_u_list[layer_id]->N;
+
+        for (int i = 0; i < B; ++i) {
+            // Copy existing data
+            for (int j = 0; j <= N - 16; j += 16) {
+                __m512i data_chunk = _mm512_loadu_si512(&pv_blind_factor_u_list[layer_id]->data[i * N + j]);
+                _mm512_storeu_si512(&new_blind_factor_u->data[i * (N + 1) + j], data_chunk);
+            }
+            for (int j = (N / 16) * 16; j < N; ++j) {
+                new_blind_factor_u->data[i * (N + 1) + j] = pv_blind_factor_u_list[layer_id]->data[i * N + j];
+            }
+            GetCPRNG((unsigned char*)&new_blind_factor_u->data[i * (N + 1) + N], sizeof(int));
+        }
+
+        DeleteTensorInt32(pv_blind_factor_u_list[layer_id]);
+        pv_blind_factor_u_list[layer_id] = new_blind_factor_u;
+    }
+
+    // Encrypt X
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            for (int k = 0; k <= X->N - 16; k += 16) {
+                __m512i x_data = _mm512_loadu_si512(&X->data[i * X->M * X->N + j * X->N + k]);
+                __m512i u_data = _mm512_loadu_si512(&pv_blind_factor_u_list[layer_id]->data[i * X->N + k]);
+                __m512i result = _mm512_add_epi32(x_data, u_data);
+                _mm512_storeu_si512(&out1[i * X->M * X->N + j * X->N + k], result);
+            }
+            for (int k = (X->N / 16) * 16; k < X->N; ++k) {
+                out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] +
+                                                      pv_blind_factor_u_list[layer_id]->data[i * X->N + k];
+            }
+        }
+    }
+
+    // Encrypt Y
+    for (int i = 0; i < Y->B; ++i) {
+        for (int j = 0; j < Y->M; ++j) {
+            for (int k = 0; k <= Y->N - 16; k += 16) {
+                __m512i y_data = _mm512_loadu_si512(&Y->data[i * Y->M * Y->N + j * Y->N + k]);
+                __m512i v_data = _mm512_set1_epi32(pv_blind_factor_v_list[layer_id]->data[i * Y->M + j]);
+                __m512i result = _mm512_add_epi32(y_data, v_data);
+                _mm512_storeu_si512(&out2[i * Y->M * Y->N + j * Y->N + k], result);
+            }
+            for (int k = (Y->N / 16) * 16; k < Y->N; ++k) {
+                out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] +
+                                                      pv_blind_factor_v_list[layer_id]->data[i * Y->M + j];
+            }
+        }
+    }
+}
+
+
+int Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id) {
+    struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
+    struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
+
+    struct TensorInt32* xv = CreateTensorInt32(X->B, X->M, Y->M);
+
+    // Vectorize sum calculation and multiplication
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            int sum = 0;
+            for (int k = 0; k <= X->N - 16; k += 16) {
+                __m512i x_chunk = _mm512_loadu_si512(&X->data[i * X->M * X->N + j * X->N + k]);
+                sum += _mm512_reduce_add_epi32(x_chunk);
+            }
+            for (int k = (X->N / 16) * 16; k < X->N; ++k) {
+                sum += X->data[i * X->M * X->N + j * X->N + k];
+            }
+            for (int k = 0; k <= Y->M - 16; k += 16) {
+                __m512i v_chunk = _mm512_loadu_si512(&pv_blind_factor_v_list[layer_id]->data[i * Y->M + k]);
+                __m512i sum_vec = _mm512_set1_epi32(sum);
+                __m512i result = _mm512_mullo_epi32(sum_vec, v_chunk);
+                _mm512_storeu_si512(&xv->data[i * X->M * Y->M + j * Y->M + k], result);
+            }
+            for (int k = (Y->M / 16) * 16; k < Y->M; ++k) {
+                xv->data[i * X->M * Y->M + j * Y->M + k] = sum * pv_blind_factor_v_list[layer_id]->data[i * Y->M + k];
+            }
+        }
+    }
+
+    if (pv_uv_unblind_factor_accum_list[layer_id] == NULL) {
+        pv_uy_unblind_factor_accum_list[layer_id] = MatmulS32S32S32(pv_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
+        pv_uv_unblind_factor_accum_list[layer_id] = CreateTensorInt32(X->B, 1, Y->M);  // B, 1, Y_M
+
+        for (int i = 0; i < X->B; ++i) {
+            int sum = 0;
+            for (int j = 0; j < X->N; ++j) {
+                sum += pv_blind_factor_u_list[layer_id]->data[i * X->N + j];
+            }
+            for (int j = 0; j <= Y->M - 16; j += 16) {
+                __m512i v_chunk = _mm512_loadu_si512(&pv_blind_factor_v_list[layer_id]->data[i * Y->M + j]);
+                __m512i sum_vec = _mm512_set1_epi32(sum);
+                __m512i result = _mm512_mullo_epi32(sum_vec, v_chunk);
+                _mm512_storeu_si512(&pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + j], result);
+            }
+            for (int j = (Y->M / 16) * 16; j < Y->M; ++j) {
+                pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + j] = sum * pv_blind_factor_v_list[layer_id]->data[i * Y->M + j];
+            }
+        }
+    } else {
+        // Update pv_uy_unblind_factor_accum
+        for (int i = 0; i < X->B; ++i) {
+            int u_last = pv_blind_factor_u_list[layer_id]->data[i * X->N + X->N - 1];
+            for (int j = 0; j <= Y->M - 16; j += 16) {
+                __m512i y_chunk = _mm512_loadu_si512(&Y->data[i * Y->M + j]);
+                __m512i v_chunk = _mm512_loadu_si512(&pv_blind_factor_v_list[layer_id]->data[i * Y->M + j]);
+                __m512i u_vec = _mm512_set1_epi32(u_last);
+                __m512i uy_result = _mm512_mullo_epi32(u_vec, y_chunk);
+                __m512i uv_result = _mm512_mullo_epi32(u_vec, v_chunk);
+                __m512i uy_accum = _mm512_loadu_si512(&pv_uy_unblind_factor_accum_list[layer_id]->data[i * Y->M + j]);
+                __m512i uv_accum = _mm512_loadu_si512(&pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + j]);
+                uy_accum = _mm512_add_epi32(uy_accum, uy_result);
+                uv_accum = _mm512_add_epi32(uv_accum, uv_result);
+                _mm512_storeu_si512(&pv_uy_unblind_factor_accum_list[layer_id]->data[i * Y->M + j], uy_accum);
+                _mm512_storeu_si512(&pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + j], uv_accum);
+            }
+            for (int j = (Y->M / 16) * 16; j < Y->M; ++j) {
+                pv_uy_unblind_factor_accum_list[layer_id]->data[i * Y->M + j] += u_last * Y->data[i * Y->M + j];
+                pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + j] += u_last * pv_blind_factor_v_list[layer_id]->data[i * Y->M + j];
+            }
+        }
+    }
+
+    struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+    for (int i = 0; i < X->B; ++i) {
+        for (int j = 0; j < X->M; ++j) {
+            for (int k = 0; k <= Y->M - 16; k += 16) {
+                __m512i xv_chunk = _mm512_loadu_si512(&xv->data[i * X->M * Y->M + j * Y->M + k]);
+                __m512i uy_chunk = _mm512_loadu_si512(&pv_uy_unblind_factor_accum_list[layer_id]->data[i * Y->M + k]);
+                __m512i uv_chunk = _mm512_loadu_si512(&pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + k]);
+                __m512i result = _mm512_add_epi32(xv_chunk, uy_chunk);
+                result = _mm512_add_epi32(result, uv_chunk);
+                _mm512_storeu_si512(&decryption_key->data[i * X->M * Y->M + j * Y->M + k], result);
+            }
+            for (int k = (Y->M / 16) * 16; k < Y->M; ++k) {
+                decryption_key->data[i * X->M * Y->M + j * Y->M + k] =
+                    xv->data[i * X->M * Y->M + j * Y->M + k] +
+                    pv_uy_unblind_factor_accum_list[layer_id]->data[i * Y->M + k] +
+                    pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + k];
+            }
+        }
+    }
+
+    int curr_id = tensor_int32_id;
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    tensor_int32_list[curr_id] = decryption_key;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int decryption_key_id) {
+    struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+    struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+    int total_elements = B * M * N;
+
+    // Process data in chunks of 16 integers using AVX-512
+    for (int idx = 0; idx <= total_elements - 16; idx += 16) {
+        __m512i data_chunk = _mm512_loadu_si512(&data[idx]);
+        __m512i decryption_key_chunk = _mm512_loadu_si512(&decryption_key->data[idx]);
+        __m512i result_chunk = _mm512_sub_epi32(data_chunk, decryption_key_chunk);
+        _mm512_storeu_si512(&tensor->data[idx], result_chunk);
+    }
+
+    // Process any remaining elements
+    for (int idx = (total_elements / 16) * 16; idx < total_elements; ++idx) {
+        tensor->data[idx] = data[idx] - decryption_key->data[idx];
+    }
+
+    if (tensor_int32_list[tensor_int32_id] != NULL) {
+        DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+    }
+    int curr_id = tensor_int32_id;
+    tensor_int32_list[curr_id] = tensor;
+    tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+    return curr_id;
+}
+
+
+void Sgx_Pre_Init() {
+  for (int i = 0; i < STATIC_LIST_LEN; ++i) {
+    if (qk_blind_factor_u_list[i] != NULL) {
+      DeleteTensorInt32(qk_blind_factor_u_list[i]);
+      qk_blind_factor_u_list[i] = NULL;
+    }
+    if (qk_blind_factor_v_list[i] != NULL) {
+      DeleteTensorInt32(qk_blind_factor_v_list[i]);
+      qk_blind_factor_v_list[i] = NULL;
+    }
+    if (qk_uy_unblind_factor_accum_list[i] != NULL) {
+      DeleteTensorInt32(qk_uy_unblind_factor_accum_list[i]);
+      qk_uy_unblind_factor_accum_list[i] = NULL;
+    }
+    if (qk_uv_dot_list[i] != NULL) {
+      DeleteTensorInt32(qk_uv_dot_list[i]);
+      qk_uv_dot_list[i] = NULL;
+    }
+    if (pv_blind_factor_u_list[i] != NULL) {
+      DeleteTensorInt32(pv_blind_factor_u_list[i]);
+      pv_blind_factor_u_list[i] = NULL;
+    }
+    if (pv_blind_factor_v_list[i] != NULL) {
+      DeleteTensorInt32(pv_blind_factor_v_list[i]);
+      pv_blind_factor_v_list[i] = NULL;
+    }
+    if (pv_uy_unblind_factor_accum_list[i] != NULL) {
+      DeleteTensorInt32(pv_uy_unblind_factor_accum_list[i]);
+      pv_uy_unblind_factor_accum_list[i] = NULL;
+    }
+    if (pv_uv_unblind_factor_accum_list[i] != NULL) {
+      DeleteTensorInt32(pv_uv_unblind_factor_accum_list[i]);
+      pv_uv_unblind_factor_accum_list[i] = NULL;
+    }
+  }
+}
+
 int Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
@@ -1000,6 +1375,34 @@ void ecall_Sgx_Set_Bmm_Param(float alpha, int* ret_id) {
 
 void ecall_Sgx_Residual_Add(int residual, int hidden_states, int* ret_id) {
   *ret_id = Sgx_Residual_Add(residual,hidden_states);
+}
+
+void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int* out1, int* out2, int layer_id) {
+  Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(src_id1, src_id2, out1, out2, layer_id);
+}
+
+void ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id, int* ret_id) {
+  *ret_id = Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id);
+}
+
+void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int decryption_key_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(data, B, M, N, decryption_key_id);
+}
+
+void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int* out1, int* out2, int layer_id) {
+  Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(src_id1, src_id2, out1, out2, layer_id);
+}
+
+void ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id, int* ret_id) {
+  *ret_id = Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id);
+}
+
+void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int decryption_key_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(data, B, M, N, decryption_key_id);
+}
+
+void ecall_Sgx_Pre_Init() {
+  Sgx_Pre_Init();
 }
 
 }

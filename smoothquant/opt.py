@@ -41,6 +41,7 @@ class ExecMode(Enum):
     Mode5 = 5
     Mode6 = 6
     Mode7 = 7
+    Mode8 = 8
 
 
 '''
@@ -50,9 +51,10 @@ class ExecMode(Enum):
     Mode2 = GPU Only (Unsecure)
     Mode3 = CPU (torch native) + GPU (Unsecure), Flexgen style
     Mode4 = CPU (custom cpp) + GPU (Unsecure), Flexgen style, KV cache managed in CPU
-    Mode5 = CPU (custom cpp) + GPU (Secure), Flexgen style, KV cache manged in CPU
+    Mode5 = CPU (custom cpp) + GPU (Half Secure), Flexgen style, KV cache manged in CPU
     Mode6 = CPU (custom cpp on SGX) + GPU (Secure), Flexgen style, KV cache managed in CPU
-    Mode7 = CPU (custom cpp on SGX) + GPU (Secure), Flexgen style, KV cache managed in GPU
+    Mode7 = CPU (custom cpp) + GPU (Half Secure), Flexgen style, KV cache managed in GPU
+    Mode8 = CPU (custom cpp on SGX) + GPU (Secure), Flexgen style, KV cache managed in GPU
 
     From Mode 3 to 4 show torch native vs. custom cpp performance
     From Mode 4 to 5 show unsecure vs. secure performance regarding addtive cipher
@@ -218,6 +220,8 @@ class Int8OPTAttention(nn.Module):
             self.sgx_lsc = sgx_lsc.SgxLayerStructC()
         elif my_exec_mode == ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
+        elif my_exec_mode == ExecMode.Mode8:
+            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
 
     def pre_init(self):
         privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
@@ -237,6 +241,8 @@ class Int8OPTAttention(nn.Module):
 
         if my_exec_mode == ExecMode.Mode7:
             self.lsc.Pre_Init() # Reset internal KV cache metadata
+        elif my_exec_mode == ExecMode.Mode8:
+            self.sgx_lsc.Pre_Init()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return (
@@ -275,10 +281,12 @@ class Int8OPTAttention(nn.Module):
             bsz, tgt_len, _ = self.sgx_lsc.Get_Tensor_Dim_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             bsz, tgt_len, _ = self.lsc.Get_Tensor_Dim_Int8(hidden_states)
+        elif my_exec_mode == ExecMode.Mode8:
+            bsz, tgt_len, _ = self.sgx_lsc.Get_Tensor_Dim_Int8(hidden_states)
         else:
             assert False
         timer.end(t)
-        # print("After Get Hidden States Size")
+
         '''
             NOTE(jpyo0803): Pass hidden_states to Q projection.
             Matmul should be done on Untrusted GPU side
@@ -300,13 +308,14 @@ class Int8OPTAttention(nn.Module):
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
+        elif my_exec_mode == ExecMode.Mode8:
+            query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         else:
             assert False
         '''
             NOTE(jpyo0803): Get Key, Value projection.
         '''
         # get key, value proj
-
         if is_cross_attention and past_key_value is not None:
             assert False
             # reuse k,v, cross_attentions
@@ -420,6 +429,25 @@ class Int8OPTAttention(nn.Module):
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
                 timer.end(t)
+            elif my_exec_mode == ExecMode.Mode8:
+                key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
+                value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
+                key_states = self.sgx_lsc.Get_Tensor_Int8(key_states)
+                value_states = self.sgx_lsc.Get_Tensor_Int8(value_states)
+
+                key_states = self._shape(key_states, -1, bsz)
+                value_states = self._shape(value_states, -1, bsz)
+
+                actual_key_states = key_states
+                actual_value_states = value_states
+
+                key_states = torch.cat([past_key_value[0], key_states], dim=2)
+                value_states = torch.cat(
+                    [past_key_value[1], value_states], dim=2)
+                timer.end(t)
             else:
                 assert False
         else:
@@ -504,9 +532,24 @@ class Int8OPTAttention(nn.Module):
                 actual_key_states = key_states
                 actual_value_states = value_states
                 timer.end(t)
+            elif my_exec_mode == ExecMode.Mode8:
+                key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
+                value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
+
+                t = timer.start(
+                    tag=f'Construct KV Cache ({state})', category=f'Construct KV Cache ({state})')
+                key_states = self.sgx_lsc.Get_Tensor_Int8(key_states)
+                value_states = self.sgx_lsc.Get_Tensor_Int8(value_states)
+
+                key_states = self._shape(key_states, -1, bsz)
+                value_states = self._shape(value_states, -1, bsz)
+
+                actual_key_states = key_states
+                actual_value_states = value_states
+                timer.end(t)
             else:
                 assert False
-
+        
         t = timer.start(tag=f'Get Past KV ({state})',
                         category=f'Get Past KV ({state})')
         past_key_value = (key_states, value_states)
@@ -529,6 +572,8 @@ class Int8OPTAttention(nn.Module):
             query_states = self.sgx_lsc.Get_Tensor_Int8(query_states)
         elif my_exec_mode == ExecMode.Mode7:
             query_states = self.lsc.Get_Tensor_Int8(query_states)
+        elif my_exec_mode == ExecMode.Mode8:
+            query_states = self.sgx_lsc.Get_Tensor_Int8(query_states)
         
         query_states = self._shape(
             query_states, tgt_len, bsz).view(*proj_shape)
@@ -536,6 +581,9 @@ class Int8OPTAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         if my_exec_mode == ExecMode.Mode7:
+            actual_key_states = actual_key_states.view(*proj_shape)
+            actual_value_states = actual_value_states.view(*proj_shape)
+        elif my_exec_mode == ExecMode.Mode8:
             actual_key_states = actual_key_states.view(*proj_shape)
             actual_value_states = actual_value_states.view(*proj_shape)
 
@@ -559,6 +607,11 @@ class Int8OPTAttention(nn.Module):
             # During generation, set only the recent one
             # That means encrypted past key states must be kept inside QK_BMM
             actual_key_states = self.lsc.Set_Tensor_Int8(actual_key_states)
+        elif my_exec_mode == ExecMode.Mode8:
+            query_states = self.sgx_lsc.Set_Tensor_Int8(query_states)
+            # During generation, set only the recent one
+            # That means encrypted past key states must be kept inside QK_BMM
+            actual_key_states = self.sgx_lsc.Set_Tensor_Int8(actual_key_states)
         else:
             assert False
         timer.end(t)
@@ -592,6 +645,10 @@ class Int8OPTAttention(nn.Module):
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, actual_key_states)
             attn_weights = self.lsc.Get_Tensor_Float(attn_weights)
+        elif my_exec_mode == ExecMode.Mode8:
+            attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
+                query_states, actual_key_states)
+            attn_weights = self.sgx_lsc.Get_Tensor_Float(attn_weights)
         else:
             assert False
 
@@ -609,6 +666,8 @@ class Int8OPTAttention(nn.Module):
         '''
         if my_exec_mode == ExecMode.Mode7:
             src_len = self.my_qk_bmm.cache_len() # size of last dim of key_states
+        elif my_exec_mode == ExecMode.Mode8:
+            src_len = self.my_qk_bmm.cache_len()
 
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
@@ -653,6 +712,11 @@ class Int8OPTAttention(nn.Module):
             attn_weights = self.lsc.Set_Tensor_Float(attn_weights)
             attn_probs = self.lsc.Softmax(attn_weights)
             attn_probs = self.lsc.Get_Tensor_Float(attn_probs)
+        elif my_exec_mode == ExecMode.Mode8:
+            attn_weights = self.sgx_lsc.Set_Tensor_Float(attn_weights)
+            attn_probs = self.sgx_lsc.Softmax(attn_weights)
+            attn_probs = self.sgx_lsc.Get_Tensor_Float(attn_probs)
+
         else:
             assert False
         timer.end(t)
@@ -713,6 +777,9 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode7:
             attn_probs = self.lsc.Set_Tensor_Float(attn_probs)
             attn_probs = self.lsc.Quantize_Post_Softmax(attn_probs)
+        elif my_exec_mode == ExecMode.Mode8:
+            attn_probs = self.sgx_lsc.Set_Tensor_Float(attn_probs)
+            attn_probs = self.sgx_lsc.Quantize_Post_Softmax(attn_probs)
         else:
             assert False
         timer.end(t)
@@ -720,6 +787,8 @@ class Int8OPTAttention(nn.Module):
         t = timer.start(tag=f'Transpose V ({state})',
                         category=f'Transpose V ({state})')
         if my_exec_mode == ExecMode.Mode7:
+            actual_value_states = actual_value_states.transpose(1, 2).contiguous()
+        elif my_exec_mode == ExecMode.Mode8:
             actual_value_states = actual_value_states.transpose(1, 2).contiguous()
         else:
             value_states = value_states.transpose(1, 2).contiguous()
@@ -758,6 +827,11 @@ class Int8OPTAttention(nn.Module):
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, actual_value_states)
             attn_output = self.lsc.Get_Tensor_Int8(attn_output)
+        elif my_exec_mode == ExecMode.Mode8:
+            actual_value_states = self.sgx_lsc.Set_Tensor_Int8(actual_value_states)
+            attn_output, my_pv_bmm_dt = self.my_pv_bmm(
+                attn_probs, actual_value_states)
+            attn_output = self.sgx_lsc.Get_Tensor_Int8(attn_output)
         else:
             assert False
 
@@ -805,6 +879,9 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode7:
             attn_output = self.lsc.Set_Tensor_Int8(attn_output)
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
+        elif my_exec_mode == ExecMode.Mode8:
+            attn_output = self.sgx_lsc.Set_Tensor_Int8(attn_output)
+            attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         else:
             assert False
 
@@ -838,6 +915,8 @@ class Int8OPTDecoderLayer(nn.Module):
             self.sgx_lsc = sgx_lsc.SgxLayerStructC()
         elif my_exec_mode == ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
+        elif my_exec_mode == ExecMode.Mode8:
+            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
 
     def pre_init(self):
         # how to compare enum by value?
@@ -868,6 +947,11 @@ class Int8OPTDecoderLayer(nn.Module):
             self.self_attn_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
+                self.final_layer_norm)
+        elif my_exec_mode == ExecMode.Mode8:
+            self.self_attn_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
+                self.self_attn_layer_norm)
+            self.final_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
                 self.final_layer_norm)
 
         self.self_attn.pre_init()
@@ -933,6 +1017,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode7:
             hidden_states = self.lsc.Set_Hidden_States(
                 hidden_states)  # pass
+        elif my_exec_mode == ExecMode.Mode8:
+            hidden_states = self.sgx_lsc.Set_Hidden_States(
+                hidden_states)
         else:
             assert False
         timer.end(t)
@@ -952,6 +1039,8 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = self.sgx_lsc.Copy_Hidden_States(hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode7:
             residual = self.lsc.Copy_Hidden_States(hidden_states)
+        elif my_exec_mode == ExecMode.Mode8:
+            residual = self.sgx_lsc.Copy_Hidden_States(hidden_states)
         else:
             assert False
         timer.end(t)
@@ -981,6 +1070,9 @@ class Int8OPTDecoderLayer(nn.Module):
                 hidden_states, self.self_attn_layer_norm_id)  # id (float) -> id (int8)
         elif my_exec_mode == ExecMode.Mode7:
             hidden_states = self.lsc.Layer_Norm_Q(
+                hidden_states, self.self_attn_layer_norm_id)
+        elif my_exec_mode == ExecMode.Mode8:
+            hidden_states = self.sgx_lsc.Layer_Norm_Q(
                 hidden_states, self.self_attn_layer_norm_id)
         else:
             assert False
@@ -1026,6 +1118,8 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = self.sgx_lsc.Residual_Add(residual, hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             hidden_states = self.lsc.Residual_Add(residual, hidden_states)  
+        elif my_exec_mode == ExecMode.Mode8:
+            hidden_states = self.sgx_lsc.Residual_Add(residual, hidden_states)
         else:
             assert False
         timer.end(t)
@@ -1049,6 +1143,8 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = self.sgx_lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             residual = self.lsc.Copy_Hidden_States(hidden_states)
+        elif my_exec_mode == ExecMode.Mode8:
+            residual = self.sgx_lsc.Copy_Hidden_States(hidden_states)
         else:
             assert False
         timer.end(t)
@@ -1078,6 +1174,9 @@ class Int8OPTDecoderLayer(nn.Module):
                 hidden_states, self.final_layer_norm_id)
         elif my_exec_mode == ExecMode.Mode7:
             hidden_states = self.lsc.Layer_Norm_Q(
+                hidden_states, self.final_layer_norm_id)
+        elif my_exec_mode == ExecMode.Mode8:
+            hidden_states = self.sgx_lsc.Layer_Norm_Q(
                 hidden_states, self.final_layer_norm_id)
         else:
             assert False
@@ -1156,6 +1255,13 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = self.lsc.ReLU(hidden_states)
             hidden_states = self.lsc.Cast_From_Float_To_Int8(hidden_states)
             timer.end(t)
+        elif my_exec_mode == ExecMode.Mode8:
+            hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
+
+            t = timer.start(tag=f'ReLU ({state})', category=f'ReLU ({state})')
+            hidden_states = self.sgx_lsc.ReLU(hidden_states)
+            hidden_states = self.sgx_lsc.Cast_From_Float_To_Int8(hidden_states)
+            timer.end(t)
         else:
             assert False
 
@@ -1183,6 +1289,8 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode6:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
+            hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
+        elif my_exec_mode == ExecMode.Mode8:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         else:
             assert False
@@ -1214,6 +1322,9 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode7:
             residual = self.lsc.Residual_Add(residual, hidden_states)
             residual = self.lsc.Get_Tensor_Float(residual)
+        elif my_exec_mode == ExecMode.Mode8:
+            residual = self.sgx_lsc.Residual_Add(residual, hidden_states)
+            residual = self.sgx_lsc.Get_Tensor_Float(residual)
         else:
             assert False
         timer.end(t)

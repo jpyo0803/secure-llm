@@ -189,6 +189,47 @@ class SgxLayerStructC:
   def Residual_Add(cls, src_id1, src_id2):
     return cls.lib.Sgx_Residual_Add(cls.eid[0],src_id1, src_id2)
   
+  @classmethod
+  def Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
+    B, M, K = cls.Get_Tensor_Dim_Int32(src_id1)
+    _, N, K2 = cls.Get_Tensor_Dim_Int32(src_id2)
+
+    enc_x = torch.empty((B, M, K), dtype=torch.int32)
+    enc_y = torch.empty((B, N, K2), dtype=torch.int32)
+
+    cls.lib.Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)), layer_id)
+    return enc_x, enc_y
+  
+  @classmethod
+  def Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
+    return cls.lib.Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, layer_id)
+  
+  @classmethod
+  def Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls, src, decryption_key_id):
+    return cls.lib.Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), decryption_key_id)
+
+  @classmethod
+  def Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
+    B, M, K = cls.Get_Tensor_Dim_Int32(src_id1)
+    _, N, K2 = cls.Get_Tensor_Dim_Int32(src_id2)
+
+    enc_x = torch.empty((B, M, K), dtype=torch.int32)
+    enc_y = torch.empty((B, N, K2), dtype=torch.int32)
+
+    cls.lib.Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)), layer_id)
+    return enc_x, enc_y
+  
+  @classmethod
+  def Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
+    return cls.lib.Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, layer_id)
+  
+  @classmethod
+  def Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src, decryption_key_id):
+    return cls.lib.Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), decryption_key_id)
+
+  @classmethod
+  def Pre_Init(cls):
+    cls.lib.Sgx_Pre_Init(cls.eid[0])
 
 if __name__ == "__main__":
   sgx = SgxLayerStructC()

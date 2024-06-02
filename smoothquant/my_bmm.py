@@ -33,6 +33,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             self.sgx_lsc = sgx_lsc.SgxLayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             self.alpha = torch.tensor(
@@ -45,14 +47,17 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             self.bmm_id = self.sgx_lsc.Set_Bmm_Param(torch_int_nn_bmm)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.bmm_id = self.lsc.Set_Bmm_Param(torch_int_nn_bmm)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            self.bmm_id = self.sgx_lsc.Set_Bmm_Param(torch_int_nn_bmm)
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
+            self.cache = None
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.cache = None
 
 
     def __run(self, x, y):
         state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
-
         t = timer.start(tag=f'{self.module_name}, Cast From Int8 To Int32 ({state})', category=f'{self.module_name}, Cast From Int8 To Int32 ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             assert x.device == torch.device('cpu')
@@ -74,6 +79,10 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             x = self.lsc.Cast_From_Int8_To_Int32(x)
             y = self.lsc.Cast_From_Int8_To_Int32(y)
+            # y is transposed inside
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            x = self.sgx_lsc.Cast_From_Int8_To_Int32(x)
+            y = self.sgx_lsc.Cast_From_Int8_To_Int32(y)
             # y is transposed inside
         else:
             assert False
@@ -101,6 +110,14 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 x, y = self.lsc.Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(x, y, self.bmm_id)
             else:
                 x, y = self.lsc.Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(x, y, self.bmm_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            x_copy = x
+            y_copy = y
+
+            if self.is_pv_bmm:
+                x, y = self.sgx_lsc.Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(x, y, self.bmm_id)
+            else:
+                x, y = self.sgx_lsc.Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(x, y, self.bmm_id)
         else:
             assert False
         timer.end(t)
@@ -119,6 +136,11 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 decryption_key_id = self.lsc.Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(x_copy, y_copy, self.bmm_id)
             else:
                 decryption_key_id = self.lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_copy, y_copy, self.bmm_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            if self.is_pv_bmm:
+                decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(x_copy, y_copy, self.bmm_id)
+            else:
+                decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_copy, y_copy, self.bmm_id)
         else:
             assert False
 
@@ -136,6 +158,16 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
 
         y = y.transpose(1, 2).contiguous()
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
+            if self.cache is None:
+                self.cache = y
+            else:
+                # print("cache shape vs y shape", self.cache.shape, y.shape)
+                if self.is_pv_bmm:
+                    self.cache = torch.cat([self.cache, y], dim=1)
+                else:
+                    self.cache = torch.cat([self.cache, y], dim=2)
+            y = self.cache
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             if self.cache is None:
                 self.cache = y
             else:
@@ -177,6 +209,11 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 z = self.lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, decryption_key_id)
             else:
                 z = self.lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, decryption_key_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            if self.is_pv_bmm:
+                z = self.sgx_lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, decryption_key_id)
+            else:
+                z = self.sgx_lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, decryption_key_id)
         else:
             assert False
         timer.end(t)
@@ -193,9 +230,12 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             z = self.sgx_lsc.Compute_Epilogue_BMM(z, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             z = self.lsc.Compute_Epilogue_BMM(z, self.bmm_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            z = self.sgx_lsc.Compute_Epilogue_BMM(z, self.bmm_id)
         else:
             assert False
         timer.end(t)
+
         return z
 
     def __call__(self, x, y):
@@ -226,7 +266,8 @@ class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):
             return self.sgx_lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             return self.lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
-            
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            return self.sgx_lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
 
     def __call__(self, x, y):
         start_time = time.perf_counter_ns()

@@ -15,6 +15,13 @@
 extern "C" {
 #endif
 
+void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int* out1, int* out2, int layer_id);
+void ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id, int* ret_id);
+void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int decryption_key_id, int* ret_id);
+void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int* out1, int* out2, int layer_id);
+void ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id, int* ret_id);
+void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int decryption_key_id, int* ret_id);
+void ecall_Sgx_Pre_Init(void);
 void ecall_Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N, int* ret_id);
 void ecall_Sgx_Copy_Hidden_States(int src_id, int* ret_id);
 void ecall_Sgx_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps, int* ret_id);

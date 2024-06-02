@@ -13,7 +13,7 @@ import accuracy_measure_tools as amt
 
 import sgx.sgx_layer_struct as sgx_lsc
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode7
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
 
 amt.set_clock_speed()
 
@@ -131,6 +131,8 @@ print(
 
 
 if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+    sgx_lsc.SgxLayerStructC().Destroy()
+elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
     sgx_lsc.SgxLayerStructC().Destroy()
 
 amt.reset_clock_speed()
