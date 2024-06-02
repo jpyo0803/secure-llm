@@ -97,7 +97,10 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             x_copy = x # copy it so that can be passed to Decryption Key generation
             y_copy = y # copy it so that can be passed to Decryption Key generation
-            x, y, blind_factor_u_id, blind_factor_v_id = self.lsc.Get_Encrypted_Tensor_Opr2_Int32(x, y)
+            if self.is_pv_bmm:
+                x, y, blind_factor_u_id, blind_factor_v_id = self.lsc.Get_Encrypted_Tensor_PV_Int32(x, y)
+            else:
+                x, y, blind_factor_u_id, blind_factor_v_id = self.lsc.Get_Encrypted_Tensor_QK_Int32(x, y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             x_copy = x # copy it so that can be passed to Decryption Key generation
             y_copy = y # copy it so that can be passed to Decryption Key generation
@@ -128,7 +131,10 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            decryption_key_id = self.lsc.Generate_Decryption_Key_Opr2_Int32(x_copy, y_copy, blind_factor_u_id, blind_factor_v_id)
+            if self.is_pv_bmm:
+                decryption_key_id = self.lsc.Generate_Decryption_Key_PV_Int32(x_copy, y_copy, blind_factor_u_id, blind_factor_v_id)
+            else:
+                decryption_key_id = self.lsc.Generate_Decryption_Key_QK_Int32(x_copy, y_copy, blind_factor_u_id, blind_factor_v_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_Opr2_Int32(x_copy, y_copy, blind_factor_u_id, blind_factor_v_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
@@ -192,6 +198,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
 
         z = torch.from_dlpack(z)
 
+
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
         z = z.to(torch.device('cpu'))
@@ -200,8 +207,13 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         t = timer.start(tag=f'{self.module_name}, Process Output Tensors After Offload ({state})', category=f'{self.module_name}, Process Output Tensors After Offload ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             z = self.lsc.Set_Tensor_Int32(z)
+            z_test = self.lsc.Get_Tensor_Int32(z)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            z = self.lsc.Set_Decrypted_Tensor_Opr2_Int32(z, decryption_key_id)
+            if self.is_pv_bmm:
+                z = self.lsc.Set_Decrypted_Tensor_PV_Int32(z, decryption_key_id)
+            else: 
+                z = self.lsc.Set_Decrypted_Tensor_QK_Int32(z, decryption_key_id)
+            z_test = self.lsc.Get_Tensor_Int32(z)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             z = self.sgx_lsc.Set_Decrypted_Tensor_Opr2_Int32(z, decryption_key_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
@@ -209,14 +221,19 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 z = self.lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, decryption_key_id)
             else:
                 z = self.lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, decryption_key_id)
+            z_test = self.lsc.Get_Tensor_Int32(z)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             if self.is_pv_bmm:
                 z = self.sgx_lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, decryption_key_id)
             else:
                 z = self.sgx_lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, decryption_key_id)
+            z_test = self.sgx_lsc.Get_Tensor_Int32(z)
         else:
             assert False
         timer.end(t)
+
+        # Checksum
+        print(f"BMM ID={self.bmm_id}, {self.is_pv_bmm}, sum = {torch.sum(z_test)}, state={state}")
         
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:

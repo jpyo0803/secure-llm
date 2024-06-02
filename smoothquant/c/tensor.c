@@ -130,41 +130,35 @@ void DeleteTensorInt8(struct TensorInt8* tensor) {
 
 struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X,
                                     struct TensorInt32* Y) {
-  int B = X->B;
-  int M = X->M;
-  int K = X->N;
-  int N = Y->M;
+    int B = X->B;
+    int M = X->M;
+    int K = X->N;
+    int N = Y->M; // Y's second dimension should be N since Y has dimensions (B, N, K)
 
-  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
-  for (int b = 0; b < B; b++) {
-    for (int m = 0; m < M; m++) {
-      for (int n = 0; n < N; n++) {
-        __m512i sum_vec = _mm512_setzero_si512();
-        for (int k = 0; k < K; k += 16) {
-            // Load 16 int32 elements from X
-            __m512i x_vec = _mm512_loadu_si512(&X->data[b * M * K + m * K + k]);
-            
-            // Load 16 int32 elements from Y, treating it as if it were transposed
-            __m512i y_vec = _mm512_loadu_si512(&Y->data[b * N * K + n * K + k]);
+    struct TensorInt32* Z = CreateTensorInt32(B, M, N);
 
-            // Multiply and accumulate
-            __m512i mul_vec = _mm512_mullo_epi32(x_vec, y_vec);
-            sum_vec = _mm512_add_epi32(sum_vec, mul_vec);
+    for (int b = 0; b < B; b++) {
+        for (int m = 0; m < M; m++) {
+            for (int n = 0; n < N; n++) {
+                __m512i sum_vec = _mm512_setzero_epi32();
+                int sum = 0;
+                int k;
+                for (k = 0; k <= K - 16; k += 16) {
+                    __m512i x_vec = _mm512_loadu_si512(&X->data[b * M * K + m * K + k]);
+                    __m512i y_vec = _mm512_loadu_si512(&Y->data[b * N * K + n * K + k]);
+                    __m512i prod_vec = _mm512_mullo_epi32(x_vec, y_vec);
+                    sum_vec = _mm512_add_epi32(sum_vec, prod_vec);
+                }
+                sum += _mm512_reduce_add_epi32(sum_vec);
+                for (; k < K; ++k) {
+                    sum += X->data[b * M * K + m * K + k] * Y->data[b * N * K + n * K + k];
+                }
+                Z->data[b * M * N + m * N + n] = sum;
+            }
         }
-        
-        // Horizontally add the elements in sum_vec to get the final sum for this element
-        int temp[16];
-        _mm512_storeu_si512((__m512i*)temp, sum_vec);
-        int sum = 0;
-        for (int i = 0; i < 16; ++i) {
-            sum += temp[i];
-        }
-
-        Z->data[b * M * N + m * N + n] = sum;
-      }
     }
-  }
-  return Z;
+
+    return Z;
 }
 
 struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X,
@@ -226,4 +220,26 @@ void PushBack(struct VectorInt32* vec, int value) {
     vec->data = (int*)realloc(vec->data, vec->capacity * sizeof(int));
   }
   vec->data[vec->N++] = value;
+}
+
+struct TensorInt32* MatmulS32S32S32_naive(struct TensorInt32* X,
+                                         struct TensorInt32* Y) {
+  int B = X->B;
+  int M = X->M;
+  int K = X->N;
+  int N = Y->M; // Y's second dimension should be N since Y has dimensions (B, N, K)
+
+  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
+  for (int b = 0; b < B; b++) {
+    for (int m = 0; m < M; m++) {
+      for (int n = 0; n < N; n++) {
+        int sum = 0;
+        for (int k = 0; k < K; ++k) {
+          sum += X->data[b * M * K + m * K + k] * Y->data[b * N * K + n * K + k];
+        }
+        Z->data[b * M * N + m * N + n] = sum;
+      }
+    }
+  }
+  return Z;
 }
