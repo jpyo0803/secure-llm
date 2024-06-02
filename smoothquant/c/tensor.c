@@ -221,25 +221,3 @@ void PushBack(struct VectorInt32* vec, int value) {
   }
   vec->data[vec->N++] = value;
 }
-
-struct TensorInt32* MatmulS32S32S32_naive(struct TensorInt32* X,
-                                         struct TensorInt32* Y) {
-  int B = X->B;
-  int M = X->M;
-  int K = X->N;
-  int N = Y->M; // Y's second dimension should be N since Y has dimensions (B, N, K)
-
-  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
-  for (int b = 0; b < B; b++) {
-    for (int m = 0; m < M; m++) {
-      for (int n = 0; n < N; n++) {
-        int sum = 0;
-        for (int k = 0; k < K; ++k) {
-          sum += X->data[b * M * K + m * K + k] * Y->data[b * N * K + n * K + k];
-        }
-        Z->data[b * M * N + m * N + n] = sum;
-      }
-    }
-  }
-  return Z;
-}
