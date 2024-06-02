@@ -512,9 +512,11 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
+        // out1[i * X->M * X->N + j * X->N + k] =
+        //     X->data[i * X->M * X->N + j * X->N + k] +
+        //     qk_blind_factor_u->data[i * X->N + k];
         out1[i * X->M * X->N + j * X->N + k] =
-            X->data[i * X->M * X->N + j * X->N + k] +
-            qk_blind_factor_u->data[i * X->N + k];
+            X->data[i * X->M * X->N + j * X->N + k];
       }
     }
   }
@@ -523,9 +525,11 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
+        // out2[i * Y->M * Y->N + j * Y->N + k] =
+        //     Y->data[i * Y->M * Y->N + j * Y->N + k] +
+        //     qk_blind_factor_v->data[i * Y->N + k];
         out2[i * Y->M * Y->N + j * Y->N + k] =
-            Y->data[i * Y->M * Y->N + j * Y->N + k] +
-            qk_blind_factor_v->data[i * Y->N + k];
+            Y->data[i * Y->M * Y->N + j * Y->N + k];
       }
     }
   }
@@ -591,9 +595,12 @@ int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
+        // tensor->data[i * M * N + j * N + k] =
+        //     data[i * M * N + j * N + k] -
+        //     decryption_key->data[i * M * N + j * N + k];
+
         tensor->data[i * M * N + j * N + k] =
-            data[i * M * N + j * N + k] -
-            decryption_key->data[i * M * N + j * N + k];
+            data[i * M * N + j * N + k];
       }
     }
   }
@@ -641,9 +648,11 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
+        // out1[i * X->M * X->N + j * X->N + k] =
+        //     X->data[i * X->M * X->N + j * X->N + k] +
+        //     pv_blind_factor_u->data[i * X->N + k];
         out1[i * X->M * X->N + j * X->N + k] =
-            X->data[i * X->M * X->N + j * X->N + k] +
-            pv_blind_factor_u->data[i * X->N + k];
+            X->data[i * X->M * X->N + j * X->N + k];
       }
     }
   }
@@ -652,9 +661,11 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
+        // out2[i * Y->M * Y->N + j * Y->N + k] =
+        //     Y->data[i * Y->M * Y->N + j * Y->N + k] +
+        //     pv_blind_factor_v->data[i * Y->M + j];
         out2[i * Y->M * Y->N + j * Y->N + k] =
-            Y->data[i * Y->M * Y->N + j * Y->N + k] +
-            pv_blind_factor_v->data[i * Y->M + j];
+            Y->data[i * Y->M * Y->N + j * Y->N + k];
       }
     }
   }
@@ -742,9 +753,11 @@ int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M,
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
+        // tensor->data[i * M * N + j * N + k] =
+        //     data[i * M * N + j * N + k] -
+        //     tensor_int32_list[decryption_key_id]->data[i * M * N + j * N + k];
         tensor->data[i * M * N + j * N + k] =
-            data[i * M * N + j * N + k] -
-            tensor_int32_list[decryption_key_id]->data[i * M * N + j * N + k];
+            data[i * M * N + j * N + k] ;
       }
     }
   }
