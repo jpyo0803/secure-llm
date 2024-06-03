@@ -13,7 +13,7 @@ import accuracy_measure_tools as amt
 
 import sgx.sgx_layer_struct as sgx_lsc
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode9
 
 amt.set_clock_speed()
 
@@ -130,9 +130,7 @@ print(
     f'SmoothQuant INT8 accuracy: {acc_smoothquant}, per-sample lantecy: {lantecy_smoothquant:.3f}ms')
 
 
-if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-    sgx_lsc.SgxLayerStructC().Destroy()
-elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
     sgx_lsc.SgxLayerStructC().Destroy()
 
 amt.reset_clock_speed()

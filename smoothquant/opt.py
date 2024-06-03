@@ -42,6 +42,7 @@ class ExecMode(Enum):
     Mode6 = 6
     Mode7 = 7
     Mode8 = 8
+    Mode9 = 9
 
 
 '''
@@ -216,7 +217,7 @@ class Int8OPTAttention(nn.Module):
             self.lsc = lsc.LayerStructC()
         elif my_exec_mode == ExecMode.Mode5:
             self.lsc = lsc.LayerStructC()
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             self.sgx_lsc = sgx_lsc.SgxLayerStructC()
         elif my_exec_mode == ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
@@ -277,7 +278,7 @@ class Int8OPTAttention(nn.Module):
             bsz, tgt_len, _ = self.lsc.Get_Tensor_Dim_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             bsz, tgt_len, _ = self.lsc.Get_Tensor_Dim_Int8(hidden_states)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             bsz, tgt_len, _ = self.sgx_lsc.Get_Tensor_Dim_Int8(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             bsz, tgt_len, _ = self.lsc.Get_Tensor_Dim_Int8(hidden_states)
@@ -304,7 +305,7 @@ class Int8OPTAttention(nn.Module):
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             query_states, my_q_proj_dt = self.my_q_proj(hidden_states)
@@ -392,7 +393,7 @@ class Int8OPTAttention(nn.Module):
                 value_states = torch.cat(
                     [past_key_value[1], value_states], dim=2)
                 timer.end(t)
-            elif my_exec_mode == ExecMode.Mode6:
+            elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
@@ -505,7 +506,7 @@ class Int8OPTAttention(nn.Module):
                 key_states = self._shape(key_states, -1, bsz)
                 value_states = self._shape(value_states, -1, bsz)
                 timer.end(t)
-            elif my_exec_mode == ExecMode.Mode6:
+            elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
                 key_states, my_k_proj_dt = self.my_k_proj(hidden_states)
                 value_states, my_v_proj_dt = self.my_v_proj(hidden_states)
 
@@ -568,7 +569,7 @@ class Int8OPTAttention(nn.Module):
             query_states = self.lsc.Get_Tensor_Int8(query_states)
         elif my_exec_mode == ExecMode.Mode5:
             query_states = self.lsc.Get_Tensor_Int8(query_states)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             query_states = self.sgx_lsc.Get_Tensor_Int8(query_states)
         elif my_exec_mode == ExecMode.Mode7:
             query_states = self.lsc.Get_Tensor_Int8(query_states)
@@ -599,7 +600,7 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             query_states = self.lsc.Set_Tensor_Int8(query_states)
             key_states = self.lsc.Set_Tensor_Int8(key_states)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             query_states = self.sgx_lsc.Set_Tensor_Int8(query_states)
             key_states = self.sgx_lsc.Set_Tensor_Int8(key_states)
         elif my_exec_mode == ExecMode.Mode7:
@@ -637,7 +638,7 @@ class Int8OPTAttention(nn.Module):
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, key_states)
             attn_weights = self.lsc.Get_Tensor_Float(attn_weights)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             attn_weights, my_qk_bmm_dt = self.my_qk_bmm(
                 query_states, key_states)
             attn_weights = self.sgx_lsc.Get_Tensor_Float(attn_weights)
@@ -704,7 +705,7 @@ class Int8OPTAttention(nn.Module):
             attn_weights = self.lsc.Set_Tensor_Float(attn_weights)
             attn_probs = self.lsc.Softmax(attn_weights)
             attn_probs = self.lsc.Get_Tensor_Float(attn_probs)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             attn_weights = self.sgx_lsc.Set_Tensor_Float(attn_weights)
             attn_probs = self.sgx_lsc.Softmax(attn_weights)
             attn_probs = self.sgx_lsc.Get_Tensor_Float(attn_probs)
@@ -771,7 +772,7 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             attn_probs = self.lsc.Set_Tensor_Float(attn_probs)
             attn_probs = self.lsc.Quantize_Post_Softmax(attn_probs)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             attn_probs = self.sgx_lsc.Set_Tensor_Float(attn_probs)
             attn_probs = self.sgx_lsc.Quantize_Post_Softmax(attn_probs)
         elif my_exec_mode == ExecMode.Mode7:
@@ -817,7 +818,7 @@ class Int8OPTAttention(nn.Module):
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
             attn_output = self.lsc.Get_Tensor_Int8(attn_output)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             value_states = self.sgx_lsc.Set_Tensor_Int8(value_states)
             attn_output, my_pv_bmm_dt = self.my_pv_bmm(
                 attn_probs, value_states)
@@ -873,7 +874,7 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             attn_output = self.lsc.Set_Tensor_Int8(attn_output)
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             attn_output = self.sgx_lsc.Set_Tensor_Int8(attn_output)
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         elif my_exec_mode == ExecMode.Mode7:
@@ -911,7 +912,7 @@ class Int8OPTDecoderLayer(nn.Module):
             self.lsc = lsc.LayerStructC()
         elif my_exec_mode == ExecMode.Mode5:
             self.lsc = lsc.LayerStructC()
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             self.sgx_lsc = sgx_lsc.SgxLayerStructC()
         elif my_exec_mode == ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
@@ -938,7 +939,7 @@ class Int8OPTDecoderLayer(nn.Module):
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
                 self.final_layer_norm)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             self.self_attn_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
@@ -1011,7 +1012,7 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states = self.lsc.Set_Hidden_States(
                 hidden_states)  # pass
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             hidden_states = self.sgx_lsc.Set_Hidden_States(
                 hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode7:
@@ -1035,7 +1036,7 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = self.lsc.Copy_Hidden_States(hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode5:
             residual = self.lsc.Copy_Hidden_States(hidden_states)  # pass
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             residual = self.sgx_lsc.Copy_Hidden_States(hidden_states)  # pass
         elif my_exec_mode == ExecMode.Mode7:
             residual = self.lsc.Copy_Hidden_States(hidden_states)
@@ -1065,7 +1066,7 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states = self.lsc.Layer_Norm_Q(
                 hidden_states, self.self_attn_layer_norm_id)  # id (float) -> id (int8)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             hidden_states = self.sgx_lsc.Layer_Norm_Q(
                 hidden_states, self.self_attn_layer_norm_id)  # id (float) -> id (int8)
         elif my_exec_mode == ExecMode.Mode7:
@@ -1113,7 +1114,7 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             # hidden_states = self.lsc.Set_Tensor_Float(hidden_states)
             hidden_states = self.lsc.Residual_Add(residual, hidden_states)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             # hidden_states = self.lsc.Set_Tensor_Float(hidden_states)
             hidden_states = self.sgx_lsc.Residual_Add(residual, hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
@@ -1139,7 +1140,7 @@ class Int8OPTDecoderLayer(nn.Module):
             residual = self.lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             residual = self.lsc.Copy_Hidden_States(hidden_states)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             residual = self.sgx_lsc.Copy_Hidden_States(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             residual = self.lsc.Copy_Hidden_States(hidden_states)
@@ -1169,7 +1170,7 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states = self.lsc.Layer_Norm_Q(
                 hidden_states, self.final_layer_norm_id)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             hidden_states = self.sgx_lsc.Layer_Norm_Q(
                 hidden_states, self.final_layer_norm_id)
         elif my_exec_mode == ExecMode.Mode7:
@@ -1238,7 +1239,7 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states = self.lsc.ReLU(hidden_states)
             hidden_states = self.lsc.Cast_From_Float_To_Int8(hidden_states)
             timer.end(t)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             # t = timer.start(tag=f'FC1 ({state})',
             #                 category=f'FC1 ({state})')
             hidden_states, my_fc1_dt = self.my_fc1(hidden_states)
@@ -1286,7 +1287,7 @@ class Int8OPTDecoderLayer(nn.Module):
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode5:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
         elif my_exec_mode == ExecMode.Mode7:
             hidden_states, my_fc2_dt = self.my_fc2(hidden_states)
@@ -1316,7 +1317,7 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             residual = self.lsc.Residual_Add(residual, hidden_states)
             residual = self.lsc.Get_Tensor_Float(residual)
-        elif my_exec_mode == ExecMode.Mode6:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             residual = self.sgx_lsc.Residual_Add(residual, hidden_states)
             residual = self.sgx_lsc.Get_Tensor_Float(residual)
         elif my_exec_mode == ExecMode.Mode7:

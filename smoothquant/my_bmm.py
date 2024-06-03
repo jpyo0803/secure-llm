@@ -34,6 +34,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             self.lsc = lsc.LayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             self.alpha = torch.tensor(
@@ -48,11 +50,14 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             self.bmm_id = self.lsc.Set_Bmm_Param(torch_int_nn_bmm)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.bmm_id = self.sgx_lsc.Set_Bmm_Param(torch_int_nn_bmm)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            self.bmm_id = self.sgx_lsc.Set_Bmm_Param(torch_int_nn_bmm)
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.cache = None
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.cache = None
+    
 
 
     def __run(self, x, y):
@@ -69,6 +74,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             x_id = self.lsc.Cast_From_Int8_To_Int32(x)
             y_id = self.lsc.Cast_From_Int8_To_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            x_id = self.sgx_lsc.Cast_From_Int8_To_Int32(x)
+            y_id = self.sgx_lsc.Cast_From_Int8_To_Int32(y)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             x_id = self.sgx_lsc.Cast_From_Int8_To_Int32(x)
             y_id = self.sgx_lsc.Cast_From_Int8_To_Int32(y)
         else:
@@ -109,6 +117,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 x, y = self.sgx_lsc.Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
             else:
                 x, y = self.sgx_lsc.Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            pass
         else:
             assert False
         timer.end(t)
@@ -143,6 +153,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
             else:
                 decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            pass
         else:
             assert False
 
@@ -151,12 +163,16 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Host to Device ({state})', category=f'{self.module_name}, Host to Device ({state})')
 
-        if self.is_pv_bmm and smoothquant.opt.is_prefill:
-            if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-                y = y.to(torch.device('cuda:0'))
+        
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            pass
         else:
-            x = x.to(torch.device('cuda:0'))
-            y = y.to(torch.device('cuda:0'))
+            if self.is_pv_bmm and smoothquant.opt.is_prefill:
+                if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+                    y = y.to(torch.device('cuda:0'))
+            else:
+                x = x.to(torch.device('cuda:0'))
+                y = y.to(torch.device('cuda:0'))
 
         torch.cuda.synchronize()
         timer.end(t)
@@ -164,61 +180,87 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Manage Y ({state})', category=f'{self.module_name}, Manage Y ({state})')
 
-        if self.is_pv_bmm and smoothquant.opt.is_prefill:
-            if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-                y = y.transpose(1, 2).contiguous()
+        
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            pass
         else:
-            y = y.transpose(1, 2).contiguous()
-            
-        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-            if self.cache is None:
-                self.cache = y
+            if self.is_pv_bmm and smoothquant.opt.is_prefill:
+                if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+                    y = y.transpose(1, 2).contiguous()
             else:
-                # print("cache shape vs y shape", self.cache.shape, y.shape)
-                if self.is_pv_bmm:
-                    self.cache = torch.cat([self.cache, y], dim=1)
+                y = y.transpose(1, 2).contiguous()
+        
+
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            pass
+        else:
+            if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+                if self.cache is None:
+                    self.cache = y
                 else:
-                    self.cache = torch.cat([self.cache, y], dim=2)
-            y = self.cache
+                    # print("cache shape vs y shape", self.cache.shape, y.shape)
+                    if self.is_pv_bmm:
+                        self.cache = torch.cat([self.cache, y], dim=1)
+                    else:
+                        self.cache = torch.cat([self.cache, y], dim=2)
+                y = self.cache
         
         torch.cuda.synchronize()
         timer.end(t)
 
-        if self.is_pv_bmm and smoothquant.opt.is_prefill:
+        
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             pass
         else:
-            x = cupy.from_dlpack(x)
-            y = cupy.from_dlpack(y)
+            if self.is_pv_bmm and smoothquant.opt.is_prefill:
+                pass
+            else:
+                x = cupy.from_dlpack(x)
+                y = cupy.from_dlpack(y)
 
         cupy.cuda.Stream.null.synchronize()
         t = timer.start(tag=f'{self.module_name}, Main Computation ({state})', category=f'{self.module_name}, Main Computation ({state})')
-        if self.is_pv_bmm and smoothquant.opt.is_prefill:
-            if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
-                z = self.lsc.CPU_Bmm(x_id, y_id)
-            elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-                z = self.sgx_lsc.CPU_Bmm(x_id, y_id)
-            else:
-                assert False
+        
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            z = self.sgx_lsc.CPU_Bmm(x_id, y_id)
         else:
-            z = cupy.matmul(x, y)
+            if self.is_pv_bmm and smoothquant.opt.is_prefill:
+                if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
+                    z = self.lsc.CPU_Bmm(x_id, y_id)
+                elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+                    z = self.sgx_lsc.CPU_Bmm(x_id, y_id)
+                else:
+                    assert False
+            else:
+                z = cupy.matmul(x, y)
         cupy.cuda.Stream.null.synchronize()
         timer.end(t)
 
-        if self.is_pv_bmm and smoothquant.opt.is_prefill:
+
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             pass
         else:
-            z = torch.from_dlpack(z)
+            if self.is_pv_bmm and smoothquant.opt.is_prefill:
+                pass
+            else:
+                z = torch.from_dlpack(z)
 
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
-        if self.is_pv_bmm and smoothquant.opt.is_prefill:
+        
+        if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             pass
         else:
-            z = z.to(torch.device('cpu'))
+            if self.is_pv_bmm and smoothquant.opt.is_prefill:
+                pass
+            else:
+                z = z.to(torch.device('cpu'))
+
         torch.cuda.synchronize()
         timer.end(t)
         
         t = timer.start(tag=f'{self.module_name}, Process Output Tensors After Offload ({state})', category=f'{self.module_name}, Process Output Tensors After Offload ({state})')
+        
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
@@ -256,6 +298,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                     z = self.sgx_lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, decryption_key_id)
             else:
                 z = self.sgx_lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, decryption_key_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
+            pass
         else:
             assert False
         timer.end(t)
@@ -274,6 +318,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             z = self.lsc.Compute_Epilogue_BMM(z, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+            z = self.sgx_lsc.Compute_Epilogue_BMM(z, self.bmm_id)
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             z = self.sgx_lsc.Compute_Epilogue_BMM(z, self.bmm_id)
         else:
             assert False
@@ -305,7 +351,7 @@ class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):
             return self.lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             return self.lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
-        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+        elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             return self.sgx_lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             return self.lsc.Cast_From_Float_To_Int8(super()._BMM_S8X_S8Y_FP32Z_Mixed__run(x, y))

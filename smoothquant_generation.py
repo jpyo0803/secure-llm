@@ -20,10 +20,10 @@ timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
-model_size = '125m'
-target_input_token_len = 128
-target_output_token_len = 256
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode9
+model_size = '1.3B'
+target_input_token_len = 1024
+target_output_token_len = 2048
 num_batches = 1
 
 
@@ -146,7 +146,7 @@ for state in ['Prefill', 'Generation']:
         writer.writerows(data)
         f.close()
 
-if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
+if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
     sgx_lsc.SgxLayerStructC().Destroy()
 
 amt.reset_clock_speed()
