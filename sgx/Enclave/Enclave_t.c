@@ -305,6 +305,12 @@ typedef struct ms_ecall_Sgx_Residual_Add_t {
 	int* ms_ret_id;
 } ms_ecall_Sgx_Residual_Add_t;
 
+typedef struct ms_ecall_Sgx_CPU_Bmm_t {
+	int ms_src_id1;
+	int ms_src_id2;
+	int* ms_ret_id;
+} ms_ecall_Sgx_CPU_Bmm_t;
+
 typedef struct ms_ocall_print_string_t {
 	const char* ms_str;
 } ms_ocall_print_string_t;
@@ -1248,11 +1254,33 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Residual_Add(void* pms)
 	return status;
 }
 
+static sgx_status_t SGX_CDECL sgx_ecall_Sgx_CPU_Bmm(void* pms)
+{
+	CHECK_REF_POINTER(pms, sizeof(ms_ecall_Sgx_CPU_Bmm_t));
+	//
+	// fence after pointer checks
+	//
+	sgx_lfence();
+	ms_ecall_Sgx_CPU_Bmm_t* ms = SGX_CAST(ms_ecall_Sgx_CPU_Bmm_t*, pms);
+	ms_ecall_Sgx_CPU_Bmm_t __in_ms;
+	if (memcpy_s(&__in_ms, sizeof(ms_ecall_Sgx_CPU_Bmm_t), ms, sizeof(ms_ecall_Sgx_CPU_Bmm_t))) {
+		return SGX_ERROR_UNEXPECTED;
+	}
+	sgx_status_t status = SGX_SUCCESS;
+	int* _tmp_ret_id = __in_ms.ms_ret_id;
+
+
+	ecall_Sgx_CPU_Bmm(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_ret_id);
+
+
+	return status;
+}
+
 SGX_EXTERNC const struct {
 	size_t nr_ecall;
-	struct {void* ecall_addr; uint8_t is_priv; uint8_t is_switchless;} ecall_table[42];
+	struct {void* ecall_addr; uint8_t is_priv; uint8_t is_switchless;} ecall_table[43];
 } g_ecall_table = {
-	42,
+	43,
 	{
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Generate_Decryption_Key_QK_Int32, 0, 0},
@@ -1296,19 +1324,20 @@ SGX_EXTERNC const struct {
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Cast_From_Int8_To_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Bmm_Param, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Residual_Add, 0, 0},
+		{(void*)(uintptr_t)sgx_ecall_Sgx_CPU_Bmm, 0, 0},
 	}
 };
 
 SGX_EXTERNC const struct {
 	size_t nr_ocall;
-	uint8_t entry_table[4][42];
+	uint8_t entry_table[4][43];
 } g_dyn_entry_table = {
 	4,
 	{
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
 	}
 };
 

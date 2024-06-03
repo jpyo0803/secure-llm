@@ -57,6 +57,7 @@ void ecall_Sgx_Cast_From_Float_To_Int32(int src_id, int* ret_id);
 void ecall_Sgx_Cast_From_Int8_To_Int32(int src_id, int* ret_id);
 void ecall_Sgx_Set_Bmm_Param(float alpha, int* ret_id);
 void ecall_Sgx_Residual_Add(int residual, int hidden_states, int* ret_id);
+void ecall_Sgx_CPU_Bmm(int src_id1, int src_id2, int* ret_id);
 
 sgx_status_t SGX_CDECL ocall_print_string(const char* str);
 sgx_status_t SGX_CDECL ocall_start_clock(void);

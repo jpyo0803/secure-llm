@@ -159,7 +159,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         x = cupy.from_dlpack(x) # torch to cupy
 
         cupy.cuda.Stream.null.synchronize() 
-        t = timer.start(tag=f'{self.module_name}, GPU Computation ({state})', category=f'{self.module_name}, GPU Computation ({state})')
+        t = timer.start(tag=f'{self.module_name}, Main Computation ({state})', category=f'{self.module_name}, Main Computation ({state})')
         y = cupy.matmul(x, self.weight)
         cupy.cuda.Stream.null.synchronize() 
         timer.end(t)
@@ -392,7 +392,7 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         x = cupy.from_dlpack(x)
 
         cupy.cuda.Stream.null.synchronize()
-        t = timer.start(tag=f'{self.module_name}, GPU Computation ({state})', category=f'{self.module_name}, GPU Computation ({state})')
+        t = timer.start(tag=f'{self.module_name}, Main Computation ({state})', category=f'{self.module_name}, Main Computation ({state})')
         y = cupy.matmul(x, self.weight)
         cupy.cuda.Stream.null.synchronize()
         timer.end(t)

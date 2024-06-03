@@ -256,6 +256,10 @@ class SgxLayerStructC:
                                                         src.size(0), src.size(
                                                             1), src.size(2),
                                                         decryption_key_id)
+  
+  @classmethod
+  def CPU_Bmm(cls, src_id1, src_id2):
+      return cls.lib.Sgx_CPU_Bmm(cls.eid[0],src_id1, src_id2)
 
 if __name__ == "__main__":
   sgx = SgxLayerStructC()

@@ -1451,6 +1451,23 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N, int decryp
     return curr_id;
 }
 
+
+int Sgx_CPU_Bmm(int src_id1, int src_id2) {
+  struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
+  struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+  struct TensorInt32* Z = MatmulS32S32S32(X, Y);  // B x M x N
+
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
+
+  int curr_id = tensor_int32_id;
+  tensor_int32_list[curr_id] = Z;
+  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  return curr_id;
+}
+
 void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
   Sgx_Get_Encrypted_Tensor_QK_Int32(src_id1,src_id2,out1,out2,blind_factor_ids);
 }
@@ -1617,6 +1634,10 @@ void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int 
 
 void ecall_Sgx_Pre_Init() {
   Sgx_Pre_Init();
+}
+
+void ecall_Sgx_CPU_Bmm(int src_id1, int src_id2, int* ret_id) {
+  *ret_id = Sgx_CPU_Bmm(src_id1, src_id2);
 }
 
 }

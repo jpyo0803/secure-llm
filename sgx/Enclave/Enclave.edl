@@ -76,6 +76,8 @@ enclave {
 
     public void ecall_Sgx_Residual_Add(int residual, int hidden_states, [user_check]int* ret_id);
 
+    public void ecall_Sgx_CPU_Bmm(int src_id1, int src_id2, [user_check]int* ret_id);
+
         
     };
 

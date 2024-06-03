@@ -75,6 +75,7 @@ sgx_status_t ecall_Sgx_Cast_From_Float_To_Int32(sgx_enclave_id_t eid, int src_id
 sgx_status_t ecall_Sgx_Cast_From_Int8_To_Int32(sgx_enclave_id_t eid, int src_id, int* ret_id);
 sgx_status_t ecall_Sgx_Set_Bmm_Param(sgx_enclave_id_t eid, float alpha, int* ret_id);
 sgx_status_t ecall_Sgx_Residual_Add(sgx_enclave_id_t eid, int residual, int hidden_states, int* ret_id);
+sgx_status_t ecall_Sgx_CPU_Bmm(sgx_enclave_id_t eid, int src_id1, int src_id2, int* ret_id);
 
 #ifdef __cplusplus
 }

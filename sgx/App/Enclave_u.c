@@ -279,6 +279,12 @@ typedef struct ms_ecall_Sgx_Residual_Add_t {
 	int* ms_ret_id;
 } ms_ecall_Sgx_Residual_Add_t;
 
+typedef struct ms_ecall_Sgx_CPU_Bmm_t {
+	int ms_src_id1;
+	int ms_src_id2;
+	int* ms_ret_id;
+} ms_ecall_Sgx_CPU_Bmm_t;
+
 typedef struct ms_ocall_print_string_t {
 	const char* ms_str;
 } ms_ocall_print_string_t;
@@ -821,6 +827,17 @@ sgx_status_t ecall_Sgx_Residual_Add(sgx_enclave_id_t eid, int residual, int hidd
 	ms.ms_hidden_states = hidden_states;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 41, &ocall_table_Enclave, &ms);
+	return status;
+}
+
+sgx_status_t ecall_Sgx_CPU_Bmm(sgx_enclave_id_t eid, int src_id1, int src_id2, int* ret_id)
+{
+	sgx_status_t status;
+	ms_ecall_Sgx_CPU_Bmm_t ms;
+	ms.ms_src_id1 = src_id1;
+	ms.ms_src_id2 = src_id2;
+	ms.ms_ret_id = ret_id;
+	status = sgx_ecall(eid, 42, &ocall_table_Enclave, &ms);
 	return status;
 }
 

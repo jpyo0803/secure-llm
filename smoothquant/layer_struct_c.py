@@ -118,7 +118,7 @@ class LayerStructC:
         
         cls.lib.Ex_Get_Encrypted_Tensor_PV_Int32(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)), cast(blind_factor_ids.data_ptr(), POINTER(c_int32)))
         return enc_x, enc_y, blind_factor_ids[0], blind_factor_ids[1]
-    
+
     @classmethod    
     def Generate_Decryption_Key_PV_Int32(cls, src_id1, src_id2, blind_factor_u_id, blind_factor_v_id):
         return cls.lib.Ex_Generate_Decryption_Key_PV_Int32(src_id1, src_id2, c_int32(blind_factor_u_id), c_int32(blind_factor_v_id))
@@ -259,3 +259,7 @@ class LayerStructC:
     @classmethod
     def Residual_Add(cls, src_id_1, src_id_2):
         return cls.lib.Ex_Residual_Add(src_id_1, src_id_2)
+    
+    @classmethod
+    def CPU_Bmm(cls, src_id1, src_id2):
+        return cls.lib.Ex_CPU_Bmm(src_id1, src_id2)

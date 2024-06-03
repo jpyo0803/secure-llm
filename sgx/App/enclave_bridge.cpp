@@ -618,6 +618,16 @@ extern "C"
         }
         return ret_id;
     }
+
+    int Sgx_CPU_Bmm(unsigned long eid, int src_id1, int src_id2) {
+        int ret_id;
+        sgx_status_t ret = ecall_Sgx_CPU_Bmm(eid,src_id1,src_id2,&ret_id);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+        return ret_id;
+    }
 }
 
 /* Application entry */

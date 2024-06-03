@@ -39,25 +39,32 @@ int Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
                                         int blind_factor_u_id,
                                         int blind_factor_v_id);
 int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N,
-                                      int decryption_key_id);
+                                     int decryption_key_id);
 
 void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1,
                                       int* out2, int* blind_factor_ids);
 int Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
                                         int blind_factor_u_id,
                                         int blind_factor_v_id);
-int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N, int decryption_key_id);
+int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N,
+                                     int decryption_key_id);
 
 // Handle blind / unblind factors inside
 void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
-                                                     int* out1, int* out2, int layer_id);
-int Ex_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id);
-int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int decryption_key_id);
+                                                   int* out1, int* out2,
+                                                   int layer_id);
+int Ex_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+                                                     int layer_id);
+int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
+                                                  int N, int decryption_key_id);
 
 void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
-                                                     int* out1, int* out2, int layer_id);
-int Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id);
-int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int decryption_key_id);
+                                                   int* out1, int* out2,
+                                                   int layer_id);
+int Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+                                                     int layer_id);
+int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M,
+                                                  int N, int decryption_key_id);
 
 void Ex_Pre_Init();
 
@@ -84,5 +91,7 @@ int Ex_Cast_From_Int8_To_Int32(int src_id);
 int Ex_Set_Bmm_Param(float alpha);
 
 int Ex_Residual_Add(int residual, int hidden_states);
+
+int Ex_CPU_Bmm(int src_id1, int src_id2);
 
 #endif
