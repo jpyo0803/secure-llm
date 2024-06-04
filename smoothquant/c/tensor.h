@@ -77,6 +77,11 @@ struct TensorInt32* MatmulS32S32S32_ModP(struct TensorInt32* X,
 struct TensorInt32* MatmulS32S8S32_ModP(struct TensorInt32* X,
                                     struct TensorInt8* Y);
 
+struct TensorInt32* MatmulS32S32S32_ModP_Naive(struct TensorInt32* X,
+                                    struct TensorInt32* Y);
+struct TensorInt32* MatmulS32S8S32_ModP_Naive(struct TensorInt32* X,
+                                    struct TensorInt8* Y);
+
 struct TensorInt64* CreateTensorInt64(int B, int M, int N);
 void DeleteTensorInt64(struct TensorInt64* tensor);
 

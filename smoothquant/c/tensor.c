@@ -401,3 +401,5 @@ struct TensorInt32* MatmulS32S32S32_naive(struct TensorInt32* X,
   }
   return Z;
 }
+
+

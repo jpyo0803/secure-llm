@@ -173,7 +173,7 @@ int Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
              N * sizeof(int));
   }
   linear_param->precomputed_unblind_factors =
-      MatmulS32S8S32_ModP(linear_param->blind_factors_set, linear_param->weight);
+      MatmulS32S8S32_ModP_Naive(linear_param->blind_factors_set, linear_param->weight);
   // dimension should be (1, obfuscation_ratio, M)
 
   linear_param_list[curr_id] = linear_param;
@@ -205,7 +205,7 @@ int Sgx_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
              N * sizeof(int));
   }
   linear_param->precomputed_unblind_factors =
-      MatmulS32S8S32_ModP(linear_param->blind_factors_set, linear_param->weight);
+      MatmulS32S8S32_ModP_Naive(linear_param->blind_factors_set, linear_param->weight);
 
   linear_param_list[curr_id] = linear_param;
   linear_param_id = (linear_param_id + 1) % STATIC_LIST_LEN;
@@ -298,7 +298,7 @@ int Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
   }
 
   struct TensorInt32* decryption_key =
-      MatmulS32S8S32(blind_factor, linear_weight);
+      MatmulS32S8S32_Naive(blind_factor, linear_weight);
 
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = decryption_key;
@@ -392,14 +392,14 @@ int Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
   struct TensorInt32* u = tensor_int32_list[blind_factor_u_id];
   struct TensorInt32* v = tensor_int32_list[blind_factor_v_id];
 
-  struct TensorInt32* uy = MatmulS32S32S32_ModP(u, Y);  // B, 1, Y_M
-  struct TensorInt32* xv = MatmulS32S32S32_ModP(X, v);  // B, X_M, 1
+  struct TensorInt32* uy = MatmulS32S32S32_ModP_Naive(u, Y);  // B, 1, Y_M
+  struct TensorInt32* xv = MatmulS32S32S32_ModP_Naive(X, v);  // B, X_M, 1
 
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
 
-  struct TensorInt32* uv = MatmulS32S32S32_ModP(u, v);  // B x 1 x 1
+  struct TensorInt32* uv = MatmulS32S32S32_ModP_Naive(u, v);  // B x 1 x 1
 
   struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
 
@@ -503,7 +503,7 @@ int Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
   struct TensorInt32* u = tensor_int32_list[blind_factor_u_id];
   struct TensorInt32* v = tensor_int32_list[blind_factor_v_id];
 
-  struct TensorInt32* uy = MatmulS32S32S32_ModP(u, Y);  // B, 1, Y_M
+  struct TensorInt32* uy = MatmulS32S32S32_ModP_Naive(u, Y);  // B, 1, Y_M
 
   struct TensorInt32* xv = CreateTensorInt32(X->B, X->M, Y->M);
 
@@ -641,16 +641,16 @@ int Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   // printf("Y: %d %d %d\n", Y->B, Y->M, Y->N);
   
   struct TensorInt32* uy =
-      MatmulS32S32S32_ModP(qk_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
+      MatmulS32S32S32_ModP_Naive(qk_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
   struct TensorInt32* xv =
-      MatmulS32S32S32_ModP(X, qk_blind_factor_v_list[layer_id]);  // B, X_M, 1
+      MatmulS32S32S32_ModP_Naive(X, qk_blind_factor_v_list[layer_id]);  // B, X_M, 1
 
   // printf("uy shape %d %d %d\n", uy->B, uy->M, uy->N);
   // printf("xv shape %d %d %d\n", xv->B, xv->M, xv->N);
 
   if (qk_uv_dot_list[layer_id] == NULL) {
     qk_uv_dot_list[layer_id] =
-        MatmulS32S32S32_ModP(qk_blind_factor_u_list[layer_id],
+        MatmulS32S32S32_ModP_Naive(qk_blind_factor_u_list[layer_id],
                         qk_blind_factor_v_list[layer_id]);  // B x 1 x 1
     qk_uy_unblind_factor_accum_list[layer_id] = uy;
   } else {
@@ -816,7 +816,7 @@ int Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
 
   if (pv_uv_unblind_factor_accum_list[layer_id] == NULL) {
     pv_uy_unblind_factor_accum_list[layer_id] =
-        MatmulS32S32S32_ModP(pv_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
+        MatmulS32S32S32_ModP_Naive(pv_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
     pv_uv_unblind_factor_accum_list[layer_id] =
         CreateTensorInt32(X->B, 1, Y->M);  // B, 1, Y_M
 
@@ -1349,7 +1349,7 @@ int Sgx_CPU_Bmm(int src_id1, int src_id2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
-  struct TensorInt32* Z = MatmulS32S32S32(X, Y);  // B x M x N
+  struct TensorInt32* Z = MatmulS32S32S32_Naive(X, Y);  // B x M x N
 
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
