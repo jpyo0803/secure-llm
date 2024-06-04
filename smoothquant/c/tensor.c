@@ -2,6 +2,9 @@
 
 #include <immintrin.h>
 #include <stdlib.h>
+#include <stdint.h>
+
+#include "mod.h"
 
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   struct TensorInt32* tensor =
@@ -255,6 +258,32 @@ struct TensorInt32* MatmulS8S8S32(struct TensorInt8* X, struct TensorInt8* Y) {
         for (; k < K; ++k) {  // Process remaining elements
           sum += (int)X->data[b * M * K + m * K + k] *
                  (int)Y->data[b * N * K + n * K + k];
+        }
+        Z->data[b * M * N + m * N + n] = sum;
+      }
+    }
+  }
+
+  return Z;
+}
+
+struct TensorInt32* MatmulS32S32S32_ModP(struct TensorInt32* X,
+                                    struct TensorInt32* Y) {
+  int B = X->B;
+  int M = X->M;
+  int K = X->N;
+  int N = Y->M;  // Y's second dimension should be N since Y has dimensions (B,
+                 // N, K)
+
+  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
+
+  for (int b = 0; b < B; b++) {
+    for (int m = 0; m < M; m++) {
+      for (int n = 0; n < N; n++) {
+        int64_t sum = 0;
+        for (int k = 0; k < K; ++k) {
+          sum += (int64_t)X->data[b * M * K + m * K + k] * (int64_t)Y->data[b * N * K + n * K + k];
+          sum = ModP(sum);
         }
         Z->data[b * M * N + m * N + n] = sum;
       }

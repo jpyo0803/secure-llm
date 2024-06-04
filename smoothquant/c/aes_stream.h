@@ -33,4 +33,6 @@ void GetCPRNG(unsigned char *buf, size_t buf_len);
 void GetDummyCPRNG(unsigned char *buf, size_t buf_len);
 
 void GetDummyCPRNG_Ones(unsigned char *buf, size_t buf_len);
+
+void GetCPRNG_ModP(unsigned char *buf, size_t buf_len);
 #endif

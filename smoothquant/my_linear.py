@@ -89,7 +89,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
     def __run(self, x):
         state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
 
+        # Cast from 8 to int32 for convenience, dont include time measure
         t = timer.start(tag=f'{self.module_name}, Cast From Int8 To Int32 ({state})', category=f'{self.module_name}, Cast From Int8 To Int32 ({state})')
+        timer.end(t)
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
@@ -107,7 +109,6 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             x = self.sgx_lsc.Cast_From_Int8_To_Int32(x)
         else:
             assert False
-        timer.end(t)
 
         t = timer.start(tag=f'{self.module_name}, Process Input Tensor Before Offload ({state})', category=f'{self.module_name}, Process Input Tensor Before Offload ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:

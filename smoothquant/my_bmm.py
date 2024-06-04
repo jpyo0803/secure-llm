@@ -17,6 +17,16 @@ CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
 cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
 
+P = (2**24 - 3)
+# P = 1000003
+
+def wrap_tensor(x, p):
+    x = x + p
+    x = torch.remainder(x, 2 * p)
+    x = x - p
+    x = torch.where(x < -p, x + 2 * p, x)
+    return x
+
 class BMM_S8X_S8Y_FP32Z_Mixed:
     def __init__(self, torch_int_nn_bmm, privacy_on, module_name=None):
         self.privacy_on = privacy_on
@@ -62,7 +72,10 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
 
     def __run(self, x, y):
         state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
+        
+        # Cast from 8 to int32 for convenience, dont include time measure
         t = timer.start(tag=f'{self.module_name}, Cast From Int8 To Int32 ({state})', category=f'{self.module_name}, Cast From Int8 To Int32 ({state})')
+        timer.end(t)
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             assert x.device == torch.device('cpu')
             assert y.device == torch.device('cpu')
@@ -81,7 +94,6 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             y_id = self.sgx_lsc.Cast_From_Int8_To_Int32(y)
         else:
             assert False
-        timer.end(t)
         
         t = timer.start(tag=f'{self.module_name}, Process Input Tensors Before Offload ({state})', category=f'{self.module_name}, Process Input Tensors Before Offload ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
@@ -215,10 +227,12 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                x = cupy.from_dlpack(x)
-                y = cupy.from_dlpack(y)
+                pass
+                # x = cupy.from_dlpack(x)
+                # y = cupy.from_dlpack(y)
 
-        cupy.cuda.Stream.null.synchronize()
+        torch.cuda.synchronize()
+        # cupy.cuda.Stream.null.synchronize()
         t = timer.start(tag=f'{self.module_name}, Main Computation ({state})', category=f'{self.module_name}, Main Computation ({state})')
         
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
@@ -232,8 +246,20 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 else:
                     assert False
             else:
-                z = cupy.matmul(x, y)
-        cupy.cuda.Stream.null.synchronize()
+                # z = cupy.matmul(x, y)
+                x = x.to(torch.float64)
+                y = y.to(torch.float64)
+                z = torch.matmul(x, y)
+                if smoothquant.opt.ENABLE_GLOB_MIN_MAX_STAT:
+                    smoothquant.opt.glob_max = max(smoothquant.opt.glob_max, torch.max(z).item())
+                    smoothquant.opt.glob_min = min(smoothquant.opt.glob_min, torch.min(z).item())
+                    print(f"Glob Min / Max : {smoothquant.opt.glob_min: _}, {smoothquant.opt.glob_max: _}")
+
+                z = wrap_tensor(z, P)
+                z = z.to(torch.int32)
+
+        torch.cuda.synchronize()
+        # cupy.cuda.Stream.null.synchronize()
         timer.end(t)
 
 
@@ -243,7 +269,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                z = torch.from_dlpack(z)
+                pass
+                # z = torch.from_dlpack(z)
 
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')

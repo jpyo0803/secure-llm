@@ -31,7 +31,9 @@ import singleton_timer as st
 
 timer = st.SingletonTimer()
 
-
+ENABLE_GLOB_MIN_MAX_STAT = False
+glob_min = 1e25
+glob_max = -1e25
 
 class ExecMode(Enum):
     Mode1 = 1
