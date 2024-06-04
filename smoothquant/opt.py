@@ -32,6 +32,10 @@ import singleton_timer as st
 timer = st.SingletonTimer()
 
 ENABLE_GLOB_MIN_MAX_STAT = False
+ENABLE_MATMUL_OUTPUT_SUM = True
+
+check_sum = 0
+
 glob_min = 1e25
 glob_max = -1e25
 

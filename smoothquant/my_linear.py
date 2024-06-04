@@ -198,6 +198,10 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             assert False
         timer.end(t)
 
+        if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
+            y_test = self.lsc.Get_Tensor_Int32(y)
+            smoothquant.opt.check_sum += torch.sum(y_test)
+            # print(smoothquant.opt.check_sum)
 
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:
@@ -424,6 +428,11 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         else:
             assert False
         timer.end(t)
+
+        if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
+            y_test = self.lsc.Get_Tensor_Int32(y)
+            # print(f'{self.module_name}, {state}, Checksum: {torch.sum(y_test)}')
+            smoothquant.opt.check_sum += torch.sum(y_test)
 
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode1:

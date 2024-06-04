@@ -17,7 +17,7 @@ CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
 cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
 
-P = (2**24 - 3)
+P = (2**21 - 3)
 # P = 1000003
 
 def wrap_tensor(x, p):
@@ -227,9 +227,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                pass
-                # x = cupy.from_dlpack(x)
-                # y = cupy.from_dlpack(y)
+                # pass
+                x = cupy.from_dlpack(x)
+                y = cupy.from_dlpack(y)
 
         torch.cuda.synchronize()
         # cupy.cuda.Stream.null.synchronize()
@@ -246,17 +246,17 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 else:
                     assert False
             else:
-                # z = cupy.matmul(x, y)
-                x = x.to(torch.float64)
-                y = y.to(torch.float64)
-                z = torch.matmul(x, y)
+                z = cupy.matmul(x, y)
+                # x = x.to(torch.float64)
+                # y = y.to(torch.float64)
+                # z = torch.matmul(x, y)
+
                 if smoothquant.opt.ENABLE_GLOB_MIN_MAX_STAT:
                     smoothquant.opt.glob_max = max(smoothquant.opt.glob_max, torch.max(z).item())
                     smoothquant.opt.glob_min = min(smoothquant.opt.glob_min, torch.min(z).item())
-                    print(f"Glob Min / Max : {smoothquant.opt.glob_min: _}, {smoothquant.opt.glob_max: _}")
 
-                z = wrap_tensor(z, P)
-                z = z.to(torch.int32)
+                # z = wrap_tensor(z, P)
+                # z = z.to(torch.int32)
 
         torch.cuda.synchronize()
         # cupy.cuda.Stream.null.synchronize()
@@ -269,8 +269,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                pass
-                # z = torch.from_dlpack(z)
+                # pass
+                z = torch.from_dlpack(z)
 
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
@@ -332,6 +332,11 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         timer.end(t)
 
         # Checksum
+        if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
+            z_test = self.lsc.Get_Tensor_Int32(z)
+            # print(f'{self.module_name}, {state}, Checksum: {torch.sum(z_test)}')
+            smoothquant.opt.check_sum += torch.sum(z_test)
+
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             z = z.to(torch.float32)
