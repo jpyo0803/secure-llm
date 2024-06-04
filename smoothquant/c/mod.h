@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 
-int64_t ModP(int64_t x);
+int32_t ModP(int64_t x);
 
 
 #endif
