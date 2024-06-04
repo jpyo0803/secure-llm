@@ -227,9 +227,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                # pass
-                x = cupy.from_dlpack(x)
-                y = cupy.from_dlpack(y)
+                pass
+                # x = cupy.from_dlpack(x)
+                # y = cupy.from_dlpack(y)
 
         torch.cuda.synchronize()
         # cupy.cuda.Stream.null.synchronize()
@@ -246,17 +246,17 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 else:
                     assert False
             else:
-                z = cupy.matmul(x, y)
-                # x = x.to(torch.float64)
-                # y = y.to(torch.float64)
-                # z = torch.matmul(x, y)
+                # z = cupy.matmul(x, y)
+                x = x.to(torch.float64)
+                y = y.to(torch.float64)
+                z = torch.matmul(x, y)
 
                 if smoothquant.opt.ENABLE_GLOB_MIN_MAX_STAT:
                     smoothquant.opt.glob_max = max(smoothquant.opt.glob_max, torch.max(z).item())
                     smoothquant.opt.glob_min = min(smoothquant.opt.glob_min, torch.min(z).item())
 
-                # z = wrap_tensor(z, P)
-                # z = z.to(torch.int32)
+                z = wrap_tensor(z, P)
+                z = z.to(torch.int32)
 
         torch.cuda.synchronize()
         # cupy.cuda.Stream.null.synchronize()
@@ -269,8 +269,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                # pass
-                z = torch.from_dlpack(z)
+                pass
+                # z = torch.from_dlpack(z)
 
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
