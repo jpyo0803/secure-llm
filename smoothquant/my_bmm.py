@@ -251,9 +251,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 y = y.to(torch.float64)
                 z = torch.matmul(x, y)
 
-                if smoothquant.opt.ENABLE_GLOB_MIN_MAX_STAT:
-                    smoothquant.opt.glob_max = max(smoothquant.opt.glob_max, torch.max(z).item())
-                    smoothquant.opt.glob_min = min(smoothquant.opt.glob_min, torch.min(z).item())
+                # if smoothquant.opt.ENABLE_GLOB_MIN_MAX_STAT:
+                #     smoothquant.opt.glob_max = max(smoothquant.opt.glob_max, torch.max(z).item())
+                #     smoothquant.opt.glob_min = min(smoothquant.opt.glob_min, torch.min(z).item())
 
                 z = wrap_tensor(z, P)
                 z = z.to(torch.int32)
@@ -333,9 +333,13 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
 
         # Checksum
         if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
-            z_test = self.lsc.Get_Tensor_Int32(z)
+            if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
+                z_test = self.lsc.Get_Tensor_Int32(z)
+            else:
+                z_test = self.sgx_lsc.Get_Tensor_Int32(z)
             # print(f'{self.module_name}, {state}, Checksum: {torch.sum(z_test)}')
             smoothquant.opt.check_sum += torch.sum(z_test)
+
 
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:

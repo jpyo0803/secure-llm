@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+
 #define COMPILER_ASSERT(X) (void)sizeof(char[(X) ? 1 : -1])
 
 #ifdef __IBMC__
@@ -282,4 +283,24 @@ void GetDummyCPRNG_Ones(unsigned char *buf, size_t buf_len) {
   }
 }
 
+void GetCPRNG_ModP(unsigned char *buf, size_t buf_len) {
+  static aes_stream_state st;
+  if (first == 1) {
+    aes_stream_init(&st, init_seed);
+    first = 0;
+  }
+
+  aes_stream(&st, buf, buf_len);
+  
+  int* buf_int = (int*)buf;
+  int buf_int_len = buf_len / sizeof(int);
+  for (int i = 0; i < buf_int_len; i++) {
+    buf_int[i] = ModP(buf_int[i]);
+    // buf_int[i] = 10000;
+    // printf("%d\n", buf_int[i]);
+    // if (buf_int[i] < -P || buf_int[i] >= P) {
+    //   exit(-1);
+    // }
+  }
+}
 }
