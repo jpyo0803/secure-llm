@@ -35,6 +35,7 @@ int Ex_Copy_Hidden_States(int src_id) {
   return curr_id;
 }
 
+// Not offloaded so it does not need precomputation
 int Ex_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
   int curr_id = layer_norm_param_id;
 
@@ -148,6 +149,7 @@ int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
   return curr_id;
 }
 
+// Need precomputation
 int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
                                float alpha, float beta) {
   int curr_id = linear_param_id;
@@ -167,11 +169,11 @@ int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
   linear_param->blind_factors_set =
       CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
   for (int i = 0; i < linear_param->obfuscation_ratio; ++i) {
-    GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N],
+    GetCPRNG_ModP((unsigned char*)&linear_param->blind_factors_set->data[i * N],
              N * sizeof(int));
   }
   linear_param->precomputed_unblind_factors =
-      MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
+      MatmulS32S8S32_ModP(linear_param->blind_factors_set, linear_param->weight);
   // dimension should be (1, obfuscation_ratio, M)
 
   linear_param_list[curr_id] = linear_param;
@@ -199,11 +201,11 @@ int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
   linear_param->blind_factors_set =
       CreateTensorInt32(1, linear_param->obfuscation_ratio, N);
   for (int i = 0; i < linear_param->obfuscation_ratio; ++i) {
-    GetCPRNG((unsigned char*)&linear_param->blind_factors_set->data[i * N],
+    GetCPRNG_ModP((unsigned char*)&linear_param->blind_factors_set->data[i * N],
              N * sizeof(int));
   }
   linear_param->precomputed_unblind_factors =
-      MatmulS32S8S32(linear_param->blind_factors_set, linear_param->weight);
+      MatmulS32S8S32_ModP(linear_param->blind_factors_set, linear_param->weight);
 
   linear_param_list[curr_id] = linear_param;
   linear_param_id = (linear_param_id + 1) % STATIC_LIST_LEN;
@@ -276,20 +278,15 @@ void Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id,
       int* blind_factor =
           &linear_param->blind_factors_set->data[chosen_value * N];
 
-      for (int k = 0; k <= N - 16; k += 16) {
-        __m512i out_vec =
-            _mm512_loadu_si512((__m512i*)&out[i * M * N + j * N + k]);
-        __m512i blind_vec = _mm512_loadu_si512((__m512i*)&blind_factor[k]);
-        out_vec = _mm512_add_epi32(out_vec, blind_vec);
-        _mm512_storeu_si512((__m512i*)&out[i * M * N + j * N + k], out_vec);
-      }
-      for (int k = (N / 16) * 16; k < N; ++k) {
-        out[i * M * N + j * N + k] += blind_factor[k];
+      for (int k = 0; k < N; ++k) {
+        out[i * M * N + j * N + k] =
+            ModP(out[i * M * N + j * N + k] + blind_factor[k]);
       }
     }
   }
 }
 
+// depreciated
 int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
                                           int linear_param_id) {
   struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
@@ -325,16 +322,9 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
     for (int j = 0; j < M; ++j) {
       int chosen_value = linear_param->chosen_keys->data[i * M + j];
       int* unblind_factor = &unblind_factors->data[chosen_value * N];
-      for (int k = 0; k <= N - 16; k += 16) {
-        __m512i data_vec =
-            _mm512_loadu_si512((__m512i*)&data[i * M * N + j * N + k]);
-        __m512i key_vec =
-            _mm512_loadu_si512((__m512i*)&unblind_factor[i * N + k]);
-        data_vec = _mm512_sub_epi32(data_vec, key_vec);
-        _mm512_storeu_si512((__m512i*)&data[i * M * N + j * N + k], data_vec);
-      }
-      for (int k = (N / 16) * 16; k < N; ++k) {
-        data[i * M * N + j * N + k] -= unblind_factor[i * N + k];
+      for (int k = 0; k < N; ++k) {
+        data[i * M * N + j * N + k] =
+            ModP(data[i * M * N + j * N + k] - unblind_factor[k]);
       }
     }
   }
