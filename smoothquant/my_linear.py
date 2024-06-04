@@ -99,6 +99,11 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             assert False
 
     def __run(self, x):
+        x = self.sgx_lsc.Get_Tensor_Int8(x)
+        y = torch.zeros((x.shape[0], x.shape[1], self.weight.shape[-1]), dtype=torch.float32)
+        y = self.sgx_lsc.Set_Tensor_Float(y)
+        return y
+
         state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
 
         # Cast from 8 to int32 for convenience, dont include time measure
@@ -190,6 +195,9 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         y = y.to(torch.device('cpu'))
         torch.cuda.synchronize()
         timer.end(t)
+        print("x shape: ", x.shape)
+        print("weight shape: ", self.weight.shape)
+        print("result shape: ", y.shape)
 
 
         t = timer.start(tag=f'{self.module_name}, Process Output Tensor After Offload ({state})', category=f'{self.module_name}, Process Output Tensor After Offload ({state})')
@@ -338,6 +346,10 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
                 torch_int_nn_linear)
 
     def __run(self, x):
+        x = self.sgx_lsc.Get_Tensor_Int8(x)
+        y = torch.zeros((x.shape[0], x.shape[1], self.weight.shape[-1]), dtype=torch.float32)
+        y = self.sgx_lsc.Set_Tensor_Float(y)
+        return y
         state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
 
         t = timer.start(tag=f'{self.module_name}, Cast From Int8 To Int32 ({state})', category=f'{self.module_name}, Cast From Int8 To Int32 ({state})')
