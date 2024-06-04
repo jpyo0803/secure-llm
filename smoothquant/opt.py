@@ -124,57 +124,58 @@ class TimeStats:
         self.generation_post = 0.0
 
     def print_summary(self):
-        print("[Overall Statistics]")
-        print("Total Latency: ", self.total)
+        pass
+        # print("[Overall Statistics]")
+        # print("Total Latency: ", self.total)
 
-        print("Total Latency (Prefill): ", self.total_prefill)
-        print("Total Latency (Generation): ", self.total_generation)
+        # print("Total Latency (Prefill): ", self.total_prefill)
+        # print("Total Latency (Generation): ", self.total_generation)
 
-        print("[Prefill Statistics]")
-        print("Samples: ", self.prefill_samples)
-        print(
-            f'Residual Copy 1 (total, avg, percent): {self.prefill_resi_copy1:0.6f}, {self.prefill_resi_copy1 / self.prefill_samples:0.6f}, {self.prefill_resi_copy1 / self.total_prefill:0.6f}')
-        print(
-            f'LayerNorm 1 (total, avg, percent): {self.prefill_ln1:0.6f}, {self.prefill_ln1 / self.prefill_samples:0.6f}, {self.prefill_ln1 / self.total_prefill:0.6f}')
-        print(
-            f'Attention (total, avg, percent): {self.prefill_attn:0.6f}, {self.prefill_attn / self.prefill_samples:0.6f}, {self.prefill_attn / self.total_prefill:0.6f}')
-        print(
-            f'Residual Add 1 (total, avg, percent): {self.prefill_resi_add1:0.6f}, {self.prefill_resi_add1 / self.prefill_samples:0.6f}, {self.prefill_resi_add1 / self.total_prefill:0.6f}')
-        print(
-            f'Residual Copy 2 (total, avg, percent): {self.prefill_resi_copy2:0.6f}, {self.prefill_resi_copy2 / self.prefill_samples:0.6f}, {self.prefill_resi_copy2 / self.total_prefill:0.6f}')
-        print(
-            f'LayerNorm 2 (total, avg, percent): {self.prefill_ln2:0.6f}, {self.prefill_ln2 / self.prefill_samples:0.6f}, {self.prefill_ln2 / self.total_prefill:0.6f}')
-        print(
-            f'FC1 ReLU (total, avg, percent): {self.prefill_fc1_relu:0.6f}, {self.prefill_fc1_relu / self.prefill_samples:0.6f}, {self.prefill_fc1_relu / self.total_prefill:0.6f}')
-        print(
-            f'FC2 (total, avg, percent): {self.prefill_fc2:0.6f}, {self.prefill_fc2 / self.prefill_samples:0.6f}, {self.prefill_fc2 / self.total_prefill:0.6f}')
-        print(
-            f'Residual Add 2 (total, avg, percent): {self.prefill_resi_add2:0.6f}, {self.prefill_resi_add2 / self.prefill_samples:0.6f}, {self.prefill_resi_add2 / self.total_prefill:0.6f}')
-        print(
-            f'Post (total, avg, percent): {self.prefill_post:0.6f}, {self.prefill_post / self.prefill_samples:0.6f}, {self.prefill_post / self.total_prefill:0.6f}')
+        # print("[Prefill Statistics]")
+        # print("Samples: ", self.prefill_samples)
+        # print(
+        #     f'Residual Copy 1 (total, avg, percent): {self.prefill_resi_copy1:0.6f}, {self.prefill_resi_copy1 / self.prefill_samples:0.6f}, {self.prefill_resi_copy1 / self.total_prefill:0.6f}')
+        # print(
+        #     f'LayerNorm 1 (total, avg, percent): {self.prefill_ln1:0.6f}, {self.prefill_ln1 / self.prefill_samples:0.6f}, {self.prefill_ln1 / self.total_prefill:0.6f}')
+        # print(
+        #     f'Attention (total, avg, percent): {self.prefill_attn:0.6f}, {self.prefill_attn / self.prefill_samples:0.6f}, {self.prefill_attn / self.total_prefill:0.6f}')
+        # print(
+        #     f'Residual Add 1 (total, avg, percent): {self.prefill_resi_add1:0.6f}, {self.prefill_resi_add1 / self.prefill_samples:0.6f}, {self.prefill_resi_add1 / self.total_prefill:0.6f}')
+        # print(
+        #     f'Residual Copy 2 (total, avg, percent): {self.prefill_resi_copy2:0.6f}, {self.prefill_resi_copy2 / self.prefill_samples:0.6f}, {self.prefill_resi_copy2 / self.total_prefill:0.6f}')
+        # print(
+        #     f'LayerNorm 2 (total, avg, percent): {self.prefill_ln2:0.6f}, {self.prefill_ln2 / self.prefill_samples:0.6f}, {self.prefill_ln2 / self.total_prefill:0.6f}')
+        # print(
+        #     f'FC1 ReLU (total, avg, percent): {self.prefill_fc1_relu:0.6f}, {self.prefill_fc1_relu / self.prefill_samples:0.6f}, {self.prefill_fc1_relu / self.total_prefill:0.6f}')
+        # print(
+        #     f'FC2 (total, avg, percent): {self.prefill_fc2:0.6f}, {self.prefill_fc2 / self.prefill_samples:0.6f}, {self.prefill_fc2 / self.total_prefill:0.6f}')
+        # print(
+        #     f'Residual Add 2 (total, avg, percent): {self.prefill_resi_add2:0.6f}, {self.prefill_resi_add2 / self.prefill_samples:0.6f}, {self.prefill_resi_add2 / self.total_prefill:0.6f}')
+        # print(
+        #     f'Post (total, avg, percent): {self.prefill_post:0.6f}, {self.prefill_post / self.prefill_samples:0.6f}, {self.prefill_post / self.total_prefill:0.6f}')
 
-        print("[Generation Statistics]")
-        print("Samples: ", self.generation_samples)
-        print(
-            f'Residual Copy 1 (total, avg, percent): {self.generation_resi_copy1:0.6f}, {self.generation_resi_copy1 / self.generation_samples:0.6f}, {self.generation_resi_copy1 / self.total_generation:0.6f}')
-        print(
-            f'LayerNorm 1 (total, avg, percent): {self.generation_ln1:0.6f}, {self.generation_ln1 / self.generation_samples:0.6f}, {self.generation_ln1 / self.total_generation:0.6f}')
-        print(
-            f'Attention (total, avg, percent): {self.generation_attn:0.6f}, {self.generation_attn / self.generation_samples:0.6f}, {self.generation_attn / self.total_generation:0.6f}')
-        print(
-            f'Residual Add 1 (total, avg, percent): {self.generation_resi_add1:0.6f}, {self.generation_resi_add1 / self.generation_samples:0.6f}, {self.generation_resi_add1 / self.total_generation:0.6f}')
-        print(
-            f'Residual Copy 2 (total, avg, percent): {self.generation_resi_copy2:0.6f}, {self.generation_resi_copy2 / self.generation_samples:0.6f}, {self.generation_resi_copy2 / self.total_generation:0.6f}')
-        print(
-            f'LayerNorm 2 (total, avg, percent): {self.generation_ln2:0.6f}, {self.generation_ln2 / self.generation_samples:0.6f}, {self.generation_ln2 / self.total_generation:0.6f}')
-        print(
-            f'FC1 ReLU (total, avg, percent): {self.generation_fc1_relu:0.6f}, {self.generation_fc1_relu / self.generation_samples:0.6f}, {self.generation_fc1_relu / self.total_generation:0.6f}')
-        print(
-            f'FC2 (total, avg, percent): {self.generation_fc2:0.6f}, {self.generation_fc2 / self.generation_samples:0.6f}, {self.generation_fc2 / self.total_generation:0.6f}')
-        print(
-            f'Residual Add 2 (total, avg, percent): {self.generation_resi_add2:0.6f}, {self.generation_resi_add2 / self.generation_samples:0.6f}, {self.generation_resi_add2 / self.total_generation:0.6f}')
-        print(
-            f'Post (total, avg, percent): {self.generation_post:0.6f}, {self.generation_post / self.generation_samples:0.6f}, {self.generation_post / self.total_generation:0.6f}')
+        # print("[Generation Statistics]")
+        # print("Samples: ", self.generation_samples)
+        # print(
+        #     f'Residual Copy 1 (total, avg, percent): {self.generation_resi_copy1:0.6f}, {self.generation_resi_copy1 / self.generation_samples:0.6f}, {self.generation_resi_copy1 / self.total_generation:0.6f}')
+        # print(
+        #     f'LayerNorm 1 (total, avg, percent): {self.generation_ln1:0.6f}, {self.generation_ln1 / self.generation_samples:0.6f}, {self.generation_ln1 / self.total_generation:0.6f}')
+        # print(
+        #     f'Attention (total, avg, percent): {self.generation_attn:0.6f}, {self.generation_attn / self.generation_samples:0.6f}, {self.generation_attn / self.total_generation:0.6f}')
+        # print(
+        #     f'Residual Add 1 (total, avg, percent): {self.generation_resi_add1:0.6f}, {self.generation_resi_add1 / self.generation_samples:0.6f}, {self.generation_resi_add1 / self.total_generation:0.6f}')
+        # print(
+        #     f'Residual Copy 2 (total, avg, percent): {self.generation_resi_copy2:0.6f}, {self.generation_resi_copy2 / self.generation_samples:0.6f}, {self.generation_resi_copy2 / self.total_generation:0.6f}')
+        # print(
+        #     f'LayerNorm 2 (total, avg, percent): {self.generation_ln2:0.6f}, {self.generation_ln2 / self.generation_samples:0.6f}, {self.generation_ln2 / self.total_generation:0.6f}')
+        # print(
+        #     f'FC1 ReLU (total, avg, percent): {self.generation_fc1_relu:0.6f}, {self.generation_fc1_relu / self.generation_samples:0.6f}, {self.generation_fc1_relu / self.total_generation:0.6f}')
+        # print(
+        #     f'FC2 (total, avg, percent): {self.generation_fc2:0.6f}, {self.generation_fc2 / self.generation_samples:0.6f}, {self.generation_fc2 / self.total_generation:0.6f}')
+        # print(
+        #     f'Residual Add 2 (total, avg, percent): {self.generation_resi_add2:0.6f}, {self.generation_resi_add2 / self.generation_samples:0.6f}, {self.generation_resi_add2 / self.total_generation:0.6f}')
+        # print(
+        #     f'Post (total, avg, percent): {self.generation_post:0.6f}, {self.generation_post / self.generation_samples:0.6f}, {self.generation_post / self.total_generation:0.6f}')
 
 
 time_stats = TimeStats()
@@ -658,7 +659,6 @@ class Int8OPTAttention(nn.Module):
             attn_weights = self.sgx_lsc.Get_Tensor_Float(attn_weights)
         else:
             assert False
-
         # t = timer.start(tag=f'Apply Attention Mask ({state})',
         #                 category=f'Apply Attention Mask ({state})')
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):

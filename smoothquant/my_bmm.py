@@ -20,6 +20,10 @@ cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
 P = (2**21 - 3)
 # P = 1000003
 
+QK_Gen_First = True
+PV_Gen_First = True
+Measure_Start = False
+
 def wrap_tensor(x, p):
     x = x + p
     x = torch.remainder(x, 2 * p)
@@ -67,12 +71,55 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             self.cache = None
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.cache = None
+
+        self.im_enabled = False
+        self.cache_len_sim = None
     
 
 
     def __run(self, x, y):
         state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'
-        
+
+        # if first BMM layer, let it do normally
+        # otherwise, just simulate return value 
+
+        global PV_Gen_First
+        global QK_Gen_First
+
+        if self.is_pv_bmm:
+            if PV_Gen_First:
+                PV_Gen_First = False
+                self.im_enabled = True
+        else:
+            if QK_Gen_First:
+                QK_Gen_First = False
+                self.im_enabled = True
+
+        if not self.im_enabled:
+            if smoothquant.opt.is_prefill:
+                if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+                    # keep record of cache length
+                    yy = self.sgx_lsc.Get_Tensor_Int8(y)
+                    self.cache_len_sim = yy.shape[-2] 
+                else:
+                    pass # do nothing
+            else:
+                if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
+                    if not self.is_pv_bmm:
+                        self.cache_len_sim += 1
+                    x = self.sgx_lsc.Get_Tensor_Int8(x)
+                    y = self.sgx_lsc.Get_Tensor_Int8(y)
+                    z = torch.rand((x.shape[0], x.shape[1], self.cache_len_sim), dtype=torch.float32)
+                    z = self.sgx_lsc.Set_Tensor_Float(z)
+                    return z
+                else:
+                    x = self.sgx_lsc.Get_Tensor_Int8(x)
+                    y = self.sgx_lsc.Get_Tensor_Int8(y)
+                    last_dim = y.shape[-2]     
+                    z = torch.rand((x.shape[0], x.shape[1], last_dim), dtype=torch.float32)
+                    z = self.sgx_lsc.Set_Tensor_Float(z)
+                    return z
+
         # Cast from 8 to int32 for convenience, dont include time measure
         t = timer.start(tag=f'{self.module_name}, Cast From Int8 To Int32 ({state})', category=f'{self.module_name}, Cast From Int8 To Int32 ({state})')
         timer.end(t)
@@ -282,7 +329,6 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 pass
             else:
                 z = z.to(torch.device('cpu'))
-
         torch.cuda.synchronize()
         timer.end(t)
         
@@ -332,13 +378,13 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         timer.end(t)
 
         # Checksum
-        if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
-            if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
-                z_test = self.lsc.Get_Tensor_Int32(z)
-            else:
-                z_test = self.sgx_lsc.Get_Tensor_Int32(z)
-            # print(f'{self.module_name}, {state}, Checksum: {torch.sum(z_test)}')
-            smoothquant.opt.check_sum += torch.sum(z_test)
+        # if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
+        #     if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
+        #         z_test = self.lsc.Get_Tensor_Int32(z)
+        #     else:
+        #         z_test = self.sgx_lsc.Get_Tensor_Int32(z)
+        #     # print(f'{self.module_name}, {state}, Checksum: {torch.sum(z_test)}')
+        #     smoothquant.opt.check_sum += torch.sum(z_test)
 
 
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
@@ -371,7 +417,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         return y, dt
     
     def cache_len(self):
-        return self.cache.shape[2] if self.cache is not None else 0
+        return self.cache.shape[2] if self.im_enabled else self.cache_len_sim
 
 
 class BMM_S8X_S8Y_S8Z_Mixed(BMM_S8X_S8Y_FP32Z_Mixed):

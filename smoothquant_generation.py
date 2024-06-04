@@ -9,6 +9,7 @@ import csv
 
 import singleton_timer as st
 import accuracy_measure_tools as amt
+import smoothquant.my_bmm as my_bmm
 
 amt.set_clock_speed()
 
@@ -20,10 +21,10 @@ timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode6
 model_size = '125m'
-target_input_token_len = 128
-target_output_token_len = 256
+target_input_token_len = 256
+target_output_token_len = 512
 num_batches = 1
 
 
@@ -102,7 +103,8 @@ assert model_inputs['input_ids'].shape[1] == target_input_token_len
 
 
 smoothquant.opt.is_prefill = True
-smoothquant.opt.time_stats.on()
+# smoothquant.opt.time_stats.on()
+my_bmm.Measure_Start = True
 timer.enable()
 
 start_time = time.perf_counter_ns()
