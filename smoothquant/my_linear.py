@@ -199,19 +199,14 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             pass
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             y = self.lsc.Set_Tensor_Int32(y)
-            test_y = self.lsc.Get_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
-            test_y = self.lsc.Get_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
-            test_y = self.sgx_lsc.Get_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             y = self.lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
-            test_y = self.lsc.Get_Tensor_Int32(y)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             y = self.sgx_lsc.Set_Decrypted_Tensor_Opr1_Int32(y, self.linear_layer_id)
-            test_y = self.sgx_lsc.Get_Tensor_Int32(y)
         else:
             assert False
         timer.end(t)
