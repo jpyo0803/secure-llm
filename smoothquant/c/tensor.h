@@ -1,8 +1,18 @@
 #ifndef SECURE_LLM_SMOOTHQUANT_C_TENSOR_H
 #define SECURE_LLM_SMOOTHQUANT_C_TENSOR_H
 
+#include <stdint.h>
+
 struct TensorFloat {
   float* data;
+  int B;
+  int M;
+  int N;
+  unsigned int num_bytes;
+};
+
+struct TensorInt64 {
+  int64_t* data;
   int B;
   int M;
   int N;
@@ -62,7 +72,10 @@ struct TensorInt32* MatmulS32S32S32(struct TensorInt32* X,
 struct TensorInt32* MatmulS32S8S32(struct TensorInt32* X, struct TensorInt8* Y);
 struct TensorInt32* MatmulS8S8S32(struct TensorInt8* X, struct TensorInt8* Y);
 
-
 struct TensorInt32* MatmulS32S32S32_ModP(struct TensorInt32* X,
                                     struct TensorInt32* Y);
+
+struct TensorInt64* CreateTensorInt64(int B, int M, int N);
+void DeleteTensorInt64(struct TensorInt64* tensor);
+
 #endif

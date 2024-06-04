@@ -2,7 +2,6 @@
 
 #include <immintrin.h>
 #include <stdlib.h>
-#include <stdint.h>
 
 #include "mod.h"
 
@@ -267,6 +266,22 @@ struct TensorInt32* MatmulS8S8S32(struct TensorInt8* X, struct TensorInt8* Y) {
   return Z;
 }
 
+struct TensorInt64* CreateTensorInt64(int B, int M, int N) {
+  struct TensorInt64* tensor =
+      (struct TensorInt64*)malloc(sizeof(struct TensorInt64));
+  tensor->num_bytes = B * M * N * sizeof(int64_t);
+  tensor->data = (int64_t*)aligned_alloc(64, B * M * N * sizeof(int64_t));
+  tensor->B = B;
+  tensor->M = M;
+  tensor->N = N;
+  return tensor;
+}
+
+void DeleteTensorInt64(struct TensorInt64* tensor) {
+  free(tensor->data);
+  free(tensor);
+}
+
 struct TensorInt32* MatmulS32S32S32_ModP(struct TensorInt32* X,
                                     struct TensorInt32* Y) {
   int B = X->B;
@@ -275,20 +290,51 @@ struct TensorInt32* MatmulS32S32S32_ModP(struct TensorInt32* X,
   int N = Y->M;  // Y's second dimension should be N since Y has dimensions (B,
                  // N, K)
 
-  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
+  struct TensorInt64* tmp = CreateTensorInt64(B, M, N);
 
-  for (int b = 0; b < B; b++) {
-    for (int m = 0; m < M; m++) {
-      for (int n = 0; n < N; n++) {
-        int64_t sum = 0;
-        for (int k = 0; k < K; ++k) {
-          sum += (int64_t)X->data[b * M * K + m * K + k] * (int64_t)Y->data[b * N * K + n * K + k];
-          sum = ModP(sum);
+     for (int b = 0; b < B; b++) {
+        for (int m = 0; m < M; m++) {
+            for (int n = 0; n < N; n++) {
+                int64_t sum = 0;
+                int k;
+                __m512i sum_vec = _mm512_setzero_si512();
+
+                for (k = 0; k <= K - 16; k += 16) {
+                    // Load 16 elements from X and Y
+                    __m512i x_vals = _mm512_loadu_si512((__m512i*)&X->data[b * M * K + m * K + k]);
+                    __m512i y_vals = _mm512_loadu_si512((__m512i*)&Y->data[b * N * K + n * K + k]);
+
+                    // Convert to 64-bit integers in pairs
+                    __m512i x_vals_lo1 = _mm512_cvtepi32_epi64(_mm512_castsi512_si256(x_vals));
+                    __m512i x_vals_hi1 = _mm512_cvtepi32_epi64(_mm512_extracti64x4_epi64(x_vals, 1));
+                    __m512i y_vals_lo1 = _mm512_cvtepi32_epi64(_mm512_castsi512_si256(y_vals));
+                    __m512i y_vals_hi1 = _mm512_cvtepi32_epi64(_mm512_extracti64x4_epi64(y_vals, 1));
+
+                    // Multiply and accumulate
+                    sum_vec = _mm512_add_epi64(sum_vec, _mm512_mullo_epi64(x_vals_lo1, y_vals_lo1));
+                    sum_vec = _mm512_add_epi64(sum_vec, _mm512_mullo_epi64(x_vals_hi1, y_vals_hi1));
+                }
+
+                // Horizontal sum of all elements in sum_vec
+                sum += _mm512_reduce_add_epi64(sum_vec);
+
+                // Handle remaining elements
+                for (; k < K; ++k) {
+                    sum += (int64_t)X->data[b * M * K + m * K + k] * (int64_t)Y->data[b * N * K + n * K + k];
+                }
+
+                tmp->data[b * M * N + m * N + n] = sum;
+            }
         }
-        Z->data[b * M * N + m * N + n] = sum;
-      }
     }
+
+
+  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
+  for (int i = 0; i < B * M * N; ++i) {
+    Z->data[i] = ModP(tmp->data[i]);
   }
+
+  DeleteTensorInt64(tmp);
 
   return Z;
 }
