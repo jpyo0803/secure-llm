@@ -12,15 +12,6 @@ import singleton_timer as st
 
 timer = st.SingletonTimer()
 
-P = (2**21 - 3)
-# P = 1000003
-
-def wrap_tensor(x, p):
-    x = x + p
-    x = torch.remainder(x, 2 * p)
-    x = x - p
-    x = torch.where(x < -p, x + 2 * p, x)
-    return x
 
 class Linear_S8W_S8A_S8B_FP32O_Mixed:
     # Only perform matmul in GPU with cupy
@@ -61,38 +52,36 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             assert self.alpha.device == torch.device('cpu')
             assert self.beta.device == torch.device('cpu')
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            # self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
-                # torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))  # Send to GPU
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
             # weight 2D
             # bias 1D
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))  # Send to GPU
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
             # weight 2D
             # bias 1D
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))  # Send to GPU
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
             # weight 2D
             # bias 1D
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))  # Send to GPU
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
             # weight 2D
             # bias 1D
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
         else:
@@ -169,21 +158,15 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         torch.cuda.synchronize()
         timer.end(t)
 
-        # x = cupy.from_dlpack(x) # torch to cupy
+        x = cupy.from_dlpack(x) # torch to cupy
 
-        # cupy.cuda.Stream.null.synchronize() 
-        torch.cuda.synchronize()
+        cupy.cuda.Stream.null.synchronize() 
         t = timer.start(tag=f'{self.module_name}, Main Computation ({state})', category=f'{self.module_name}, Main Computation ({state})')
-        # y = cupy.matmul(x, self.weight)
-        # cupy.cuda.Stream.null.synchronize() 
-        x = x.to(torch.float64)
-        y = torch.matmul(x, self.weight)
-        y = wrap_tensor(y, P)
-        y = y.to(torch.int32)
-        torch.cuda.synchronize()
+        y = cupy.matmul(x, self.weight)
+        cupy.cuda.Stream.null.synchronize() 
         timer.end(t)
 
-        # y = torch.from_dlpack(y) # cupy to torch
+        y = torch.from_dlpack(y) # cupy to torch
 
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
@@ -312,28 +295,28 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
             assert self.alpha.dtype == torch.float32
             assert self.alpha.device == torch.device('cpu')
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-            self.weight = torch_int_nn_linear.weight.to(
-                torch.float64).transpose(-2, -1).contiguous().to(torch.device('cuda:0'))
+            self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
+                torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
 
@@ -409,22 +392,15 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         torch.cuda.synchronize()
         timer.end(t)
 
-        # x = cupy.from_dlpack(x)
+        x = cupy.from_dlpack(x)
 
-        # cupy.cuda.Stream.null.synchronize()
-        torch.cuda.synchronize()
+        cupy.cuda.Stream.null.synchronize()
         t = timer.start(tag=f'{self.module_name}, Main Computation ({state})', category=f'{self.module_name}, Main Computation ({state})')
-        # y = cupy.matmul(x, self.weight)
-        # cupy.cuda.Stream.null.synchronize()
-
-        x = x.to(torch.float64)
-        y = torch.matmul(x, self.weight)
-        y = wrap_tensor(y, P)
-        y = y.to(torch.int32)
-        torch.cuda.synchronize()
+        y = cupy.matmul(x, self.weight)
+        cupy.cuda.Stream.null.synchronize()
         timer.end(t)
 
-        # y = torch.from_dlpack(y)
+        y = torch.from_dlpack(y)
 
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')

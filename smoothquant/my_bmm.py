@@ -17,16 +17,6 @@ CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
 cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
 cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
 
-P = (2**21 - 3)
-# P = 1000003
-
-def wrap_tensor(x, p):
-    x = x + p
-    x = torch.remainder(x, 2 * p)
-    x = x - p
-    x = torch.where(x < -p, x + 2 * p, x)
-    return x
-
 class BMM_S8X_S8Y_FP32Z_Mixed:
     def __init__(self, torch_int_nn_bmm, privacy_on, module_name=None):
         self.privacy_on = privacy_on
@@ -237,12 +227,10 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                pass
-                # x = cupy.from_dlpack(x)
-                # y = cupy.from_dlpack(y)
+                x = cupy.from_dlpack(x)
+                y = cupy.from_dlpack(y)
 
-        torch.cuda.synchronize()
-        # cupy.cuda.Stream.null.synchronize()
+        cupy.cuda.Stream.null.synchronize()
         t = timer.start(tag=f'{self.module_name}, Main Computation ({state})', category=f'{self.module_name}, Main Computation ({state})')
         
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
@@ -256,20 +244,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 else:
                     assert False
             else:
-                # z = cupy.matmul(x, y)
-                x = x.to(torch.float64)
-                y = y.to(torch.float64)
-                z = torch.matmul(x, y)
+                z = cupy.matmul(x, y)
 
-                # if smoothquant.opt.ENABLE_GLOB_MIN_MAX_STAT:
-                #     smoothquant.opt.glob_max = max(smoothquant.opt.glob_max, torch.max(z).item())
-                #     smoothquant.opt.glob_min = min(smoothquant.opt.glob_min, torch.min(z).item())
-
-                z = wrap_tensor(z, P)
-                z = z.to(torch.int32)
-
-        torch.cuda.synchronize()
-        # cupy.cuda.Stream.null.synchronize()
+        cupy.cuda.Stream.null.synchronize()
         timer.end(t)
 
 
@@ -279,8 +256,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             if self.is_pv_bmm and smoothquant.opt.is_prefill:
                 pass
             else:
-                pass
-                # z = torch.from_dlpack(z)
+                z = torch.from_dlpack(z)
 
         if smoothquant.opt.ENABLE_PROGRESS_PRINT:
             print(f'After Main Computation')

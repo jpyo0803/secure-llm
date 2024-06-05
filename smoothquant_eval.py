@@ -13,7 +13,7 @@ import accuracy_measure_tools as amt
 
 import sgx.sgx_layer_struct as sgx_lsc
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode7
 
 amt.set_clock_speed()
 
