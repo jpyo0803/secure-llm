@@ -739,7 +739,7 @@ int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
 void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                    int* out1, int* out2,
                                                    int layer_id) {
-  auto start = std::chrono::steady_clock::now();
+  // auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
@@ -804,14 +804,14 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     }
   }
 
-  auto end = std::chrono::steady_clock::now();
-  auto diff = end - start;
-  printf("Enc time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
+  // auto end = std::chrono::steady_clock::now();
+  // auto diff = end - start;
+  // printf("Enc time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
 }
 
 int Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                      int layer_id) {
-  auto start = std::chrono::steady_clock::now();
+  // auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
 
@@ -888,9 +888,9 @@ int Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   tensor_int32_list[curr_id] = decryption_key;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
 
-  auto end = std::chrono::steady_clock::now();
-  auto diff = end - start;
-  printf("Gen Dec time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
+  // auto end = std::chrono::steady_clock::now();
+  // auto diff = end - start;
+  // printf("Gen Dec time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
   return curr_id;
 }
 
@@ -1369,7 +1369,7 @@ int Ex_Residual_Add(int residual, int hidden_states) {
 }
 
 int Ex_CPU_Bmm(int src_id1, int src_id2) {
-  auto start = std::chrono::steady_clock::now();
+  // auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
@@ -1388,9 +1388,9 @@ int Ex_CPU_Bmm(int src_id1, int src_id2) {
   tensor_int32_list[curr_id] = Z;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
 
-  auto end = std::chrono::steady_clock::now();
-  auto diff = end - start;
-  printf("CPU BMM time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
+  // auto end = std::chrono::steady_clock::now();
+  // auto diff = end - start;
+  // printf("CPU BMM time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
   return curr_id;
 }
 
