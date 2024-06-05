@@ -32,7 +32,7 @@ import singleton_timer as st
 timer = st.SingletonTimer()
 
 ENABLE_GLOB_MIN_MAX_STAT = False
-ENABLE_MATMUL_OUTPUT_SUM = True
+ENABLE_MATMUL_OUTPUT_SUM = False
 ENABLE_PROGRESS_PRINT = False
 
 check_sum = 0
@@ -125,6 +125,7 @@ class TimeStats:
         self.generation_post = 0.0
 
     def print_summary(self):
+        return
         print("[Overall Statistics]")
         print("Total Latency: ", self.total)
 
