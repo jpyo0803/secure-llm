@@ -48,7 +48,6 @@ print("Input token length: ", target_input_token_len)
 print("Output token length: ", target_output_token_len)
 print("Number of batches: ", num_batches)
 
-
 '''
     NOTE(jpyo0803): Set execution mode
 
