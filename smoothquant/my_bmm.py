@@ -94,6 +94,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             y_id = self.sgx_lsc.Cast_From_Int8_To_Int32(y)
         else:
             assert False
+
+        if smoothquant.opt.ENABLE_PROGRESS_PRINT:
+            print(f'After Cast From Int8 to Int32')
         
         t = timer.start(tag=f'{self.module_name}, Process Input Tensors Before Offload ({state})', category=f'{self.module_name}, Process Input Tensors Before Offload ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
@@ -135,6 +138,10 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             assert False
         timer.end(t)
 
+        
+        if smoothquant.opt.ENABLE_PROGRESS_PRINT:
+            print(f'After Process Input Tensors')
+
         t = timer.start(tag=f'{self.module_name}, Generate Decryption Key ({state})', category=f'{self.module_name}, Generate Decryption Key ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             pass
@@ -169,8 +176,11 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             pass
         else:
             assert False
-
         timer.end(t)
+
+        if smoothquant.opt.ENABLE_PROGRESS_PRINT:
+            print(f'After Gen. Dec Key')
+
         # Main computation
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Host to Device ({state})', category=f'{self.module_name}, Host to Device ({state})')
@@ -272,6 +282,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 pass
                 # z = torch.from_dlpack(z)
 
+        if smoothquant.opt.ENABLE_PROGRESS_PRINT:
+            print(f'After Main Computation')
+
         torch.cuda.synchronize()
         t = timer.start(tag=f'{self.module_name}, Device to Host ({state})', category=f'{self.module_name}, Device to Host ({state})')
         
@@ -331,6 +344,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             assert False
         timer.end(t)
 
+        if smoothquant.opt.ENABLE_PROGRESS_PRINT:
+            print(f'After Process Output Tensors')
+
         # Checksum
         if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
             if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
@@ -340,6 +356,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
             # print(f'{self.module_name}, {state}, Checksum: {torch.sum(z_test)}')
             smoothquant.opt.check_sum += torch.sum(z_test)
 
+
+        if smoothquant.opt.ENABLE_PROGRESS_PRINT:
+            print(f'After Checksum')
 
         t = timer.start(tag=f'{self.module_name}, Compute Epilogue ({state})', category=f'{self.module_name}, Compute Epilogue ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
@@ -360,6 +379,10 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         else:
             assert False
         timer.end(t)
+
+        if smoothquant.opt.ENABLE_PROGRESS_PRINT:
+            print(f'After Compute Epilogue')
+
         
         return z
 

@@ -33,6 +33,7 @@ timer = st.SingletonTimer()
 
 ENABLE_GLOB_MIN_MAX_STAT = False
 ENABLE_MATMUL_OUTPUT_SUM = True
+ENABLE_PROGRESS_PRINT = False
 
 check_sum = 0
 
@@ -294,6 +295,9 @@ class Int8OPTAttention(nn.Module):
             assert False
         timer.end(t)
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Get Hidden States Size ({state})')
+
         '''
             NOTE(jpyo0803): Pass hidden_states to Q projection.
             Matmul should be done on Untrusted GPU side
@@ -322,6 +326,11 @@ class Int8OPTAttention(nn.Module):
         '''
             NOTE(jpyo0803): Get Key, Value projection.
         '''
+
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Q Projection ({state})')
+
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
             assert False
@@ -557,11 +566,17 @@ class Int8OPTAttention(nn.Module):
             else:
                 assert False
         
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After KV Cache ({state})')
+
         t = timer.start(tag=f'Get Past KV ({state})',
                         category=f'Get Past KV ({state})')
         past_key_value = (key_states, value_states)
         # seems like past_key_value exists for each layer
         timer.end(t)
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Get Past KV ({state})')
 
         t = timer.start(tag=f'Reshape Q, K, V ({state})',
                         category=f'Reshape Q, K, V ({state})')
@@ -623,6 +638,9 @@ class Int8OPTAttention(nn.Module):
             assert False
         timer.end(t)
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Reshape Q, K, V ({state})')
+
         '''
             NOTE(jpyo0803): Pass query_states and key_states to qk_bmm.
             Matmul should be done on Untrusted GPU side
@@ -659,6 +677,9 @@ class Int8OPTAttention(nn.Module):
         else:
             assert False
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After QK^T BMM ({state})')
+
         t = timer.start(tag=f'Apply Attention Mask ({state})',
                         category=f'Apply Attention Mask ({state})')
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
@@ -692,6 +713,9 @@ class Int8OPTAttention(nn.Module):
                 bsz * self.num_heads, tgt_len, src_len)
         timer.end(t)
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Apply Attention Mask ({state})')
+
         '''
             NOTE(jpyo0803): Softmax on attn_weights.
             Should be done in CPU side SGX, O(N^2)
@@ -723,10 +747,12 @@ class Int8OPTAttention(nn.Module):
             attn_weights = self.sgx_lsc.Set_Tensor_Float(attn_weights)
             attn_probs = self.sgx_lsc.Softmax(attn_weights)
             attn_probs = self.sgx_lsc.Get_Tensor_Float(attn_probs)
-
         else:
             assert False
         timer.end(t)
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Softmax ({state})')
 
         t = timer.start(tag=f'Apply Layer Head Mask ({state})',
                         category=f'Apply Layer Head Mask ({state})')
@@ -763,6 +789,9 @@ class Int8OPTAttention(nn.Module):
             attn_probs_reshaped = None
         timer.end(t)
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Reshape Attention Probabilities ({state})')
+
         t = timer.start(tag=f'Post Softmax Quantization ({state})',
                         category=f'Post Softmax Quantization ({state})')
         # (A_row V_row)_row = (A_row V_col ^T)_row
@@ -791,6 +820,9 @@ class Int8OPTAttention(nn.Module):
             assert False
         timer.end(t)
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Post Softmax Quantization ({state})')
+
         t = timer.start(tag=f'Transpose V ({state})',
                         category=f'Transpose V ({state})')
         if my_exec_mode == ExecMode.Mode7:
@@ -800,6 +832,9 @@ class Int8OPTAttention(nn.Module):
         else:
             value_states = value_states.transpose(1, 2).contiguous()
         timer.end(t)
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Transpose V ({state})')
 
         '''
             NOTE(jpyo0803): Pass attn_probs and value_states to pv_bmm.
@@ -842,6 +877,9 @@ class Int8OPTAttention(nn.Module):
         else:
             assert False
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After PV BMM ({state})')
+
         # output size should be [12, 1024, 64]
         
         t = timer.start(tag=f'Reshape Attention Output ({state})',
@@ -860,6 +898,9 @@ class Int8OPTAttention(nn.Module):
         attn_output = attn_output.reshape(
             bsz, tgt_len, self.embed_dim).contiguous()
         timer.end(t)
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Reshape Attention Output ({state})')
 
         '''
             NOTE(jpyo0803): Pass attn_output to out_proj.
@@ -891,6 +932,9 @@ class Int8OPTAttention(nn.Module):
             attn_output, my_out_proj_dt = self.my_out_proj(attn_output)
         else:
             assert False
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Out Projection ({state})')
 
         return attn_output, attn_probs_reshaped, past_key_value
 
@@ -1031,6 +1075,9 @@ class Int8OPTDecoderLayer(nn.Module):
             assert False
         timer.end(t)
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Set Hidden States ({state})')
+
         start_time = time.perf_counter_ns()
         t = timer.start(tag=f'Copy Residual 1 ({state})',
                         category=f'Copy Residual 1 ({state})')
@@ -1051,6 +1098,11 @@ class Int8OPTDecoderLayer(nn.Module):
         else:
             assert False
         timer.end(t)
+
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Copy Residual 1 ({state})')
+
         end_time = time.perf_counter_ns()
         outer_resi_copy_dt = (end_time - start_time) / 1e9
 
@@ -1084,6 +1136,11 @@ class Int8OPTDecoderLayer(nn.Module):
         else:
             assert False
         timer.end(t)
+
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Layer Norm 1 ({state})')
+
         end_time = time.perf_counter_ns()
         outer_ln1_dt = (end_time - start_time) / 1e9
         '''
@@ -1131,6 +1188,9 @@ class Int8OPTDecoderLayer(nn.Module):
             assert False
         timer.end(t)
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Add Residual 1 ({state})')
+
         end_time = time.perf_counter_ns()
         outer_resi_add1_dt = (end_time - start_time) / 1e9
 
@@ -1155,6 +1215,10 @@ class Int8OPTDecoderLayer(nn.Module):
         else:
             assert False
         timer.end(t)
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Copy Residual 2 ({state})')
+
         end_time = time.perf_counter_ns()
         outer_resi_copy2_dt = (end_time - start_time) / 1e9
 
@@ -1188,6 +1252,10 @@ class Int8OPTDecoderLayer(nn.Module):
         else:
             assert False
         timer.end(t)
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Layer Norm 2 ({state})')
+
         end_time = time.perf_counter_ns()
         outer_ln2_dt = (end_time - start_time) / 1e9
 
@@ -1272,6 +1340,9 @@ class Int8OPTDecoderLayer(nn.Module):
         else:
             assert False
 
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After FC1 & ReLU ({state})')
+
         end_time = time.perf_counter_ns()
         outer_fc1_relu_dt = (end_time - start_time) / 1e9
         '''
@@ -1308,6 +1379,11 @@ class Int8OPTDecoderLayer(nn.Module):
             Should be done in CPU side SGX, O(N^2)
         '''
 
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After FC2 ({state})')
+
+
         start_time = time.perf_counter_ns()
 
         t = timer.start(tag=f'Add Residual 2 ({state})',
@@ -1337,6 +1413,9 @@ class Int8OPTDecoderLayer(nn.Module):
         timer.end(t)
         end_time = time.perf_counter_ns()
         outer_resi_add2_dt = (end_time - start_time) / 1e9
+
+        if ENABLE_PROGRESS_PRINT:
+            print(f'After Add Residual 2 ({state})')
 
         start_time = time.perf_counter_ns()
 
