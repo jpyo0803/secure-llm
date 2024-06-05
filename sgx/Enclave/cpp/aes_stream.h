@@ -3,7 +3,6 @@
 #ifndef aes_stream_H
 #define aes_stream_H
 
-#include "mod.h"
 #include <stdlib.h>
 
 #ifndef CRYPTO_ALIGN
@@ -36,7 +35,6 @@ void GetDummyCPRNG(unsigned char *buf, size_t buf_len);
 
 void GetDummyCPRNG_Ones(unsigned char *buf, size_t buf_len);
 
-void GetCPRNG_ModP(unsigned char *buf, size_t buf_len);
 }
 
 #endif

@@ -87,7 +87,7 @@ else
 endif
 Crypto_Library_Name := sgx_tcrypto
 
-My_Cpp_Files := Enclave/cpp/aes_stream.cpp Enclave/cpp/tensor.cpp Enclave/cpp/mod.cpp
+My_Cpp_Files := Enclave/cpp/aes_stream.cpp Enclave/cpp/tensor.cpp
 
 Enclave_Cpp_Files := Enclave/Enclave.cpp Enclave/sgx_layer_struct.cpp $(My_Cpp_Files)
 # SGXDNN_Cpp_Files := sgxdnn_main.cpp json11.cpp Crypto.cpp sgxaes.cpp aes-stream.cpp

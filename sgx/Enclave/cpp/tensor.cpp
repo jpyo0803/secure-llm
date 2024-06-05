@@ -1,8 +1,9 @@
 #include "tensor.h"
 
-#include <immintrin.h>
 #include <sgx_trts.h>
+#include <immintrin.h>
 #include <stdlib.h>
+
 
 extern "C" {
 
@@ -176,56 +177,6 @@ void DeleteTensorInt64(struct TensorInt64* tensor) {
   free(tensor);
 }
 
-
-struct TensorInt32* MatmulS32S32S32_ModP_Naive(struct TensorInt32* X,
-                                               struct TensorInt32* Y) {
-  int B = X->B;
-  int M = X->M;
-  int K = X->N;
-  int N = Y->M;  // Y's second dimension should be N since Y has dimensions (B,
-
-  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
-
-  for (int b = 0; b < B; b++) {
-    for (int m = 0; m < M; m++) {
-      for (int n = 0; n < N; n++) {
-        int64_t sum = 0;
-        for (int k = 0; k < K; ++k) {
-          sum += (int64_t)X->data[b * M * K + m * K + k] *
-                 (int64_t)Y->data[b * N * K + n * K + k];
-        }
-        Z->data[b * M * N + m * N + n] = ModP(sum);
-      }
-    }
-  }
-  return Z;
-}
-
-struct TensorInt32* MatmulS32S8S32_ModP_Naive(struct TensorInt32* X,
-                                              struct TensorInt8* Y) {
-  int B = X->B;
-  int M = X->M;
-  int K = X->N;
-  int N = Y->M;  // Y's second dimension should be N since Y has dimensions (B,
-
-  struct TensorInt32* Z = CreateTensorInt32(B, M, N);
-
-  for (int b = 0; b < B; b++) {
-    for (int m = 0; m < M; m++) {
-      for (int n = 0; n < N; n++) {
-        int64_t sum = 0;
-        for (int k = 0; k < K; ++k) {
-          sum += (int64_t)X->data[b * M * K + m * K + k] *
-                 (int64_t)Y->data[b * N * K + n * K + k];
-        }
-        Z->data[b * M * N + m * N + n] = ModP(sum);
-      }
-    }
-  }
-
-  return Z;
-}
-
 struct TensorInt32* MatmulS32S8S32_Naive(struct TensorInt32* X,
                                          struct TensorInt8* Y) {
   int B = X->B;
@@ -250,5 +201,5 @@ struct TensorInt32* MatmulS32S8S32_Naive(struct TensorInt32* X,
   return Z;
 }
 
-
 }
+

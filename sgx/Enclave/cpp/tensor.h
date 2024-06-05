@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#include "mod.h"
 struct TensorFloat {
   float* data;
   int B;
@@ -44,9 +43,7 @@ struct TensorInt8 {
   unsigned int num_bytes;
 };
 
-
 extern "C" {
-
 
 struct TensorInt32* CreateTensorInt32(int B, int M, int N);
 struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N);
@@ -65,15 +62,11 @@ void DeleteTensorInt8(struct TensorInt8* tensor);
 struct TensorInt64* CreateTensorInt64(int B, int M, int N);
 void DeleteTensorInt64(struct TensorInt64* tensor);
 
-
-struct TensorInt32* MatmulS32S32S32_ModP_Naive(struct TensorInt32* X,
-                                    struct TensorInt32* Y);
-struct TensorInt32* MatmulS32S8S32_ModP_Naive(struct TensorInt32* X,
-                                    struct TensorInt8* Y);
 struct TensorInt32* MatmulS32S32S32_Naive(struct TensorInt32* X,
                                           struct TensorInt32* Y);
 
 struct TensorInt32* MatmulS32S8S32_Naive(struct TensorInt32* X,
                                          struct TensorInt8* Y);
+
 }
 #endif
