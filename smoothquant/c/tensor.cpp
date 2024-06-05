@@ -4,6 +4,8 @@
 #include <stdlib.h>
 
 
+extern "C" {
+
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   struct TensorInt32* tensor =
       (struct TensorInt32*)malloc(sizeof(struct TensorInt32));
@@ -246,4 +248,4 @@ struct TensorInt32* MatmulS32S8S32_Naive(struct TensorInt32* X,
   return Z;
 }
 
-
+}

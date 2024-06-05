@@ -7,6 +7,7 @@
 #include "static_glob_data.h"
 #include "tensor.h"
 
+extern "C" {
 int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N);
 
 int Ex_Copy_Hidden_States(int src_id);
@@ -82,5 +83,6 @@ int Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
 int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N, int decryption_key_id);
 
 int Ex_CPU_Bmm(int src_id1, int src_id2);
+}
 
 #endif

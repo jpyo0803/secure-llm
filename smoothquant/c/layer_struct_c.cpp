@@ -7,9 +7,15 @@
 #include <stdlib.h>
 #include "mod.h"
 #include "aes_stream.h"
+#include <iostream>
+
+#include <chrono>
 
 // Handle blind / unblind factors inside
 // Handle blind / unblind factors inside
+
+
+extern "C" {
 int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
@@ -733,8 +739,12 @@ int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
 void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                    int* out1, int* out2,
                                                    int layer_id) {
+  auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+
+  // printf("X Enc state: %d %d %d\n", X->B, X->M, X->N);
+  // printf("Y Enc State: %d %d %d\n", Y->B, Y->N, Y->M);
 
   // Generate blind factors if first time
   if (pv_blind_factor_u_list[layer_id] == NULL) {
@@ -767,6 +777,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     pv_blind_factor_u_list[layer_id] = new_blind_factor_u;
   }
 
+
   // Encrypt X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
@@ -779,7 +790,9 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     }
   }
 
+
   // Encrypt Y
+
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
@@ -790,10 +803,15 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
       }
     }
   }
+
+  auto end = std::chrono::steady_clock::now();
+  auto diff = end - start;
+  printf("Enc time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
 }
 
 int Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                      int layer_id) {
+  auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
 
@@ -869,6 +887,10 @@ int Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   }
   tensor_int32_list[curr_id] = decryption_key;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+
+  auto end = std::chrono::steady_clock::now();
+  auto diff = end - start;
+  printf("Gen Dec time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
   return curr_id;
 }
 
@@ -1347,10 +1369,16 @@ int Ex_Residual_Add(int residual, int hidden_states) {
 }
 
 int Ex_CPU_Bmm(int src_id1, int src_id2) {
+  auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
+  // printf("X CPU BMM: %d %d %d\n", X->B, X->M, X->N);
+  // printf("Y CPU BMM: %d %d %d\n", Y->B, Y->N, Y->M);
+
+  // measure time with steady clock from chrono library
   struct TensorInt32* Z = MatmulS32S32S32_Naive(X, Y);  // B x M x N
+  // printf("CPU BMM Time: %f\n", elapsed_seconds.count());
 
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
@@ -1359,5 +1387,11 @@ int Ex_CPU_Bmm(int src_id1, int src_id2) {
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = Z;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+
+  auto end = std::chrono::steady_clock::now();
+  auto diff = end - start;
+  printf("CPU BMM time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
   return curr_id;
+}
+
 }

@@ -230,6 +230,7 @@ static void _aes_stream(_aes_stream_state *_st, unsigned char *buf,
 #endif
 }
 
+extern "C" {
 void aes_stream_init(aes_stream_state *st,
                      const unsigned char seed[AES_STREAM_SEEDBYTES]) {
   _aes_stream_state *_st = (_aes_stream_state *)(void *)st;
@@ -303,4 +304,6 @@ void GetCPRNG_ModP(unsigned char *buf, size_t buf_len) {
     //   exit(-1);
     // }
   }
+}
+
 }

@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 include_directories(./cpp)
 
-file(GLOB SOURCES "c/*.c")
+file(GLOB SOURCES "c/*.cpp")
 add_library(cipher_cpp SHARED ${SOURCES})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")

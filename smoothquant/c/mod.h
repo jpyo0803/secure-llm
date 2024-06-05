@@ -6,7 +6,8 @@
 #include <stdint.h>
 
 
+extern "C" {
 int32_t ModP(int64_t x);
-
+}
 
 #endif

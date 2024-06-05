@@ -1,5 +1,8 @@
 #include "mod.h"
 
+
+extern "C" {
+
 int32_t ModP(int64_t x) {
     int64_t mod = ((x + P) % (2 * P)) - P;
     if (mod < -P) {
@@ -8,3 +11,4 @@ int32_t ModP(int64_t x) {
     return (int32_t)mod;
 }
 
+}

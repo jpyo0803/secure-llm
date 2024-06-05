@@ -23,6 +23,8 @@ typedef struct CRYPTO_ALIGN(16) aes_stream_state {
 
 #define AES_STREAM_SEEDBYTES 32
 
+extern "C" {
+
 void aes_stream_init(aes_stream_state *st,
                      const unsigned char seed[AES_STREAM_SEEDBYTES]);
 
@@ -35,4 +37,7 @@ void GetDummyCPRNG(unsigned char *buf, size_t buf_len);
 void GetDummyCPRNG_Ones(unsigned char *buf, size_t buf_len);
 
 void GetCPRNG_ModP(unsigned char *buf, size_t buf_len);
+
+}
+
 #endif
