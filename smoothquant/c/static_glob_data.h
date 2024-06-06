@@ -5,6 +5,8 @@
 
 #include "tensor.h"
 
+struct TensorInt32* decryption_key_buffer = NULL;
+
 struct LayerNormParam {
   struct TensorFloat* gamma;
   struct TensorFloat* beta;

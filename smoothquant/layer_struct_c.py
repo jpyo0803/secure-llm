@@ -143,14 +143,13 @@ class LayerStructC:
     
     @classmethod
     def Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
-        return cls.lib.Ex_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id)
+        cls.lib.Ex_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id)
 
     @classmethod
-    def Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls, src, decryption_key_id):
+    def Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls, src):
         return cls.lib.Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cast(src.data_ptr(), POINTER(c_int32)),
                                                           src.size(0), src.size(
-                                                              1), src.size(2),
-                                                          decryption_key_id)
+                                                              1), src.size(2))
     
     @classmethod
     def Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
@@ -165,14 +164,13 @@ class LayerStructC:
     
     @classmethod
     def Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
-        return cls.lib.Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id)
+        cls.lib.Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id)
     
     @classmethod
-    def Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src, decryption_key_id):
+    def Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src):
         return cls.lib.Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cast(src.data_ptr(), POINTER(c_int32)),
                                                           src.size(0), src.size(
-                                                              1), src.size(2),
-                                                          decryption_key_id)
+                                                              1), src.size(2))
 
     @classmethod
     def Pre_Init(cls):
