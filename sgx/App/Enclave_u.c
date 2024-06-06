@@ -14,7 +14,6 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t {
 	int ms_src_id2;
 	int ms_blind_factor_u_id;
 	int ms_blind_factor_v_id;
-	int* ms_ret_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t {
@@ -22,7 +21,6 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t {
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_decryption_key_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t;
 
@@ -39,7 +37,6 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t {
 	int ms_src_id2;
 	int ms_blind_factor_u_id;
 	int ms_blind_factor_v_id;
-	int* ms_ret_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t {
@@ -47,7 +44,6 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t {
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_decryption_key_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t;
 
@@ -63,7 +59,6 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt_t {
 	int ms_src_id1;
 	int ms_src_id2;
 	int ms_layer_id;
-	int* ms_ret_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t {
@@ -71,7 +66,6 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t {
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_decryption_key_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t;
 
@@ -87,7 +81,6 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt_t {
 	int ms_src_id1;
 	int ms_src_id2;
 	int ms_layer_id;
-	int* ms_ret_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t {
@@ -95,7 +88,6 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t {
 	int ms_B;
 	int ms_M;
 	int ms_N;
-	int ms_decryption_key_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t;
 
@@ -353,7 +345,7 @@ sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int s
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id, int* ret_id)
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t ms;
@@ -361,12 +353,11 @@ sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32(sgx_enclave_id_t eid, in
 	ms.ms_src_id2 = src_id2;
 	ms.ms_blind_factor_u_id = blind_factor_u_id;
 	ms.ms_blind_factor_v_id = blind_factor_v_id;
-	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 1, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t ms;
@@ -374,7 +365,6 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int* 
 	ms.ms_B = B;
 	ms.ms_M = M;
 	ms.ms_N = N;
-	ms.ms_decryption_key_id = decryption_key_id;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 2, &ocall_table_Enclave, &ms);
 	return status;
@@ -393,7 +383,7 @@ sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int s
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id, int* ret_id)
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t ms;
@@ -401,12 +391,11 @@ sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32(sgx_enclave_id_t eid, in
 	ms.ms_src_id2 = src_id2;
 	ms.ms_blind_factor_u_id = blind_factor_u_id;
 	ms.ms_blind_factor_v_id = blind_factor_v_id;
-	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 4, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t ms;
@@ -414,7 +403,6 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int* 
 	ms.ms_B = B;
 	ms.ms_M = M;
 	ms.ms_N = N;
-	ms.ms_decryption_key_id = decryption_key_id;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 5, &ocall_table_Enclave, &ms);
 	return status;
@@ -433,19 +421,18 @@ sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int layer_id, int* ret_id)
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int layer_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt_t ms;
 	ms.ms_src_id1 = src_id1;
 	ms.ms_src_id2 = src_id2;
 	ms.ms_layer_id = layer_id;
-	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 7, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t ms;
@@ -453,7 +440,6 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id
 	ms.ms_B = B;
 	ms.ms_M = M;
 	ms.ms_N = N;
-	ms.ms_decryption_key_id = decryption_key_id;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 8, &ocall_table_Enclave, &ms);
 	return status;
@@ -472,19 +458,18 @@ sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int layer_id, int* ret_id)
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int layer_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt_t ms;
 	ms.ms_src_id1 = src_id1;
 	ms.ms_src_id2 = src_id2;
 	ms.ms_layer_id = layer_id;
-	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 10, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int decryption_key_id, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t ms;
@@ -492,7 +477,6 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id
 	ms.ms_B = B;
 	ms.ms_M = M;
 	ms.ms_N = N;
-	ms.ms_decryption_key_id = decryption_key_id;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 11, &ocall_table_Enclave, &ms);
 	return status;

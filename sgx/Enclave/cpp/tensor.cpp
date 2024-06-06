@@ -201,5 +201,31 @@ struct TensorInt32* MatmulS32S8S32_Naive(struct TensorInt32* X,
   return Z;
 }
 
+void MatmulS32S8S32_Naive_Buffer(struct TensorInt32* X,
+                                                struct TensorInt8* Y,
+                                                struct TensorInt32* buffer) {
+  int B = X->B;
+  int M = X->M;
+  int K = X->N;
+  int N = Y->M;
+
+  // struct TensorInt32* Z = CreateTensorInt32(B, M, N);
+  buffer->B = B;
+  buffer->M = M;
+  buffer->N = N;
+
+  for (int b = 0; b < B; b++) {
+    for (int m = 0; m < M; m++) {
+      for (int n = 0; n < N; n++) {
+        int sum = 0;
+        for (int k = 0; k < K; k++) {
+          sum += (int)X->data[b * M * K + m * K + k] * (int)Y->data[n * K + k];
+        }
+        buffer->data[b * M * N + m * N + n] = sum;
+      }
+    }
+  }
+}
+
 }
 

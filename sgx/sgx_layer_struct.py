@@ -180,11 +180,11 @@ class SgxLayerStructC:
   
   @classmethod
   def Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
-    return cls.lib.Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, layer_id)
+    cls.lib.Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, layer_id)
   
   @classmethod
-  def Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls, src, decryption_key_id):
-    return cls.lib.Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), decryption_key_id)
+  def Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls, src):
+    return cls.lib.Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2))
 
   @classmethod
   def Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
@@ -199,11 +199,11 @@ class SgxLayerStructC:
   
   @classmethod
   def Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(cls, src_id1, src_id2, layer_id):
-    return cls.lib.Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, layer_id)
+    cls.lib.Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(cls.eid[0],src_id1, src_id2, layer_id)
   
   @classmethod
-  def Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src, decryption_key_id):
-    return cls.lib.Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2), decryption_key_id)
+  def Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src):
+    return cls.lib.Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)), src.size(0), src.size(1), src.size(2))
 
   @classmethod
   def Pre_Init(cls):
@@ -224,14 +224,13 @@ class SgxLayerStructC:
 
   @classmethod
   def Generate_Decryption_Key_QK_Int32(cls, src_id1, src_id2, blind_factor_u_id, blind_factor_v_id):
-      return cls.lib.Sgx_Generate_Decryption_Key_QK_Int32(cls.eid[0],src_id1, src_id2, c_int32(blind_factor_u_id), c_int32(blind_factor_v_id))
+      cls.lib.Sgx_Generate_Decryption_Key_QK_Int32(cls.eid[0],src_id1, src_id2, c_int32(blind_factor_u_id), c_int32(blind_factor_v_id))
   
   @classmethod
-  def Set_Decrypted_Tensor_QK_Int32(cls, src, decryption_key_id):
+  def Set_Decrypted_Tensor_QK_Int32(cls, src):
       return cls.lib.Sgx_Set_Decrypted_Tensor_QK_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)),
                                                         src.size(0), src.size(
-                                                            1), src.size(2),
-                                                        decryption_key_id)
+                                                            1), src.size(2))
   
   @classmethod
   def Get_Encrypted_Tensor_PV_Int32(cls, src_id1, src_id2):
@@ -248,14 +247,13 @@ class SgxLayerStructC:
   
   @classmethod    
   def Generate_Decryption_Key_PV_Int32(cls, src_id1, src_id2, blind_factor_u_id, blind_factor_v_id):
-      return cls.lib.Sgx_Generate_Decryption_Key_PV_Int32(cls.eid[0],src_id1, src_id2, c_int32(blind_factor_u_id), c_int32(blind_factor_v_id))
+      cls.lib.Sgx_Generate_Decryption_Key_PV_Int32(cls.eid[0],src_id1, src_id2, c_int32(blind_factor_u_id), c_int32(blind_factor_v_id))
   
   @classmethod
-  def Set_Decrypted_Tensor_PV_Int32(cls, src, decryption_key_id):
+  def Set_Decrypted_Tensor_PV_Int32(cls, src):
       return cls.lib.Sgx_Set_Decrypted_Tensor_PV_Int32(cls.eid[0],cast(src.data_ptr(), POINTER(c_int32)),
                                                         src.size(0), src.size(
-                                                            1), src.size(2),
-                                                        decryption_key_id)
+                                                            1), src.size(2))
   
   @classmethod
   def CPU_Bmm(cls, src_id1, src_id2):

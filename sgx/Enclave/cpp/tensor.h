@@ -68,5 +68,7 @@ struct TensorInt32* MatmulS32S32S32_Naive(struct TensorInt32* X,
 struct TensorInt32* MatmulS32S8S32_Naive(struct TensorInt32* X,
                                          struct TensorInt8* Y);
 
+void MatmulS32S8S32_Naive_Buffer(struct TensorInt32* X,
+                                         struct TensorInt8* Y, struct TensorInt32* buffer);
 }
 #endif

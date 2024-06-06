@@ -131,7 +131,6 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         
         if smoothquant.opt.ENABLE_PROGRESS_PRINT:
             print(f'After Process Input Tensors')
-        print("is pv bmm : ", self.is_pv_bmm)
 
         t = timer.start(tag=f'{self.module_name}, Generate Decryption Key ({state})', category=f'{self.module_name}, Generate Decryption Key ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
