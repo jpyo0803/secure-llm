@@ -17,6 +17,8 @@
 #define MAX_SEQ_LEN 2048
 #define MAX_EMBED_DIM 5120 * 4
 
+#define SHIFT_AMT 128
+
 extern "C" {
 int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   int curr_id = tensor_float_id;
@@ -340,8 +342,8 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
   return Ex_Set_Tensor_Int32(data, B, M, N);
 }
 
-void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1,
-                                      int* out2, int* blind_factor_ids) {
+void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* out1,
+                                      unsigned int* out2, int* blind_factor_ids) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
@@ -351,11 +353,37 @@ void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1,
   struct TensorInt32* v = CreateTensorInt32(X->B, 1, Y->N);
   GetCPRNG((unsigned char*)v->data, v->num_bytes);
 
+  // Compute X_Row_Sum
+
+  share_dim = X->N;
+
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) { 
+      int sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += X->data[i * X->M * X->N + j * X->N + k];
+      }
+      x_row_sum_buffer->data[i * X->M + j] = sum;
+    }
+  }
+
+  // Compute Y_Col_sum
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+      y_col_sum_buffer->data[i * Y->M + j] = sum;
+    }
+  }
+
+
   // Encrypt X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+        out1[i * X->M * X->N + j * X->N + k] = (unsigned int)X->data[i * X->M * X->N + j * X->N + k] + SHIFT_AMT;
       }
     }
   }
@@ -364,10 +392,28 @@ void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1,
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
-        out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->N + k];
+        out2[i * Y->M * Y->N + j * Y->N + k] = (unsigned int)Y->data[i * Y->M * Y->N + j * Y->N + k] + SHIFT_AMT;
       }
     }
   }
+
+  // // Encrypt X
+  // for (int i = 0; i < X->B; ++i) {
+  //   for (int j = 0; j < X->M; ++j) {
+  //     for (int k = 0; k < X->N; ++k) {
+  //       out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+  //     }
+  //   }
+  // }
+
+  // // Encrypt Y
+  // for (int i = 0; i < Y->B; ++i) {
+  //   for (int j = 0; j < Y->M; ++j) {
+  //     for (int k = 0; k < Y->N; ++k) {
+  //       out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->N + k];
+  //     }
+  //   }
+  // }
 
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
@@ -425,7 +471,7 @@ void Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
   // return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N) {
+int Ex_Set_Decrypted_Tensor_QK_Int32(unsigned int* data, int B, int M, int N) {
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
@@ -433,10 +479,21 @@ int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N) {
 
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
+
+  // for (int i = 0; i < B; ++i) {
+  //   for (int j = 0; j < M; ++j) {
+  //     for (int k = 0; k < N; ++k) {
+  //       tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - decryption_key_buffer->data[i * M * N + j * N + k];
+  //     }
+  //   }
+  // }
+
+  // Undo shift 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - decryption_key_buffer->data[i * M * N + j * N + k];
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer->data[i * M + j] + y_col_sum_buffer->data[i * N + k] + share_dim * SHIFT_AMT);
+        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - undo_shift_factor;
       }
     }
   }
@@ -447,8 +504,8 @@ int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N) {
   return curr_id;
 }
 
-void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1,
-                                      int* out2, int* blind_factor_ids) {
+void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* out1,
+                                      unsigned int* out2, int* blind_factor_ids) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
@@ -457,23 +514,65 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1,
   struct TensorInt32* v = CreateTensorInt32(X->B, 1, Y->M);
   GetCPRNG((unsigned char*)v->data, v->num_bytes);
 
-  // Encrypt X
+  share_dim = X->N;
+  // Compute x_row_sum
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += X->data[i * X->M * X->N + j * X->N + k];
+      }
+      x_row_sum_buffer->data[i * X->M + j] = sum;
+    }
+  }
+
+  // Compute y_row_sum
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+      y_col_sum_buffer->data[i * Y->M + j] = sum;
+    }
+  }
+
+  // Shift X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] =X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+        out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] + SHIFT_AMT;
       }
     }
   }
 
-  // Encrypt Y
+  // Shift Y
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
-        out2[i * Y->M * Y->N + j * Y->N + k] =Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->M + j];
+        out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] + SHIFT_AMT;
       }
     }
   }
+
+
+  // // Encrypt X
+  // for (int i = 0; i < X->B; ++i) {
+  //   for (int j = 0; j < X->M; ++j) {
+  //     for (int k = 0; k < X->N; ++k) {
+  //       out1[i * X->M * X->N + j * X->N + k] =X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+  //     }
+  //   }
+  // }
+
+  // // Encrypt Y
+  // for (int i = 0; i < Y->B; ++i) {
+  //   for (int j = 0; j < Y->M; ++j) {
+  //     for (int k = 0; k < Y->N; ++k) {
+  //       out2[i * Y->M * Y->N + j * Y->N + k] =Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->M + j];
+  //     }
+  //   }
+  // }
 
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
@@ -557,7 +656,7 @@ void Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
   // return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N) {
+int Ex_Set_Decrypted_Tensor_PV_Int32(unsigned int* data, int B, int M, int N) {
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
@@ -565,13 +664,23 @@ int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N) {
 
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
+  // for (int i = 0; i < B; ++i) {
+  //   for (int j = 0; j < M; ++j) {
+  //     for (int k = 0; k < N; ++k) {
+  //       tensor->data[i * M * N + j * N + k] =
+  //           data[i * M * N + j * N + k] -
+  //           decryption_key_buffer->data[i * M * N + j * N + k];
+  //       tensor->data[i * M * N + j * N + k] = tensor->data[i * M * N + j * N + k];
+  //     }
+  //   }
+  // }
+
+  // Undo shift
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        tensor->data[i * M * N + j * N + k] =
-            data[i * M * N + j * N + k] -
-            decryption_key_buffer->data[i * M * N + j * N + k];
-        tensor->data[i * M * N + j * N + k] = tensor->data[i * M * N + j * N + k];
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer->data[i * M + j] + y_col_sum_buffer->data[i * N + k] + share_dim * SHIFT_AMT);
+        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - undo_shift_factor;
       }
     }
   }
@@ -882,6 +991,16 @@ int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M,
 }
 
 void Ex_Pre_Init() {
+  if (decryption_key_buffer == NULL) {
+    decryption_key_buffer = CreateTensorInt32(MAX_BATCH_SIZE, MAX_SEQ_LEN, MAX_EMBED_DIM);
+  }
+  if (x_row_sum_buffer == NULL) {
+    x_row_sum_buffer = CreateTensorInt32(MAX_BATCH_SIZE, 1, MAX_EMBED_DIM);
+  }
+  if (y_col_sum_buffer == NULL) {
+    y_col_sum_buffer = CreateTensorInt32(MAX_BATCH_SIZE, 1, MAX_EMBED_DIM);
+  }
+
   for (int i = 0; i < STATIC_LIST_LEN; ++i) {
     if (qk_blind_factor_u_list[i] != NULL) {
       DeleteTensorInt32(qk_blind_factor_u_list[i]);
@@ -917,9 +1036,6 @@ void Ex_Pre_Init() {
     }
   }
 
-  if (decryption_key_buffer == NULL) {
-    decryption_key_buffer = CreateTensorInt32(MAX_BATCH_SIZE, MAX_SEQ_LEN, MAX_EMBED_DIM);
-  }
 }
 
 int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {

@@ -7,6 +7,10 @@
 
 struct TensorInt32* decryption_key_buffer = NULL;
 
+struct TensorInt32* x_row_sum_buffer = NULL;
+struct TensorInt32* y_col_sum_buffer = NULL;
+int share_dim;
+
 struct LayerNormParam {
   struct TensorFloat* gamma;
   struct TensorFloat* beta;

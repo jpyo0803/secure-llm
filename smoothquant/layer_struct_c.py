@@ -87,12 +87,13 @@ class LayerStructC:
         B, M, K = cls.Get_Tensor_Dim_Int32(src_id1)
         _, N, K2 = cls.Get_Tensor_Dim_Int32(src_id2)
 
-        enc_x = torch.empty((B, M, K), dtype=torch.int32)
-        enc_y = torch.empty((B, N, K2), dtype=torch.int32)
+        # Change Int32 to Uint32 later
+        enc_x = torch.empty((B, M, K), dtype=torch.uint32)
+        enc_y = torch.empty((B, N, K2), dtype=torch.uint32)
 
         blind_factor_ids = torch.empty(2, dtype=torch.int32)
         
-        cls.lib.Ex_Get_Encrypted_Tensor_QK_Int32(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)), cast(blind_factor_ids.data_ptr(), POINTER(c_int32)))
+        cls.lib.Ex_Get_Encrypted_Tensor_QK_Int32(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_uint32)), cast(enc_y.data_ptr(), POINTER(c_uint32)), cast(blind_factor_ids.data_ptr(), POINTER(c_int32)))
         return enc_x, enc_y, blind_factor_ids[0], blind_factor_ids[1]
 
     @classmethod
@@ -101,7 +102,7 @@ class LayerStructC:
     
     @classmethod
     def Set_Decrypted_Tensor_QK_Int32(cls, src):
-        return cls.lib.Ex_Set_Decrypted_Tensor_QK_Int32(cast(src.data_ptr(), POINTER(c_int32)),
+        return cls.lib.Ex_Set_Decrypted_Tensor_QK_Int32(cast(src.data_ptr(), POINTER(c_uint32)),
                                                           src.size(0), src.size(
                                                               1), src.size(2))
     
@@ -110,12 +111,12 @@ class LayerStructC:
         B, M, K = cls.Get_Tensor_Dim_Int32(src_id1)
         _, N, K2 = cls.Get_Tensor_Dim_Int32(src_id2)
 
-        enc_x = torch.empty((B, M, K), dtype=torch.int32)
-        enc_y = torch.empty((B, N, K2), dtype=torch.int32)
+        enc_x = torch.empty((B, M, K), dtype=torch.uint32)
+        enc_y = torch.empty((B, N, K2), dtype=torch.uint32)
 
         blind_factor_ids = torch.empty(2, dtype=torch.int32)
         
-        cls.lib.Ex_Get_Encrypted_Tensor_PV_Int32(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)), cast(blind_factor_ids.data_ptr(), POINTER(c_int32)))
+        cls.lib.Ex_Get_Encrypted_Tensor_PV_Int32(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_uint32)), cast(enc_y.data_ptr(), POINTER(c_uint32)), cast(blind_factor_ids.data_ptr(), POINTER(c_int32)))
         return enc_x, enc_y, blind_factor_ids[0], blind_factor_ids[1]
 
     @classmethod    
@@ -124,7 +125,7 @@ class LayerStructC:
     
     @classmethod
     def Set_Decrypted_Tensor_PV_Int32(cls, src):
-        return cls.lib.Ex_Set_Decrypted_Tensor_PV_Int32(cast(src.data_ptr(), POINTER(c_int32)),
+        return cls.lib.Ex_Set_Decrypted_Tensor_PV_Int32(cast(src.data_ptr(), POINTER(c_uint32)),
                                                           src.size(0), src.size(
                                                               1), src.size(2))
 
