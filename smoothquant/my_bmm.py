@@ -131,6 +131,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         
         if smoothquant.opt.ENABLE_PROGRESS_PRINT:
             print(f'After Process Input Tensors')
+        print("is pv bmm : ", self.is_pv_bmm)
 
         t = timer.start(tag=f'{self.module_name}, Generate Decryption Key ({state})', category=f'{self.module_name}, Generate Decryption Key ({state})')
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
@@ -140,17 +141,17 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 if smoothquant.opt.is_prefill:
                     pass
                 else:
-                    decryption_key_id = self.lsc.Generate_Decryption_Key_PV_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
+                    self.lsc.Generate_Decryption_Key_PV_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
             else:
-                decryption_key_id = self.lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
+                self.lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             if self.is_pv_bmm:
                 if smoothquant.opt.is_prefill:
                     pass
                 else:
-                    decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_PV_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
+                    self.sgx_lsc.Generate_Decryption_Key_PV_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
             else:
-                decryption_key_id = self.sgx_lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
+                self.sgx_lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             if self.is_pv_bmm:
                 # Always need to Generate Decryption key for future
@@ -287,17 +288,17 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 if smoothquant.opt.is_prefill:
                     pass
                 else:
-                    z = self.lsc.Set_Decrypted_Tensor_PV_Int32(z, decryption_key_id)
+                    z = self.lsc.Set_Decrypted_Tensor_PV_Int32(z)
             else: 
-                z = self.lsc.Set_Decrypted_Tensor_QK_Int32(z, decryption_key_id)
+                z = self.lsc.Set_Decrypted_Tensor_QK_Int32(z)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             if self.is_pv_bmm:
                 if smoothquant.opt.is_prefill:
                     pass
                 else:
-                    z = self.sgx_lsc.Set_Decrypted_Tensor_PV_Int32(z, decryption_key_id)
+                    z = self.sgx_lsc.Set_Decrypted_Tensor_PV_Int32(z)
             else:
-                z = self.sgx_lsc.Set_Decrypted_Tensor_QK_Int32(z, decryption_key_id)
+                z = self.sgx_lsc.Set_Decrypted_Tensor_QK_Int32(z)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             if self.is_pv_bmm:
                 if smoothquant.opt.is_prefill:

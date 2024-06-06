@@ -26,8 +26,8 @@ void Ex_Get_Tensor_Int32(int src_id, int* out);
 int Ex_Set_Tensor_Int32(int* data, int B, int M, int N);
 
 void Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id, int* out);
-int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
-                                          int linear_param_id);
+// int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
+//                                           int linear_param_id);
 int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linear_param_id);
 
 void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim);
@@ -69,18 +69,17 @@ void Ex_Pre_Init();
 
 void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1,
                                       int* out2, int* blind_factor_ids);
-int Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
+void Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
                                         int blind_factor_u_id,
                                         int blind_factor_v_id);
-int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N,
-                                      int decryption_key_id);
+int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N);
 
 void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1,
                                       int* out2, int* blind_factor_ids);
-int Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
+void Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
                                         int blind_factor_u_id,
                                         int blind_factor_v_id);
-int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N, int decryption_key_id);
+int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N);
 
 int Ex_CPU_Bmm(int src_id1, int src_id2);
 }

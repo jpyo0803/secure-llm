@@ -247,9 +247,9 @@ class Int8OPTAttention(nn.Module):
             self.qk_bmm, privacy_on, module_name="QK BMM")
         self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm, privacy_on, module_name="PV BMM")
 
-        if my_exec_mode == ExecMode.Mode7:
+        if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
             self.lsc.Pre_Init() # Reset internal KV cache metadata
-        elif my_exec_mode == ExecMode.Mode8:
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
             self.sgx_lsc.Pre_Init()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):

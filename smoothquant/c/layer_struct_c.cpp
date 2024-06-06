@@ -294,24 +294,24 @@ void Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id,
   }
 }
 
-// depreciated
-int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
-                                          int linear_param_id) {
-  struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
-  struct TensorInt8* linear_weight = linear_param_list[linear_param_id]->weight;
+// // depreciated
+// int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
+//                                           int linear_param_id) {
+//   struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
+//   struct TensorInt8* linear_weight = linear_param_list[linear_param_id]->weight;
 
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
+//   if (tensor_int32_list[tensor_int32_id] != NULL) {
+//     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+//   }
 
-  struct TensorInt32* decryption_key =
-      MatmulS32S8S32_Naive(blind_factor, linear_weight);
+//   struct TensorInt32* decryption_key =
+//       MatmulS32S8S32_Naive(blind_factor, linear_weight);
 
-  int curr_id = tensor_int32_id;
-  tensor_int32_list[curr_id] = decryption_key;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
-}
+//   int curr_id = tensor_int32_id;
+//   tensor_int32_list[curr_id] = decryption_key;
+//   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+//   return curr_id;
+// }
 
 int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
                                        int linear_param_id) {
@@ -384,7 +384,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1,
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
 }
 
-int Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
+void Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
                                         int blind_factor_u_id,
                                         int blind_factor_v_id) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
@@ -396,18 +396,21 @@ int Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
   struct TensorInt32* uy = MatmulS32S32S32_Naive(u, Y);  // B, 1, Y_M
   struct TensorInt32* xv = MatmulS32S32S32_Naive(X, v);  // B, X_M, 1
 
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
 
   struct TensorInt32* uv = MatmulS32S32S32_Naive(u, v);  // B x 1 x 1
 
-  struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+  // if (tensor_int32_list[tensor_int32_id] != NULL) {
+  //   DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  // }
+  // struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+  decryption_key_buffer->B = X->B;
+  decryption_key_buffer->M = X->M;
+  decryption_key_buffer->N = Y->M;
 
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < Y->M; ++k) {
-        decryption_key->data[i * X->M * Y->M + j * Y->M + k] =uv->data[i] + xv->data[i * X->M + j] + uy->data[i * Y->M + k];
+        decryption_key_buffer->data[i * X->M * Y->M + j * Y->M + k] =uv->data[i] + xv->data[i * X->M + j] + uy->data[i * Y->M + k];
       }
     }
   }
@@ -416,25 +419,24 @@ int Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
   DeleteTensorInt32(xv);
   DeleteTensorInt32(uv);
 
-  int curr_id = tensor_int32_id;
-  tensor_int32_list[curr_id] = decryption_key;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
+  // int curr_id = tensor_int32_id;
+  // tensor_int32_list[curr_id] = decryption_key;
+  // tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  // return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N,
-                                     int decryption_key_id) {
+int Ex_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N) {
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
-  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+  // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - decryption_key->data[i * M * N + j * N + k];
+        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - decryption_key_buffer->data[i * M * N + j * N + k];
       }
     }
   }
@@ -488,7 +490,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1,
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
 }
 
-int Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
+void Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
                                         int blind_factor_u_id,
                                         int blind_factor_v_id) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
@@ -526,16 +528,19 @@ int Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
     }
   }
 
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
+  // if (tensor_int32_list[tensor_int32_id] != NULL) {
+  //   DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  // }
 
-  struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+  // struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
+  decryption_key_buffer->B = X->B;
+  decryption_key_buffer->M = X->M;
+  decryption_key_buffer->N = Y->M;
 
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < Y->M; ++k) {
-        decryption_key->data[i * X->M * Y->M + j * Y->M + k] =
+        decryption_key_buffer->data[i * X->M * Y->M + j * Y->M + k] =
             uv->data[i * Y->M + k] + xv->data[i * X->M * Y->M + j * Y->M + k] +
             uy->data[i * Y->M + k];
       }
@@ -546,27 +551,26 @@ int Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
   DeleteTensorInt32(xv);
   DeleteTensorInt32(uv);
 
-  int curr_id = tensor_int32_id;
-  tensor_int32_list[curr_id] = decryption_key;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  return curr_id;
+  // int curr_id = tensor_int32_id;
+  // tensor_int32_list[curr_id] = decryption_key;
+  // tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  // return curr_id;
 }
 
-int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N,
-                                     int decryption_key_id) {
+int Ex_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N) {
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
-  struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
+  // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
         tensor->data[i * M * N + j * N + k] =
             data[i * M * N + j * N + k] -
-            decryption_key->data[i * M * N + j * N + k];
+            decryption_key_buffer->data[i * M * N + j * N + k];
         tensor->data[i * M * N + j * N + k] = tensor->data[i * M * N + j * N + k];
       }
     }
