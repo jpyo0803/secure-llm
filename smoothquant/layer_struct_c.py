@@ -90,15 +90,13 @@ class LayerStructC:
         # Change Int32 to Uint32 later
         enc_x = torch.empty((B, M, K), dtype=torch.uint32)
         enc_y = torch.empty((B, N, K2), dtype=torch.uint32)
-
-        blind_factor_ids = torch.empty(2, dtype=torch.int32)
         
-        cls.lib.Ex_Get_Encrypted_Tensor_QK_Int32(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_uint32)), cast(enc_y.data_ptr(), POINTER(c_uint32)), cast(blind_factor_ids.data_ptr(), POINTER(c_int32)))
-        return enc_x, enc_y, blind_factor_ids[0], blind_factor_ids[1]
+        cls.lib.Ex_Get_Encrypted_Tensor_QK_Int32(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_uint32)), cast(enc_y.data_ptr(), POINTER(c_uint32)))
+        return enc_x, enc_y
 
     @classmethod
-    def Generate_Decryption_Key_QK_Int32(cls, src_id1, src_id2, blind_factor_u_id, blind_factor_v_id):
-        cls.lib.Ex_Generate_Decryption_Key_QK_Int32(src_id1, src_id2, c_int32(blind_factor_u_id), c_int32(blind_factor_v_id))
+    def Generate_Decryption_Key_QK_Int32(cls, src_id1, src_id2):
+        cls.lib.Ex_Generate_Decryption_Key_QK_Int32(src_id1, src_id2)
     
     @classmethod
     def Set_Decrypted_Tensor_QK_Int32(cls, src):

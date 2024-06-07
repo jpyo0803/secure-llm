@@ -45,6 +45,9 @@ struct TensorInt8 {
 
 extern "C" {
 
+struct TensorUint32* CreateTensorUint32(int B, int M, int N);
+void DeleteTensorUint32(struct TensorUint32* tensor);
+
 struct TensorInt32* CreateTensorInt32(int B, int M, int N);
 struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N);
 struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M, int N);

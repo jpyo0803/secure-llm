@@ -102,7 +102,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 else:
                     x, y, blind_factor_u_id, blind_factor_v_id = self.lsc.Get_Encrypted_Tensor_PV_Int32(x_id, y_id)
             else:
-                x, y, blind_factor_u_id, blind_factor_v_id = self.lsc.Get_Encrypted_Tensor_QK_Int32(x_id, y_id)
+                x, y = self.lsc.Get_Encrypted_Tensor_QK_Int32(x_id, y_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             if self.is_pv_bmm:
                 if smoothquant.opt.is_prefill:
@@ -142,7 +142,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 else:
                     self.lsc.Generate_Decryption_Key_PV_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
             else:
-                self.lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id, blind_factor_u_id, blind_factor_v_id)
+                self.lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             if self.is_pv_bmm:
                 if smoothquant.opt.is_prefill:

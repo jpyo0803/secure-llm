@@ -5,6 +5,22 @@
 
 extern "C" {
 
+struct TensorUint32* CreateTensorUint32(int B, int M, int N) {
+  struct TensorUint32* tensor =
+      (struct TensorUint32*)malloc(sizeof(struct TensorUint32));
+  tensor->num_bytes = B * M * N * sizeof(unsigned int);
+  tensor->data = (unsigned int*)aligned_alloc(64, B * M * N * sizeof(unsigned int));
+  tensor->B = B;
+  tensor->M = M;
+  tensor->N = N;
+  return tensor;
+}
+
+void DeleteTensorUint32(struct TensorUint32* tensor) {
+  free(tensor->data);
+  free(tensor);
+}
+
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   struct TensorInt32* tensor =
       (struct TensorInt32*)malloc(sizeof(struct TensorInt32));

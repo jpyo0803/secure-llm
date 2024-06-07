@@ -4,6 +4,22 @@
 #define STATIC_LIST_LEN 1000
 
 #include "tensor.h"
+#include <vector>
+#include <utility>
+
+std::vector<uint32_t> mult_key_pool;
+std::vector<uint32_t> add_key_pool;
+std::vector<std::vector<uint32_t>> mult_key_inv_precompute;
+
+// below need memory space for each Batch
+std::vector<std::vector<std::pair<uint32_t, int32_t>>> key_a; // key and index
+std::vector<std::vector<std::pair<uint32_t, int32_t>>> key_b;
+
+std::vector<std::vector<std::pair<uint32_t, int32_t>>> key_c; // key and index
+std::vector<std::vector<std::pair<uint32_t, int32_t>>> key_d;
+
+std::vector<std::vector<uint32_t>> z_row_factor, z_col_factor;
+std::vector<uint32_t> z_dot_product_factor;
 
 struct TensorInt32* decryption_key_buffer = NULL;
 
