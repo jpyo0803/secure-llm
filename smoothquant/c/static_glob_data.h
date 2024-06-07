@@ -38,6 +38,7 @@ std::vector<std::vector<std::pair<uint32_t, int32_t>>> key_d_opt_list[MAX_NUM_LA
 std::vector<std::vector<uint32_t>> z_row_factor_opt_list[MAX_NUM_LAYERS];
 std::vector<std::vector<uint32_t>> z_col_factor_opt_list[MAX_NUM_LAYERS];
 std::vector<uint32_t> z_dot_product_factor_opt_list[MAX_NUM_LAYERS];
+bool z_dot_product_factor_opt_list_done[MAX_NUM_LAYERS];
 
 std::vector<std::vector<uint32_t>> x_row_sum_buffer_opt_list[MAX_NUM_LAYERS];
 std::vector<std::vector<uint32_t>> y_col_sum_buffer_opt_list[MAX_NUM_LAYERS];

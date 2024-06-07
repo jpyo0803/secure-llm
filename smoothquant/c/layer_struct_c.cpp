@@ -88,6 +88,16 @@ void Ex_Pre_Init() {
   for (int i = 0; i < MAX_NUM_LAYERS; ++i) {
     x_row_sum_buffer_opt_list[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
     y_col_sum_buffer_opt_list[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+    z_row_factor_opt_list[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_col_factor_opt_list[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_dot_product_factor_opt_list[i] = std::vector<uint32_t>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_dot_product_factor_opt_list_done[i] = false;
+
+    key_a_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_b_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_c_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_d_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
   }
 
   if (decryption_key_buffer == NULL) {
@@ -873,7 +883,6 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
         X->data[i * X->M * X->N + j * X->N + k] += SHIFT_AMT;
-        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k];
       }
     }
   }
@@ -883,7 +892,64 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
         Y->data[i * Y->M * Y->N + j * Y->N + k] += SHIFT_AMT;
-        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+    }
+  }
+
+  // Randomly sample random keys, must be sampled every time
+  for (int i = 0; i < X->B; ++i) {
+    key_a_opt_list[layer_id].at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_a_opt_list[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    // key_b.at(i).clear(); // dont clear, must be stacked
+    for (int j = 0; j < Y->M; ++j) {
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_b_opt_list[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  // Keys c and d only sampled first time, D does not increase
+  for (int i = 0; i < X->B; ++i) {
+    if (key_c_opt_list[layer_id].at(i).empty()) {
+      for (int j = 0; j < X->N; ++j) {
+        int idx = rand() % SECRET_KEY_POOL_SIZE;
+        key_c_opt_list[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    } 
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    if (key_d_opt_list[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->N; ++j) {
+        int idx = rand() % SECRET_KEY_POOL_SIZE;
+        key_d_opt_list[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    }
+  }
+
+  // Encrypt X as usual
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        // out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k];
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a_opt_list[layer_id].at(i).at(j).first + key_c_opt_list[layer_id].at(i).at(k).first;
+      }
+    }
+  }
+
+  // Encrypt Y must use the last b BE CAREFUL!!!, Only during generation
+  for (int i = 0; i < Y->B; ++i) {
+    bool is_gen = Y->M == 1; // if Y_M is 1, then it is generation phase  
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t b = is_gen ? key_b_opt_list[layer_id].at(i).back().first : key_b_opt_list[layer_id].at(i).at(j).first;
+      for (int k = 0; k < Y->N; ++k) {
+        // out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k];
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * b + key_d_opt_list[layer_id].at(i).at(k).first;
       }
     }
   }
@@ -894,19 +960,67 @@ void Ex_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
 
+  // z_row_factor is used once
+  // z_col_factor must be stacked
+
+  for (int i = 0; i < X->B; ++i) {
+    z_row_factor_opt_list[layer_id].at(i).clear();
+
+    // Z COL FACTOR MUST BE STACKED
+    // z_col_factor_opt_list[layer_id].at(i).clear(); 
+
+    for (int j = 0; j < X->M; ++j) {
+      uint32_t sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_d_opt_list[layer_id].at(i).at(k).first;
+      }
+      sum *= key_a_opt_list[layer_id].at(i).at(j).first;
+      z_row_factor_opt_list[layer_id].at(i).push_back(sum);
+    }
+
+    // Z COL FACTOR MUST BE STACKED
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_c_opt_list[layer_id].at(i).at(k).first;
+      }
+      bool is_gen = Y->M == 1; // if Y_M is 1, then it is generation phase
+      uint32_t b = is_gen ? key_b_opt_list[layer_id].at(i).back().first : key_b_opt_list[layer_id].at(i).at(j).first;
+
+      sum *= b; // use the last one, during gen
+      z_col_factor_opt_list[layer_id].at(i).push_back(sum);
+    }
+  }
+
+  if (z_dot_product_factor_opt_list_done[layer_id] == false) {
+    for (int i = 0; i < X->B; ++i) {
+      uint32_t sum = 0;
+      for (int j = 0; j < X->N; ++j) {
+        sum += key_c_opt_list[layer_id].at(i).at(j).first * key_d_opt_list[layer_id].at(i).at(j).first;
+      }
+      z_dot_product_factor_opt_list[layer_id].at(i) = sum;
+    }
+    z_dot_product_factor_opt_list_done[layer_id] = true;
+  }
 }
 
 int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
                                                   int N, int layer_id) {
   // printf("B %d M %d N %d\n", B, M, N);
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
-
+  // auto start  = std::chrono::steady_clock::now();
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+
+  // bool is_gen = M == 1; // if Y_M is 1, then it is generation phase
+
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        tensor->data[i * M * N + j * N + k] =data[i * M * N + j * N + k] -
-                      decryption_key_buffer->data[i * M * N + j * N + k];
+        // int b_index = is_gen ? key_b_opt_list[layer_id].at(i).back().second : key_b_opt_list[layer_id].at(i).at(k).second;
+        int b_index = key_b_opt_list[layer_id].at(i).at(k).second;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor_opt_list[layer_id].at(i).at(j) - z_col_factor_opt_list[layer_id].at(i).at(k) - z_dot_product_factor_opt_list[layer_id].at(i);
+        tmp = (tmp * mult_key_inv_precompute.at(key_a_opt_list[layer_id].at(i).at(j).second).at(b_index)) % MODULO;
+        tensor->data[i * M * N + j * N + k] = (int) tmp;
       }
     }
   }
@@ -915,12 +1029,13 @@ int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
         int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer_opt_list[layer_id].at(i).at(j) + y_col_sum_buffer_opt_list[layer_id].at(i).at(k) + share_dim * SHIFT_AMT);
-        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - undo_shift_factor;
-        // tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k];
+        tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
+        // tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - undo_shift_factor;
       }
     }
   }
-
+  // auto end = std::chrono::steady_clock::now();
+  // std::cout << "Time taken for decryption: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
