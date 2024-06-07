@@ -125,6 +125,7 @@ class TimeStats:
         self.generation_post = 0.0
 
     def print_summary(self):
+        return 
         print("[Overall Statistics]")
         print("Total Latency: ", self.total)
 

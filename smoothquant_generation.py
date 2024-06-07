@@ -10,6 +10,7 @@ import sys
 
 import singleton_timer as st
 import accuracy_measure_tools as amt
+import smoothquant.my_bmm as my_bmm
 
 amt.set_clock_speed()
 
@@ -122,7 +123,8 @@ assert model_inputs['input_ids'].shape[1] == target_input_token_len
 
 
 smoothquant.opt.is_prefill = True
-smoothquant.opt.time_stats.on()
+# smoothquant.opt.time_stats.on()
+my_bmm.Measure_Start = True
 timer.enable()
 
 start_time = time.perf_counter_ns()
@@ -143,15 +145,8 @@ raw_data = st.SingletonTimer().display_summary(outlier_percent=0.05)
 
 data = []
 
-categories = ['Set Hidden States', 'Copy Residual 1', 'Layer Norm 1', 'Get Hidden States Size', 'Q Proj, Cast From Int8 To Int32', 'Q Proj, Process Input Tensor Before Offload', 'Q Proj, Generate Decryption Key', 'Q Proj, Host to Device', 'Q Proj, Main Computation', 'Q Proj, Device to Host',
-              'Q Proj, Process Output Tensor After Offload', 'Q Proj, Compute Epilogue', 'K Proj, Cast From Int8 To Int32', 'K Proj, Process Input Tensor Before Offload', 'K Proj, Generate Decryption Key',
-               'K Proj, Host to Device', 'K Proj, Main Computation', 'K Proj, Device to Host', 'K Proj, Process Output Tensor After Offload', 'K Proj, Compute Epilogue', 'V Proj, Cast From Int8 To Int32', 'V Proj, Process Input Tensor Before Offload', 'V Proj, Generate Decryption Key',
-               'V Proj, Host to Device', 'V Proj, Main Computation', 'V Proj, Device to Host', 'V Proj, Process Output Tensor After Offload', 'V Proj, Compute Epilogue','Construct KV Cache', 'Get Past KV', 'Reshape Q, K, V', 
-               'QK BMM, Cast From Int8 To Int32', 'QK BMM, Process Input Tensors Before Offload', 'QK BMM, Generate Decryption Key', 'QK BMM, Host to Device', 'QK BMM, Manage Y', 'QK BMM, Main Computation', 'QK BMM, Device to Host', 'QK BMM, Process Output Tensors After Offload', 'QK BMM, Compute Epilogue', 'Apply Attention Mask', 'Softmax', 'Apply Layer Head Mask', 'Reshape Attention Probabilities', 'Post Softmax Quantization',
-              'Transpose V', 'PV BMM, Cast From Int8 To Int32', 'PV BMM, Process Input Tensors Before Offload', 'PV BMM, Generate Decryption Key', 'PV BMM, Host to Device', 'PV BMM, Manage Y', 'PV BMM, Main Computation', 'PV BMM, Device to Host', 'PV BMM, Process Output Tensors After Offload', 'PV BMM, Compute Epilogue', 'Reshape Attention Output', 
-              'Out Proj, Cast From Int8 To Int32', 'Out Proj, Process Input Tensor Before Offload', 'Out Proj, Generate Decryption Key', 'Out Proj, Host to Device', 'Out Proj, Main Computation', 'Out Proj, Device to Host', 'Out Proj, Process Output Tensor After Offload', 'Out Proj, Compute Epilogue', 'Add Residual 1', 'Copy Residual 2', 'Layer Norm 2', 
-              'FC1, Cast From Int8 To Int32', 'FC1, Process Input Tensor Before Offload', 'FC1, Generate Decryption Key', 'FC1, Host to Device', 'FC1, Main Computation', 'FC1, Device to Host', 'FC1, Process Output Tensor After Offload', 'FC1, Compute Epilogue', 'ReLU', 
-              'FC2, Cast From Int8 To Int32', 'FC2, Process Input Tensor Before Offload', 'FC2, Generate Decryption Key', 'FC2, Host to Device', 'FC2, Main Computation', 'FC2, Device to Host', 'FC2, Process Output Tensor After Offload', 'FC2, Compute Epilogue', 'Add Residual 2', 'Post Decoder Layer']
+categories = ['QK BMM, Cast From Int8 To Int32', 'QK BMM, Process Input Tensors Before Offload', 'QK BMM, Generate Decryption Key', 'QK BMM, Host to Device', 'QK BMM, Manage Y', 'QK BMM, Main Computation', 'QK BMM, Device to Host', 'QK BMM, Process Output Tensors After Offload', 'QK BMM, Compute Epilogue', 
+               'PV BMM, Cast From Int8 To Int32', 'PV BMM, Process Input Tensors Before Offload', 'PV BMM, Generate Decryption Key', 'PV BMM, Host to Device', 'PV BMM, Manage Y', 'PV BMM, Main Computation', 'PV BMM, Device to Host', 'PV BMM, Process Output Tensors After Offload', 'PV BMM, Compute Epilogue']
 #assert len(categories) == 76
 
 for state in ['Prefill', 'Generation']:
@@ -161,7 +156,7 @@ for state in ['Prefill', 'Generation']:
         sub_data = [key, num_samples, min_time, max_time, avg_time, total_time]
         data.append(sub_data)
 
-        f = open(f'sq_gen_{model_size}_{target_input_token_len}_{target_output_token_len}_mode{smoothquant.opt.my_exec_mode.value}_batch{num_batches}_optane.csv', 'w')
+        f = open(f'sq_gen_{model_size}_{target_input_token_len}_{target_output_token_len}_mode{smoothquant.opt.my_exec_mode.value}_batch{num_batches}_bmm_only.csv', 'w')
         writer = csv.writer(f)
         writer.writerows(data)
         f.close()
@@ -172,4 +167,4 @@ if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant
 amt.reset_clock_speed()
 
 if smoothquant.opt.ENABLE_MATMUL_OUTPUT_SUM:
-    print("Checksum: ", smoothquant.opt.check_sum.item())
+    print("Checksum: ", smoothquant.opt.check_sum)
