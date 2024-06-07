@@ -1062,7 +1062,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
         X->data[i * X->M * X->N + j * X->N + k] += SHIFT_AMT;
-        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k];
+        // out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k];
       }
     }
   }
@@ -1072,7 +1072,72 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
         Y->data[i * Y->M * Y->N + j * Y->N + k] += SHIFT_AMT;
-        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k];
+        // out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+    }
+  }
+
+  for (int i = 0; i < X->B; ++i) {
+    key_a_opt_list2[layer_id].at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_a_opt_list2[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    // you only sample one time, Y->B does not increase
+    if (key_b_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->M; ++j) {
+        int idx = rand() % SECRET_KEY_POOL_SIZE;
+        key_b_opt_list2[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+      }
+    }
+  }
+
+  for (int i = 0; i < X->B; ++i) {
+    // it increases 
+    if (key_c_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < X->N; ++j) {
+        int idx = rand() % SECRET_KEY_POOL_SIZE;
+        key_c_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    } else {
+      // sample 1
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_c_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    if (key_d_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->N; ++j) {
+        int idx = rand() % SECRET_KEY_POOL_SIZE;
+        key_d_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    } else {
+      // sample 1
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_d_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
+
+  // Encrypt X
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a_opt_list2[layer_id].at(i).at(j).first + key_c_opt_list2[layer_id].at(i).at(k).first;
+      }
+    }
+  }
+
+  // Encrypt Y
+  for (int i = 0; i < Y->B; ++i) {
+    bool is_gen = Y->N == 1; // if Y_N is 1, then it is generation phase
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        uint32_t d = is_gen ? key_d_opt_list2[layer_id].at(i).back().first : key_d_opt_list2[layer_id].at(i).at(k).first;
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_b_opt_list2[layer_id].at(i).at(j).first + d;
       }
     }
   }
@@ -1084,6 +1149,53 @@ void Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
  
+  for (int i = 0; i < X->B; ++i) {
+    // z_row_factor is trivial
+    z_row_factor_opt_list2[layer_id].at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      uint32_t sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_d_opt_list2[layer_id].at(i).at(k).first;
+      }
+      sum *= key_a_opt_list2[layer_id].at(i).at(j).first;
+      z_row_factor_opt_list2[layer_id].at(i).push_back(sum);
+    }
+
+    // Not stacked like QK but updated
+    if (z_col_factor_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->M; ++j) {
+        z_col_factor_opt_list2[layer_id].at(i).push_back(0);
+      }
+    }
+
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t sum = 0;
+
+      bool is_gen = Y->N == 1; // if Y_N is 1, then it is generation phase
+      for (int k = 0; k < Y->N; ++k) {
+        uint32_t c = is_gen ? key_c_opt_list2[layer_id].at(i).back().first : key_c_opt_list2[layer_id].at(i).at(k).first;
+        sum += (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * c;
+      }
+      sum *= key_b_opt_list2[layer_id].at(i).at(j).first;
+      z_col_factor_opt_list2[layer_id].at(i).at(j) += sum;
+    }
+  }
+
+  if (z_dot_product_factor_opt_list_done2[layer_id] == false) {
+    for (int i = 0; i < X->B; ++i) {
+      uint32_t sum = 0;
+      for (int j = 0; j < X->N; ++j) {
+        sum += key_c_opt_list2[layer_id].at(i).at(j).first * key_d_opt_list2[layer_id].at(i).at(j).first;
+      }
+      z_dot_product_factor_opt_list2[layer_id].at(i) = sum;
+    }
+    z_dot_product_factor_opt_list_done2[layer_id] = true;
+  } else {
+    // update with newly added add keys
+    for (int i = 0; i < X->B; ++i) {
+      z_dot_product_factor_opt_list2[layer_id].at(i) += key_c_opt_list2[layer_id].at(i).back().first * key_d_opt_list2[layer_id].at(i).back().first;
+    }
+  }
 }
 
 int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
@@ -1094,8 +1206,19 @@ int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
+        int b_index = key_b_opt_list2[layer_id].at(i).at(k).second;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor_opt_list2[layer_id].at(i).at(j) - z_col_factor_opt_list2[layer_id].at(i).at(k) - z_dot_product_factor_opt_list2[layer_id].at(i);
+        tmp = (tmp * mult_key_inv_precompute.at(key_a_opt_list2[layer_id].at(i).at(j).second).at(b_index)) % MODULO;
+        tensor->data[i * M * N + j * N + k] = (int) tmp;
+      }
+    }
+  }
+
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
         int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer_opt_list2[layer_id].at(i).at(j) + y_col_sum_buffer_opt_list2[layer_id].at(i).at(k) + share_dim_pv_opt * SHIFT_AMT);
-        tensor->data[i * M * N + j * N + k] = (int)data[i * M * N + j * N + k] - undo_shift_factor;
+        tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
         // tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k];
       }
     }
