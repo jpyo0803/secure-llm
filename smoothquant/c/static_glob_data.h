@@ -21,10 +21,11 @@ std::vector<std::vector<std::pair<uint32_t, int32_t>>> key_d;
 std::vector<std::vector<uint32_t>> z_row_factor, z_col_factor;
 std::vector<uint32_t> z_dot_product_factor;
 
+std::vector<std::vector<uint32_t>> x_row_sum_buffer;
+std::vector<std::vector<uint32_t>> y_col_sum_buffer;
+
 struct TensorInt32* decryption_key_buffer = NULL;
 
-struct TensorInt32* x_row_sum_buffer = NULL;
-struct TensorInt32* y_col_sum_buffer = NULL;
 int share_dim;
 
 struct LayerNormParam {
