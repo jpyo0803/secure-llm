@@ -162,9 +162,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 self.lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             if self.is_pv_bmm:
-                self.sgx_lsc.Generate_Decryption_Key_PV_Int32(x_id, y_id)
+                self.lsc.Generate_Decryption_Key_PV_Int32(x_id, y_id)
             else:
-                self.sgx_lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id)
+                self.lsc.Generate_Decryption_Key_QK_Int32(x_id, y_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             if self.is_pv_bmm:
                 # Always need to Generate Decryption key for future
@@ -173,9 +173,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 self.lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             if self.is_pv_bmm:
-                self.sgx_lsc.Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
+                self.lsc.Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
             else:
-                self.sgx_lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
+                self.lsc.Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(x_id, y_id, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             pass
         else:
@@ -277,9 +277,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 z = self.lsc.Set_Decrypted_Tensor_QK_Int32(z)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             if self.is_pv_bmm:
-                z = self.sgx_lsc.Set_Decrypted_Tensor_PV_Int32(z)
+                z = self.lsc.Set_Decrypted_Tensor_PV_Int32(z)
             else:
-                z = self.sgx_lsc.Set_Decrypted_Tensor_QK_Int32(z)
+                z = self.lsc.Set_Decrypted_Tensor_QK_Int32(z)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             if self.is_pv_bmm:
                 z = self.lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, self.bmm_id)
@@ -287,9 +287,9 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 z = self.lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             if self.is_pv_bmm:
-                z = self.sgx_lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, self.bmm_id)
+                z = self.lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z, self.bmm_id)
             else:
-                z = self.sgx_lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, self.bmm_id)
+                z = self.lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             pass
         else:
