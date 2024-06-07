@@ -151,10 +151,10 @@ class LayerStructC:
         B, M, K = cls.Get_Tensor_Dim_Int32(src_id1)
         _, N, K2 = cls.Get_Tensor_Dim_Int32(src_id2)
 
-        enc_x = torch.empty((B, M, K), dtype=torch.int32)
-        enc_y = torch.empty((B, N, K2), dtype=torch.int32)
+        enc_x = torch.empty((B, M, K), dtype=torch.uint32)
+        enc_y = torch.empty((B, N, K2), dtype=torch.uint32)
 
-        cls.lib.Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_int32)), cast(enc_y.data_ptr(), POINTER(c_int32)), layer_id)
+        cls.lib.Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(src_id1, src_id2, cast(enc_x.data_ptr(), POINTER(c_uint32)), cast(enc_y.data_ptr(), POINTER(c_uint32)), layer_id)
         return enc_x, enc_y
     
     @classmethod
@@ -162,14 +162,18 @@ class LayerStructC:
         cls.lib.Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id)
     
     @classmethod
-    def Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src):
-        return cls.lib.Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cast(src.data_ptr(), POINTER(c_int32)),
+    def Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cls, src, layer_id):
+        return cls.lib.Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(cast(src.data_ptr(), POINTER(c_uint32)),
                                                           src.size(0), src.size(
-                                                              1), src.size(2))
+                                                              1), src.size(2), layer_id)
 
     @classmethod
     def Pre_Init(cls):
         return cls.lib.Ex_Pre_Init()
+    
+    @classmethod
+    def Reset(cls):
+        return cls.lib.Ex_Reset()
 
     @classmethod
     def Compute_Epilogue_WS8BS8(cls, src_id, linear_param_id):

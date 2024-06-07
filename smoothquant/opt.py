@@ -231,6 +231,7 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode8:
             self.sgx_lsc = sgx_lsc.SgxLayerStructC()
 
+
     def pre_init(self):
         privacy_on = True if my_exec_mode.value >= ExecMode.Mode5.value else False
 
@@ -247,10 +248,14 @@ class Int8OPTAttention(nn.Module):
             self.qk_bmm, privacy_on, module_name="QK BMM")
         self.my_pv_bmm = my_bmm.BMM_S8X_S8Y_S8Z_Mixed(self.pv_bmm, privacy_on, module_name="PV BMM")
 
-        if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
-            self.lsc.Pre_Init() # Reset internal KV cache metadata
-        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
-            self.sgx_lsc.Pre_Init()
+        # if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
+        #     self.lsc.Pre_Init() # Reset internal KV cache metadata
+        # elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
+        #     self.sgx_lsc.Pre_Init()
+    
+    def reset(self):
+        self.my_qk_bmm.reset()
+        self.my_pv_bmm.reset()
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return (
@@ -984,28 +989,46 @@ class Int8OPTDecoderLayer(nn.Module):
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
                 self.final_layer_norm)
+            
+            del self.self_attn_layer_norm
+            del self.final_layer_norm
         elif my_exec_mode == ExecMode.Mode5:
             self.self_attn_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
                 self.final_layer_norm)
+            
+            del self.self_attn_layer_norm
+            del self.final_layer_norm
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             self.self_attn_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
                 self.final_layer_norm)
+
+            del self.self_attn_layer_norm
+            del self.final_layer_norm
         elif my_exec_mode == ExecMode.Mode7:
             self.self_attn_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.lsc.Set_Layer_Norm_Param(
                 self.final_layer_norm)
+
+            del self.self_attn_layer_norm
+            del self.final_layer_norm
         elif my_exec_mode == ExecMode.Mode8:
             self.self_attn_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
                 self.self_attn_layer_norm)
             self.final_layer_norm_id = self.sgx_lsc.Set_Layer_Norm_Param(
                 self.final_layer_norm)
 
+            del self.self_attn_layer_norm
+            del self.final_layer_norm
+
         self.self_attn.pre_init()
+
+    def reset(self):
+        self.self_attn.reset()
 
     def forward(
         self,
@@ -1535,6 +1558,10 @@ class Int8OPTDecoder(OPTPreTrainedModel):
         for layer in self.layers:
             layer.pre_init()
 
+    def reset(self):
+        for layer in self.layers:
+            layer.reset()
+
     def forward(
         self,
         input_ids: torch.LongTensor,
@@ -1586,13 +1613,29 @@ class Int8OPTModel(OPTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+
+
     get_input_embeddings = OPTModel.get_input_embeddings
     set_input_embeddings = OPTModel.set_input_embeddings
     get_decoder = OPTModel.get_decoder
     forward = OPTModel.forward
 
     def pre_init(self):
+        if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
+            lsc.LayerStructC().Pre_Init() # Reset internal KV cache metadata
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
+            sgx_lsc.SgxLayerStructC().Pre_Init()
+
         self.decoder.pre_init()
+
+    def reset(self):
+        self.decoder.reset()
+
+        if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
+            lsc.LayerStructC().Reset() # Reset internal KV cache metadata
+        elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
+            sgx_lsc.SgxLayerStructC().Reset()
+    
 
 
 class Int8OPTForCausalLM(OPTPreTrainedModel):
@@ -1613,8 +1656,10 @@ class Int8OPTForCausalLM(OPTPreTrainedModel):
         self.post_init()
 
     def pre_init(self):
-        if my_exec_mode.value >= ExecMode.Mode3.value:
-            self.model.pre_init()
+        self.model.pre_init()
+
+    def reset(self):
+        self.model.reset()
 
     get_input_embeddings = OPTForCausalLM.get_input_embeddings
     set_input_embeddings = OPTForCausalLM.set_input_embeddings

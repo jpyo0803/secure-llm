@@ -46,11 +46,6 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
                 torch_int_nn_linear.a.item(), dtype=torch.float32)
             self.beta = torch.tensor(
                 torch_int_nn_linear.b.item(), dtype=torch.float32)
-            assert self.bias.device == torch.device('cpu')
-            assert self.alpha.dtype == torch.float32
-            assert self.beta.dtype == torch.float32
-            assert self.alpha.device == torch.device('cpu')
-            assert self.beta.device == torch.device('cpu')
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
@@ -58,6 +53,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             # bias 1D
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
@@ -65,6 +61,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             # bias 1D
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
@@ -72,6 +69,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
             # bias 1D
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))  # Send to GPU
@@ -84,6 +82,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BS8(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         else:
             assert False
 
@@ -299,26 +298,31 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.weight = cupy.from_dlpack(torch_int_nn_linear.weight.to(
                 torch.int32).transpose(-2, -1).contiguous().to(torch.device('cuda:0')))
             self.linear_layer_id = self.sgx_lsc.Set_Linear_Param_WS8BFP32(
                 torch_int_nn_linear)
+            del torch_int_nn_linear
 
     def __run(self, x):
         state = 'Prefill' if smoothquant.opt.is_prefill else 'Generation'

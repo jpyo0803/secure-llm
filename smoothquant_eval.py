@@ -59,6 +59,8 @@ class Evaluator:
 
     @torch.no_grad()
     def evaluate(self, model):
+        model.pre_init()
+
         model.eval()
         # The task is to predict the last word of the input.
         total, hit = 0, 0
@@ -66,8 +68,7 @@ class Evaluator:
         end = torch.cuda.Event(enable_timing=True)
         latency = 0
         for i, batch in enumerate(self.dataset):
-            model.pre_init()
-
+            model.reset()
             print(f'Processing {i+1}-th Batch')
             if start_gpu:
                 input_ids = batch['input_ids'].cuda().unsqueeze(0)
