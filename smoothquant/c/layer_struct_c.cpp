@@ -673,7 +673,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] + SHIFT_AMT;
+        X->data[i * X->M * X->N + j * X->N + k] += SHIFT_AMT;
       }
     }
   }
@@ -682,40 +682,131 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
-        out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] + SHIFT_AMT;
+        Y->data[i * Y->M * Y->N + j * Y->N + k] += SHIFT_AMT;
       }
     }
   }
 
-  // Basically do what 
+  // Randomly sample random keys
+  for (int i = 0; i < X->B; ++i) {
+    key_a.at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_a.at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
 
+  for (int i = 0; i < Y->B; ++i) {
+    key_b.at(i).clear();
+    for (int j = 0; j < Y->M; ++j) {
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_b.at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < X->B; ++i) {
+    key_c.at(i).clear();
+    for (int j = 0; j < X->N; ++j) {
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_c.at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    key_d.at(i).clear();
+    for (int j = 0; j < Y->N; ++j) {
+      int idx = rand() % SECRET_KEY_POOL_SIZE;
+      key_d.at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
+
+  // Encrypt X
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a.at(i).at(j).first + key_c.at(i).at(k).first;
+      }
+    }
+  }
+
+  // Encrypt Y
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_b.at(i).at(j).first + key_d.at(i).at(k).first;
+      }
+    }
+  }
 }
 
 void Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
+  // auto start = std::chrono::steady_clock::now();
+  // jump
+  assert(X->B == Y->B);
+  // compute x_row_factor, y_col_sum
+  for (int i = 0; i < X->B; ++i) {
+    z_row_factor.at(i).clear();
+    z_col_factor.at(i).clear();
 
+    for (int j = 0; j < X->M; ++j) {
+      uint32_t sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_d.at(i).at(k).first;
+      }
+      sum *= key_a.at(i).at(j).first;
+      z_row_factor.at(i).push_back(sum);
+    }
+    assert (z_row_factor.at(i).size() == X->M);
 
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_c.at(i).at(k).first;
+      }
+      sum *= key_b.at(i).at(j).first;
+      z_col_factor.at(i).push_back(sum);
+    }
+
+    assert (z_col_factor.at(i).size() == Y->M);
+
+    uint32_t sum = 0;
+    for (int j = 0; j < X->N; ++j) {
+      sum += key_c.at(i).at(j).first * key_d.at(i).at(j).first;
+    }
+    z_dot_product_factor.at(i) = sum;
+  }
 }
 
 int Ex_Set_Decrypted_Tensor_PV_Int32(unsigned int* data, int B, int M, int N) {
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
+  // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
-
-  // Undo shift
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer.at(i).at(j) + y_col_sum_buffer.at(i).at(k) + share_dim * SHIFT_AMT);
-        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - undo_shift_factor;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor.at(i).at(j) - z_col_factor.at(i).at(k) - z_dot_product_factor.at(i);
+        tmp = (tmp * mult_key_inv_precompute.at(key_a.at(i).at(j).second).at(key_b.at(i).at(k).second)) % MODULO;
+        tensor->data[i * M * N + j * N + k] = (int)tmp;
       }
     }
   }
 
+  // Undo shift 
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer.at(i).at(j) + y_col_sum_buffer.at(i).at(k) + share_dim * SHIFT_AMT);
+        tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
+      }
+    }
+  }
+
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = tensor;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
