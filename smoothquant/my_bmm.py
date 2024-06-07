@@ -210,6 +210,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 if self.cache is None:
                     self.cache = y
                 else:
+                    # print("y dtype : ", y.dtype)
+                    # print("y shape : ", y.shape)
                     # print("cache shape vs y shape", self.cache.shape, y.shape)
                     if self.is_pv_bmm:
                         self.cache = torch.cat([self.cache, y], dim=1)
@@ -305,7 +307,7 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                 else:
                     z = self.lsc.Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(z)
             else:
-                z = self.lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z)
+                z = self.lsc.Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(z, self.bmm_id)
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             if self.is_pv_bmm:
                 if smoothquant.opt.is_prefill:
