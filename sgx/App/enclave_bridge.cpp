@@ -223,23 +223,23 @@ extern "C"
 	// 	}
     // }
 
-    void Sgx_Get_Encrypted_Tensor_QK_Int32(unsigned long eid, int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
-        sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(eid,src_id1,src_id2,out1,out2,blind_factor_ids);
+    void Sgx_Get_Encrypted_Tensor_QK_Int32(unsigned long eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2) {
+        sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(eid,src_id1,src_id2,out1,out2);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;
         }
     }
 
-    void Sgx_Generate_Decryption_Key_QK_Int32(unsigned long eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id) {
-        sgx_status_t ret = ecall_Sgx_Generate_Decryption_Key_QK_Int32(eid,src_id1,src_id2,blind_factor_u_id,blind_factor_v_id);
+    void Sgx_Generate_Decryption_Key_QK_Int32(unsigned long eid, int src_id1, int src_id2) {
+        sgx_status_t ret = ecall_Sgx_Generate_Decryption_Key_QK_Int32(eid,src_id1,src_id2);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;
         }
     }
 
-    int Sgx_Set_Decrypted_Tensor_QK_Int32(unsigned long eid, int* data, int B, int M, int N) {
+    int Sgx_Set_Decrypted_Tensor_QK_Int32(unsigned long eid, uint32_t* data, int B, int M, int N) {
         int ret_id;
         sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(eid,data,B,M,N,&ret_id);
         if (ret != SGX_SUCCESS) {
@@ -249,23 +249,23 @@ extern "C"
         return ret_id;
     }
 
-    void Sgx_Get_Encrypted_Tensor_PV_Int32(unsigned long eid, int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
-        sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(eid,src_id1,src_id2,out1,out2,blind_factor_ids);
+    void Sgx_Get_Encrypted_Tensor_PV_Int32(unsigned long eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2) {
+        sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(eid,src_id1,src_id2,out1,out2);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;
         }
     }
 
-    void Sgx_Generate_Decryption_Key_PV_Int32(unsigned long eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id) {
-        sgx_status_t ret = ecall_Sgx_Generate_Decryption_Key_PV_Int32(eid,src_id1,src_id2,blind_factor_u_id,blind_factor_v_id);
+    void Sgx_Generate_Decryption_Key_PV_Int32(unsigned long eid, int src_id1, int src_id2) {
+        sgx_status_t ret = ecall_Sgx_Generate_Decryption_Key_PV_Int32(eid,src_id1,src_id2);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;
         }
     }
 
-    int Sgx_Set_Decrypted_Tensor_PV_Int32(unsigned long eid, int* data, int B, int M, int N) {
+    int Sgx_Set_Decrypted_Tensor_PV_Int32(unsigned long eid, uint32_t* data, int B, int M, int N) {
         int ret_id;
         sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(eid,data,B,M,N,&ret_id);
         if (ret != SGX_SUCCESS) {
@@ -275,7 +275,7 @@ extern "C"
         return ret_id;
     }
     
-    void Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(unsigned long eid, int src_id1, int src_id2, int* out1, int* out2, int layer_id) {
+    void Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(unsigned long eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id) {
         sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(eid,src_id1,src_id2,out1,out2,layer_id);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
@@ -291,9 +291,9 @@ extern "C"
         }
     }
 
-    int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(unsigned long eid, int* data, int B, int M, int N) {
+    int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(unsigned long eid, uint32_t* data, int B, int M, int N, int layer_id) {
         int ret_id;
-        sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(eid,data,B,M,N,&ret_id);
+        sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(eid,data,B,M,N, layer_id,&ret_id);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;
@@ -301,7 +301,7 @@ extern "C"
         return ret_id;
     }
 
-    void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(unsigned long eid, int src_id1, int src_id2, int* out1, int* out2, int layer_id) {
+    void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(unsigned long eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id) {
         sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(eid,src_id1,src_id2,out1,out2,layer_id);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
@@ -317,9 +317,9 @@ extern "C"
         }
     }
 
-    int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(unsigned long eid, int* data, int B, int M, int N) {
+    int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(unsigned long eid, uint32_t* data, int B, int M, int N, int layer_id) {
         int ret_id;
-        sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(eid,data,B,M,N,&ret_id);
+        sgx_status_t ret = ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(eid,data,B,M,N,layer_id,&ret_id);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;
@@ -329,6 +329,14 @@ extern "C"
 
     void Sgx_Pre_Init(unsigned long eid) {
         sgx_status_t ret = ecall_Sgx_Pre_Init(eid);
+        if (ret != SGX_SUCCESS) {
+            print_error_message(ret);
+            throw ret;
+        }
+    }
+
+    void Sgx_Reset(unsigned long eid) {
+        sgx_status_t ret = ecall_Sgx_Reset(eid);
         if (ret != SGX_SUCCESS) {
             print_error_message(ret);
             throw ret;

@@ -3,12 +3,118 @@
 
 #include "Enclave.h"
 #include <immintrin.h>
+#include <chrono>
+#include <numeric>
 
+#include <sgx_trts.h>
+using namespace std;
+
+
+#define MAX_NUM_HEAD 40
 #define MAX_BATCH_SIZE 32
 #define MAX_SEQ_LEN 2048
-#define MAX_EMBED_DIM 5120 * 4
+#define MAX_EMBED_DIM (5120 * 4)
+
+#define SHIFT_AMT 128
+
+#define SECRET_KEY_POOL_SIZE 1024
+
+#define MODULO (1LL << 32)
 
 extern "C" {
+
+uint64_t RepeatedSqr(uint64_t base, uint64_t exp, uint64_t mod) {
+  uint64_t result = 1;
+  base = base % mod;
+  while (exp > 0) {
+    if (exp % 2 == 1) {
+      result = (result * base) % mod;
+    }
+    exp = exp >> 1;
+    base = (base * base) % mod;
+  }
+  return result;
+}
+
+void Sgx_Reset() {
+  z_row_factor = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+  z_col_factor = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+  z_dot_product_factor = std::vector<uint32_t>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+  key_a = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+  key_b = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+  key_c = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+  key_d = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+  x_row_sum_buffer = std::vector<std::vector<int32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+  y_col_sum_buffer = std::vector<std::vector<int32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+  for (int i = 0; i < MAX_NUM_LAYERS; ++i) {
+    x_row_sum_buffer_opt_list[i] = std::vector<std::vector<int32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    y_col_sum_buffer_opt_list[i] = std::vector<std::vector<int32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+    z_row_factor_opt_list[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_col_factor_opt_list[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_dot_product_factor_opt_list[i] = std::vector<uint32_t>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_dot_product_factor_opt_list_done[i] = false;
+
+    key_a_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_b_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_c_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_d_opt_list[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+    x_row_sum_buffer_opt_list2[i] = std::vector<std::vector<int32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    y_col_sum_buffer_opt_list2[i] = std::vector<std::vector<int32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+    z_row_factor_opt_list2[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_col_factor_opt_list2[i] = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_dot_product_factor_opt_list2[i] = std::vector<uint32_t>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    z_dot_product_factor_opt_list_done2[i] = false;
+
+    key_a_opt_list2[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_b_opt_list2[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_c_opt_list2[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+    key_d_opt_list2[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+  }
+}
+
+void Sgx_Pre_Init() {
+  if (mult_key_pool.empty()) {
+    mult_key_pool = std::vector<uint32_t>(SECRET_KEY_POOL_SIZE); // 1D array
+    add_key_pool = std::vector<uint32_t>(SECRET_KEY_POOL_SIZE); // 1D array
+
+    for (int i = 0; i < SECRET_KEY_POOL_SIZE; ++i) {
+      uint32_t prng;
+      while (true) {
+        GetCPRNG((unsigned char*)&prng, sizeof(uint32_t));
+        if (std::gcd(prng, MODULO) == 1) {
+          break;
+        }
+      } 
+      mult_key_pool.at(i) = prng;
+      assert (std::gcd(mult_key_pool.at(i), MODULO) == 1);
+    }
+    GetCPRNG((unsigned char*)add_key_pool.data(), SECRET_KEY_POOL_SIZE * sizeof(uint32_t));
+
+    // Precompute key inv, 2D array
+    mult_key_inv_precompute = std::vector<std::vector<uint32_t>>(SECRET_KEY_POOL_SIZE, std::vector<uint32_t>(SECRET_KEY_POOL_SIZE));
+    for (int i = 0; i < SECRET_KEY_POOL_SIZE; ++i) {
+      for (int j = 0; j < SECRET_KEY_POOL_SIZE; ++j) {
+        uint64_t ab = (uint64_t)mult_key_pool.at(i) * (uint64_t)mult_key_pool.at(j);
+        mult_key_inv_precompute.at(i).at(j) = (uint32_t)RepeatedSqr(ab, (1LL << 31) - 1, MODULO);
+        assert(((uint64_t)mult_key_inv_precompute[i][j] * ab % MODULO) == 1);
+      }
+    }
+  }
+
+  Sgx_Reset();
+
+  if (decryption_key_buffer == NULL) {
+    // Not used now
+    // decryption_key_buffer = CreateTensorInt32(MAX_BATCH_SIZE, MAX_SEQ_LEN, MAX_EMBED_DIM);
+  }
+}
+
 int Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
@@ -330,23 +436,106 @@ int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
 
   return Sgx_Set_Tensor_Int32(data, B, M, N);
 }
-
-void Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1,
-                                      int* out2, int* blind_factor_ids) {
+void Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* out1,
+                                      unsigned int* out2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
+  // auto start = std::chrono::steady_clock::now();
+  // Compute X_Row_Sum
+  share_dim = X->N; // need it for unshifting
 
-  struct TensorInt32* u = CreateTensorInt32(X->B, 1, X->N);
-  GetCPRNG((unsigned char*)u->data, u->num_bytes);
+  for (int i = 0; i < X->B; ++i) {
+    x_row_sum_buffer.at(i).clear();
+    for (int j = 0; j < X->M; ++j) { 
+      int sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += X->data[i * X->M * X->N + j * X->N + k];
+      }
+      x_row_sum_buffer.at(i).push_back(sum);
+    }
+  }
 
-  struct TensorInt32* v = CreateTensorInt32(X->B, 1, Y->N);
-  GetCPRNG((unsigned char*)v->data, v->num_bytes);
+  // Compute Y_Col_sum
+  for (int i = 0; i < Y->B; ++i) {
+    y_col_sum_buffer.at(i).clear();
+    for (int j = 0; j < Y->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+      y_col_sum_buffer.at(i).push_back(sum);
+    }
+  }
+
+
+  // Shift X
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        X->data[i * X->M * X->N + j * X->N + k] += SHIFT_AMT;
+      }
+    }
+  }
+
+  // Shift Y
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        Y->data[i * Y->M * Y->N + j * Y->N + k] += SHIFT_AMT;
+      }
+    }
+  }
+
+  // Randomly sample random keys
+  for (int i = 0; i < X->B; ++i) {
+    key_a.at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_a.at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    key_b.at(i).clear();
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_b.at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < X->B; ++i) {
+    key_c.at(i).clear();
+    for (int j = 0; j < X->N; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_c.at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    key_d.at(i).clear();
+    for (int j = 0; j < Y->N; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_d.at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
 
   // Encrypt X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+        // cout << "Before: " << X->data[i * X->M * X->N + j * X->N + k] << endl;
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a.at(i).at(j).first + key_c.at(i).at(k).first;
+        // cout << "After: " << out1[i * X->M * X->N + j * X->N + k] << endl;
+        // cout << "Used keys : " << key_a.at(i).at(j).first << " " << key_c.at(i).at(k).first << endl;
+        // out1[i * X->M * X->N + j * X->N + k] = (unsigned int)X->data[i * X->M * X->N + j * X->N + k];
       }
     }
   }
@@ -355,71 +544,62 @@ void Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1,
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
-        out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->N + k];
+        // cout << "Before : " << Y->data[i * Y->M * Y->N + j * Y->N + k] << endl;
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_b.at(i).at(j).first + key_d.at(i).at(k).first;
+        // cout << "After : " << out2[i * Y->M * Y->N + j * Y->N + k] << endl;
+        // cout << "Used keys : " << key_b.at(i).at(j).first << " " << key_d.at(i).at(k).first << endl; 
+        // exit(-1);
+        // out2[i * Y->M * Y->N + j * Y->N + k] = (unsigned int)Y->data[i * Y->M * Y->N + j * Y->N + k];
       }
     }
   }
 
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
-  tensor_int32_list[tensor_int32_id] = u;
-  blind_factor_ids[0] = tensor_int32_id;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
-  tensor_int32_list[tensor_int32_id] = v;
-  blind_factor_ids[1] = tensor_int32_id;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
+  // auto end = std::chrono::steady_clock::now();
+  // std::cout << "Time taken for encryption: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 }
 
-void Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2,
-                                        int blind_factor_u_id,
-                                        int blind_factor_v_id) {
+void Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
-
-  struct TensorInt32* u = tensor_int32_list[blind_factor_u_id];
-  struct TensorInt32* v = tensor_int32_list[blind_factor_v_id];
-
-  struct TensorInt32* uy = MatmulS32S32S32_Naive(u, Y);  // B, 1, Y_M
-  struct TensorInt32* xv = MatmulS32S32S32_Naive(X, v);  // B, X_M, 1
-
-
-  struct TensorInt32* uv = MatmulS32S32S32_Naive(u, v);  // B x 1 x 1
-
-  // if (tensor_int32_list[tensor_int32_id] != NULL) {
-  //   DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  // }
-  // struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
-  decryption_key_buffer->B = X->B;
-  decryption_key_buffer->M = X->M;
-  decryption_key_buffer->N = Y->M;
-
+  // auto start = std::chrono::steady_clock::now();
+  assert(X->B == Y->B);
+  // compute x_row_factor, y_col_sum
   for (int i = 0; i < X->B; ++i) {
+    z_row_factor.at(i).clear();
+    z_col_factor.at(i).clear();
+
     for (int j = 0; j < X->M; ++j) {
-      for (int k = 0; k < Y->M; ++k) {
-        decryption_key_buffer->data[i * X->M * Y->M + j * Y->M + k] =uv->data[i] + xv->data[i * X->M + j] + uy->data[i * Y->M + k];
+      uint32_t sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_d.at(i).at(k).first;
       }
+      sum *= key_a.at(i).at(j).first;
+      z_row_factor.at(i).push_back(sum);
     }
+    assert (z_row_factor.at(i).size() == X->M);
+
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_c.at(i).at(k).first;
+      }
+      sum *= key_b.at(i).at(j).first;
+      z_col_factor.at(i).push_back(sum);
+    }
+
+    assert (z_col_factor.at(i).size() == Y->M);
+
+    uint32_t sum = 0;
+    for (int j = 0; j < X->N; ++j) {
+      sum += key_c.at(i).at(j).first * key_d.at(i).at(j).first;
+    }
+    z_dot_product_factor.at(i) = sum;
   }
-
-  DeleteTensorInt32(uy);
-  DeleteTensorInt32(xv);
-  DeleteTensorInt32(uv);
-
-  // int curr_id = tensor_int32_id;
-  // tensor_int32_list[curr_id] = decryption_key;
-  // tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  // return curr_id;
+  // auto end = std::chrono::steady_clock::now();
+  // std::cout << "Time taken for decryption key generation: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 }
 
-int Sgx_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N) {
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
+int Sgx_Set_Decrypted_Tensor_QK_Int32(unsigned int* data, int B, int M, int N) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
@@ -427,32 +607,131 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N) {
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k] - decryption_key_buffer->data[i * M * N + j * N + k];
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor.at(i).at(j) - z_col_factor.at(i).at(k) - z_dot_product_factor.at(i);
+        tmp = (tmp * mult_key_inv_precompute.at(key_a.at(i).at(j).second).at(key_b.at(i).at(k).second)) % MODULO;
+        tensor->data[i * M * N + j * N + k] = (int)tmp;
       }
     }
   }
 
+  // Undo shift 
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer.at(i).at(j) + y_col_sum_buffer.at(i).at(k) + share_dim * SHIFT_AMT);
+        tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
+      }
+    }
+  }
+
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = tensor;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
 
-void Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1,
-                                      int* out2, int* blind_factor_ids) {
+void Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* out1,
+                                      unsigned int* out2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
-  struct TensorInt32* u = CreateTensorInt32(X->B, 1, X->N);
-  GetCPRNG((unsigned char*)u->data, u->num_bytes);
-  struct TensorInt32* v = CreateTensorInt32(X->B, 1, Y->M);
-  GetCPRNG((unsigned char*)v->data, v->num_bytes);
+  // struct TensorInt32* u = CreateTensorInt32(X->B, 1, X->N);
+  // GetCPRNG((unsigned char*)u->data, u->num_bytes);
+  // struct TensorInt32* v = CreateTensorInt32(X->B, 1, Y->M);
+  // GetCPRNG((unsigned char*)v->data, v->num_bytes);
+
+  share_dim = X->N;
+  // Compute x_row_sum
+  for (int i = 0; i < X->B; ++i) {
+    x_row_sum_buffer.at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += X->data[i * X->M * X->N + j * X->N + k];
+      }
+      x_row_sum_buffer.at(i).push_back(sum);
+    }
+  }
+
+  // Compute y_row_sum
+  for (int i = 0; i < Y->B; ++i) {
+    y_col_sum_buffer.at(i).clear();
+    for (int j = 0; j < Y->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+      y_col_sum_buffer.at(i).push_back(sum);
+    }
+  }
+
+  // Shift X
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        X->data[i * X->M * X->N + j * X->N + k] += SHIFT_AMT;
+      }
+    }
+  }
+
+  // Shift Y
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        Y->data[i * Y->M * Y->N + j * Y->N + k] += SHIFT_AMT;
+      }
+    }
+  }
+
+  // Randomly sample random keys
+  for (int i = 0; i < X->B; ++i) {
+    key_a.at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_a.at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    key_b.at(i).clear();
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_b.at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < X->B; ++i) {
+    key_c.at(i).clear();
+    for (int j = 0; j < X->N; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_c.at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    key_d.at(i).clear();
+    for (int j = 0; j < Y->N; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_d.at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
 
   // Encrypt X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] =X->data[i * X->M * X->N + j * X->N + k] + u->data[i * X->N + k];
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a.at(i).at(j).first + key_c.at(i).at(k).first;
       }
     }
   }
@@ -461,97 +740,53 @@ void Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1,
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
-        out2[i * Y->M * Y->N + j * Y->N + k] =Y->data[i * Y->M * Y->N + j * Y->N + k] + v->data[i * Y->M + j];
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_b.at(i).at(j).first + key_d.at(i).at(k).first;
       }
     }
   }
-
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
-  tensor_int32_list[tensor_int32_id] = u;
-  blind_factor_ids[0] = tensor_int32_id;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
-  tensor_int32_list[tensor_int32_id] = v;
-  blind_factor_ids[1] = tensor_int32_id;
-  tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
 }
 
-void Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2,
-                                        int blind_factor_u_id,
-                                        int blind_factor_v_id) {
+void Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
-
-  struct TensorInt32* u = tensor_int32_list[blind_factor_u_id];
-  struct TensorInt32* v = tensor_int32_list[blind_factor_v_id];
-
-  struct TensorInt32* uy = MatmulS32S32S32_Naive(u, Y);  // B, 1, Y_M
-
-  struct TensorInt32* xv = CreateTensorInt32(X->B, X->M, Y->M);
-
+  // auto start = std::chrono::steady_clock::now();
+  // jump
+  assert(X->B == Y->B);
+  // compute x_row_factor, y_col_sum
   for (int i = 0; i < X->B; ++i) {
+    z_row_factor.at(i).clear();
+    z_col_factor.at(i).clear();
+
     for (int j = 0; j < X->M; ++j) {
-      int sum = 0;
+      uint32_t sum = 0;
       for (int k = 0; k < X->N; ++k) {
-        sum += X->data[i * X->M * X->N + j * X->N + k];
+        sum += (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_d.at(i).at(k).first;
       }
-
-      for (int k = 0; k < Y->M; ++k) {
-        xv->data[i * X->M * Y->M + j * Y->M + k] = sum * v->data[i * Y->M + k];
-      }
+      sum *= key_a.at(i).at(j).first;
+      z_row_factor.at(i).push_back(sum);
     }
-  }
-
-  struct TensorInt32* uv = CreateTensorInt32(X->B, 1, Y->M);
-  for (int i = 0; i < X->B; ++i) {
-    int sum = 0;
-    for (int j = 0; j < X->N; ++j) {
-      sum += u->data[i * X->N + j];
-    }
+    assert (z_row_factor.at(i).size() == X->M);
 
     for (int j = 0; j < Y->M; ++j) {
-      uv->data[i * Y->M + j] = sum * v->data[i * Y->M + j];
-    }
-  }
-
-  // if (tensor_int32_list[tensor_int32_id] != NULL) {
-  //   DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  // }
-
-  // struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
-  decryption_key_buffer->B = X->B;
-  decryption_key_buffer->M = X->M;
-  decryption_key_buffer->N = Y->M;
-
-  for (int i = 0; i < X->B; ++i) {
-    for (int j = 0; j < X->M; ++j) {
-      for (int k = 0; k < Y->M; ++k) {
-        decryption_key_buffer->data[i * X->M * Y->M + j * Y->M + k] =
-            uv->data[i * Y->M + k] + xv->data[i * X->M * Y->M + j * Y->M + k] +
-            uy->data[i * Y->M + k];
+      uint32_t sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_c.at(i).at(k).first;
       }
+      sum *= key_b.at(i).at(j).first;
+      z_col_factor.at(i).push_back(sum);
     }
+
+    assert (z_col_factor.at(i).size() == Y->M);
+
+    uint32_t sum = 0;
+    for (int j = 0; j < X->N; ++j) {
+      sum += key_c.at(i).at(j).first * key_d.at(i).at(j).first;
+    }
+    z_dot_product_factor.at(i) = sum;
   }
-
-  DeleteTensorInt32(uy);
-  DeleteTensorInt32(xv);
-  DeleteTensorInt32(uv);
-
-  // int curr_id = tensor_int32_id;
-  // tensor_int32_list[curr_id] = decryption_key;
-  // tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  // return curr_id;
 }
 
-int Sgx_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N) {
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  }
+int Sgx_Set_Decrypted_Tensor_PV_Int32(unsigned int* data, int B, int M, int N) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
@@ -559,14 +794,26 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N) {
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        tensor->data[i * M * N + j * N + k] =
-            data[i * M * N + j * N + k] -
-            decryption_key_buffer->data[i * M * N + j * N + k];
-        tensor->data[i * M * N + j * N + k] = tensor->data[i * M * N + j * N + k];
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor.at(i).at(j) - z_col_factor.at(i).at(k) - z_dot_product_factor.at(i);
+        tmp = (tmp * mult_key_inv_precompute.at(key_a.at(i).at(j).second).at(key_b.at(i).at(k).second)) % MODULO;
+        tensor->data[i * M * N + j * N + k] = (int)tmp;
       }
     }
   }
 
+  // Undo shift 
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer.at(i).at(j) + y_col_sum_buffer.at(i).at(k) + share_dim * SHIFT_AMT);
+        tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
+      }
+    }
+  }
+
+  if (tensor_int32_list[tensor_int32_id] != NULL) {
+    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  }
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = tensor;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
@@ -574,38 +821,123 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N) {
 }
 
 void Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
-                                                   int* out1, int* out2,
+                                                   uint32_t* out1, uint32_t* out2,
                                                    int layer_id) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
-  // Generate blind factors if first time
-  if (qk_blind_factor_u_list[layer_id] == NULL) {
-    qk_blind_factor_u_list[layer_id] = CreateTensorInt32(X->B, 1, X->N);
-    GetCPRNG((unsigned char*)qk_blind_factor_u_list[layer_id]->data,
-             qk_blind_factor_u_list[layer_id]->num_bytes);
 
-    qk_blind_factor_v_list[layer_id] = CreateTensorInt32(X->B, 1, Y->N);
-    GetCPRNG((unsigned char*)qk_blind_factor_v_list[layer_id]->data,
-             qk_blind_factor_v_list[layer_id]->num_bytes);
+  // x_row_sum[b][x_m] = sum(X[b][x_m][x_n]), must do it every time, x does not reused
+  // y_col_sum[b][y_m] = sum(Y[b][y_m][y_n]), compute new part and concat
+
+  // Compute X_Row_Sum
+
+    // Later, must separate to handle different seq_len for each batch 
+  share_dim = X->N; // for QK, it is fixed
+
+  for (int i = 0; i < X->B; ++i) {
+    x_row_sum_buffer_opt_list[layer_id].at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += X->data[i * X->M * X->N + j * X->N + k];
+      }
+      x_row_sum_buffer_opt_list[layer_id].at(i).push_back(sum);
+    }
   }
 
-  // Encrypt X
+  // Compute Y_Col_sum
+  for (int i = 0; i < Y->B; ++i) {
+    // y_col_sum_buffer.at(i).clear(); // dont clear, must be stacked
+    for (int j = 0; j < Y->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+      y_col_sum_buffer_opt_list[layer_id].at(i).push_back(sum);
+    }
+  }
+
+  // Shift X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] = X->data[i * X->M * X->N + j * X->N + k] +
-                      qk_blind_factor_u_list[layer_id]->data[i * X->N + k];
+        X->data[i * X->M * X->N + j * X->N + k] += SHIFT_AMT;
       }
     }
   }
 
-  // Encrypt Y
+  // Shift Y
   for (int i = 0; i < Y->B; ++i) {
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
-        out2[i * Y->M * Y->N + j * Y->N + k] = Y->data[i * Y->M * Y->N + j * Y->N + k] +
-                      qk_blind_factor_v_list[layer_id]->data[i * Y->N + k];
+        Y->data[i * Y->M * Y->N + j * Y->N + k] += SHIFT_AMT;
+      }
+    }
+  }
+
+  // Randomly sample random keys, must be sampled every time
+  for (int i = 0; i < X->B; ++i) {
+    key_a_opt_list[layer_id].at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_a_opt_list[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    // key_b.at(i).clear(); // dont clear, must be stacked
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_b_opt_list[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  // Keys c and d only sampled first time, D does not increase
+  for (int i = 0; i < X->B; ++i) {
+    if (key_c_opt_list[layer_id].at(i).empty()) {
+      for (int j = 0; j < X->N; ++j) {
+        uint32_t idx;
+        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        idx = idx % SECRET_KEY_POOL_SIZE;
+        key_c_opt_list[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    } 
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    if (key_d_opt_list[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->N; ++j) {
+        uint32_t idx;
+        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        idx = idx % SECRET_KEY_POOL_SIZE;
+        key_d_opt_list[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    }
+  }
+
+  // Encrypt X as usual
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        // out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k];
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a_opt_list[layer_id].at(i).at(j).first + key_c_opt_list[layer_id].at(i).at(k).first;
+      }
+    }
+  }
+
+  // Encrypt Y must use the last b BE CAREFUL!!!, Only during generation
+  for (int i = 0; i < Y->B; ++i) {
+    bool is_gen = Y->M == 1; // if Y_M is 1, then it is generation phase  
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t b = is_gen ? key_b_opt_list[layer_id].at(i).back().first : key_b_opt_list[layer_id].at(i).at(j).first;
+      for (int k = 0; k < Y->N; ++k) {
+        // out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k];
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * b + key_d_opt_list[layer_id].at(i).at(k).first;
       }
     }
   }
@@ -616,89 +948,80 @@ void Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
 
-  // printf("X: %d %d %d\n", X->B, X->M, X->N);
-  // printf("Y: %d %d %d\n", Y->B, Y->M, Y->N);
-  
-  struct TensorInt32* uy =
-      MatmulS32S32S32_Naive(qk_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
-  struct TensorInt32* xv =
-      MatmulS32S32S32_Naive(X, qk_blind_factor_v_list[layer_id]);  // B, X_M, 1
+  // z_row_factor is used once
+  // z_col_factor must be stacked
 
-  // printf("uy shape %d %d %d\n", uy->B, uy->M, uy->N);
-  // printf("xv shape %d %d %d\n", xv->B, xv->M, xv->N);
-
-  if (qk_uv_dot_list[layer_id] == NULL) {
-    qk_uv_dot_list[layer_id] =
-        MatmulS32S32S32_Naive(qk_blind_factor_u_list[layer_id],
-                        qk_blind_factor_v_list[layer_id]);  // B x 1 x 1
-    qk_uy_unblind_factor_accum_list[layer_id] = uy;
-  } else {
-    // concat uy to qk_uy_unblind_factor_accum, to the last dimension of
-    // qk_uy_unblind_factor_accum
-    struct TensorInt32* new_uy =
-        CreateTensorInt32(qk_uy_unblind_factor_accum_list[layer_id]->B, 1,
-                          qk_uy_unblind_factor_accum_list[layer_id]->N + 1);
-    // printf("qk uy shape %d %d %d\n", qk_uy_unblind_factor_accum_list[layer_id]->B, qk_uy_unblind_factor_accum_list[layer_id]->M, qk_uy_unblind_factor_accum_list[layer_id]->N);           
-    // printf("new uy shape %d %d %d\n", uy->B, uy->M, uy->N);
-    for (int i = 0; i < qk_uy_unblind_factor_accum_list[layer_id]->B; ++i) {
-      for (int j = 0; j < qk_uy_unblind_factor_accum_list[layer_id]->N; ++j) {
-        new_uy
-            ->data[i * (qk_uy_unblind_factor_accum_list[layer_id]->N + 1) + j] =
-            qk_uy_unblind_factor_accum_list[layer_id]
-                ->data[i * qk_uy_unblind_factor_accum_list[layer_id]->N + j];
-      }
-      new_uy->data[i * (qk_uy_unblind_factor_accum_list[layer_id]->N + 1) +
-                   qk_uy_unblind_factor_accum_list[layer_id]->N] = uy->data[i];
-    }
-
-    DeleteTensorInt32(qk_uy_unblind_factor_accum_list[layer_id]);
-    qk_uy_unblind_factor_accum_list[layer_id] = new_uy;
-    // printf("after make uy shape %d %d %d\n", qk_uy_unblind_factor_accum_list[layer_id]->B, qk_uy_unblind_factor_accum_list[layer_id]->M, qk_uy_unblind_factor_accum_list[layer_id]->N);
-  }
-
-  // Y->m , Dont use
-  // struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, qk_uy_unblind_factor_accum_list[layer_id]->N);
-  decryption_key_buffer->B = X->B;
-  decryption_key_buffer->M = X->M;
-  decryption_key_buffer->N = qk_uy_unblind_factor_accum_list[layer_id]->N;
-  
   for (int i = 0; i < X->B; ++i) {
+    z_row_factor_opt_list[layer_id].at(i).clear();
+
+    // Z COL FACTOR MUST BE STACKED
+    // z_col_factor_opt_list[layer_id].at(i).clear(); 
+
     for (int j = 0; j < X->M; ++j) {
-      for (int k = 0; k < qk_uy_unblind_factor_accum_list[layer_id]->N; ++k) {
-        decryption_key_buffer->data[i * X->M * qk_uy_unblind_factor_accum_list[layer_id]->N + j * qk_uy_unblind_factor_accum_list[layer_id]->N + k] =
-            qk_uv_dot_list[layer_id]->data[i] +
-                      xv->data[i * X->M + j] +
-                      qk_uy_unblind_factor_accum_list[layer_id]
-                          ->data[i * qk_uy_unblind_factor_accum_list[layer_id]->N + k];
+      uint32_t sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_d_opt_list[layer_id].at(i).at(k).first;
       }
+      sum *= key_a_opt_list[layer_id].at(i).at(j).first;
+      z_row_factor_opt_list[layer_id].at(i).push_back(sum);
+    }
+
+    // Z COL FACTOR MUST BE STACKED
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t sum = 0;
+      for (int k = 0; k < Y->N; ++k) {
+        sum += (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_c_opt_list[layer_id].at(i).at(k).first;
+      }
+      bool is_gen = Y->M == 1; // if Y_M is 1, then it is generation phase
+      uint32_t b = is_gen ? key_b_opt_list[layer_id].at(i).back().first : key_b_opt_list[layer_id].at(i).at(j).first;
+
+      sum *= b; // use the last one, during gen
+      z_col_factor_opt_list[layer_id].at(i).push_back(sum);
     }
   }
-  // printf("decryption_key shape %d %d %d\n", decryption_key->B, decryption_key->M, decryption_key->N);
 
-  // int curr_id = tensor_int32_id;
-  // if (tensor_int32_list[tensor_int32_id] != NULL) {
-  //   DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  // }
-  // tensor_int32_list[curr_id] = decryption_key;
-  // tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-  // return curr_id;
+  if (z_dot_product_factor_opt_list_done[layer_id] == false) {
+    for (int i = 0; i < X->B; ++i) {
+      uint32_t sum = 0;
+      for (int j = 0; j < X->N; ++j) {
+        sum += key_c_opt_list[layer_id].at(i).at(j).first * key_d_opt_list[layer_id].at(i).at(j).first;
+      }
+      z_dot_product_factor_opt_list[layer_id].at(i) = sum;
+    }
+    z_dot_product_factor_opt_list_done[layer_id] = true;
+  }
 }
 
-int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
-                                                  int N) {
+int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
+                                                  int N, int layer_id) {
   // printf("B %d M %d N %d\n", B, M, N);
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
-
+  // auto start  = std::chrono::steady_clock::now();
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+
+  // bool is_gen = M == 1; // if Y_M is 1, then it is generation phase
+
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
       for (int k = 0; k < N; ++k) {
-        tensor->data[i * M * N + j * N + k] =data[i * M * N + j * N + k] -
-                      decryption_key_buffer->data[i * M * N + j * N + k];
+        int b_index = key_b_opt_list[layer_id].at(i).at(k).second;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor_opt_list[layer_id].at(i).at(j) - z_col_factor_opt_list[layer_id].at(i).at(k) - z_dot_product_factor_opt_list[layer_id].at(i);
+        tmp = (tmp * mult_key_inv_precompute.at(key_a_opt_list[layer_id].at(i).at(j).second).at(b_index)) % MODULO;
+        tensor->data[i * M * N + j * N + k] = (int) tmp;
       }
     }
   }
 
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer_opt_list[layer_id].at(i).at(j) + y_col_sum_buffer_opt_list[layer_id].at(i).at(k) + share_dim * SHIFT_AMT);
+        tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
+      }
+    }
+  }
+  // auto end = std::chrono::steady_clock::now();
+  // std::cout << "Time taken for decryption: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
@@ -709,72 +1032,142 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M,
 }
 
 void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
-                                                   int* out1, int* out2,
+                                                   uint32_t* out1, uint32_t* out2,
                                                    int layer_id) {
   // auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
 
-  // printf("X Enc state: %d %d %d\n", X->B, X->M, X->N);
-  // printf("Y Enc State: %d %d %d\n", Y->B, Y->N, Y->M);
-
-  // Generate blind factors if first time
-  if (pv_blind_factor_u_list[layer_id] == NULL) {
-    pv_blind_factor_u_list[layer_id] = CreateTensorInt32(X->B, 1, X->N);
-    GetCPRNG((unsigned char*)pv_blind_factor_u_list[layer_id]->data,
-             pv_blind_factor_u_list[layer_id]->num_bytes);
-
-    pv_blind_factor_v_list[layer_id] = CreateTensorInt32(X->B, 1, Y->M);
-    GetCPRNG((unsigned char*)pv_blind_factor_v_list[layer_id]->data,
-             pv_blind_factor_v_list[layer_id]->num_bytes);
-  } else {
-    // Copy all previous values of pv_blind_factor_u and append new random value
-    struct TensorInt32* new_blind_factor_u =
-        CreateTensorInt32(pv_blind_factor_u_list[layer_id]->B, 1,
-                          pv_blind_factor_u_list[layer_id]->N + 1);
-    int B = pv_blind_factor_u_list[layer_id]->B;
-    int N = pv_blind_factor_u_list[layer_id]->N;
-
-    for (int i = 0; i < B; ++i) {
-      // Copy existing data
-      for (int j = 0; j < N; ++j) {
-        new_blind_factor_u->data[i * (N + 1) + j] =
-            pv_blind_factor_u_list[layer_id]->data[i * N + j];
+  share_dim_pv_opt = X->N; // for PV, it is increasing
+  
+  // Compute X_Row_Sum
+  for (int i = 0; i < X->B; ++i) {
+    x_row_sum_buffer_opt_list2[layer_id].at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      int sum = 0;
+      for (int k = 0; k < X->N; ++k) {
+        sum += X->data[i * X->M * X->N + j * X->N + k];
       }
-      GetCPRNG((unsigned char*)&new_blind_factor_u->data[i * (N + 1) + N],
-               sizeof(int));
+      x_row_sum_buffer_opt_list2[layer_id].at(i).push_back(sum);
     }
-
-    DeleteTensorInt32(pv_blind_factor_u_list[layer_id]);
-    pv_blind_factor_u_list[layer_id] = new_blind_factor_u;
   }
 
+  // cout << "X dim : " << X->B << " " << X->M << " " << X->N << endl; // " " << X->M << " " << X->N << "
+  // cout << "Y dim : " << Y->B << " " << Y->M << " " << Y->N << endl;
+  // Compute Y_Col_Sum, you dont grow, but accumulate
+  for (int i = 0; i < Y->B; ++i) {
+    // y_col_sum_buffer_opt_list[layer_id].at(i).clear();
+    if (y_col_sum_buffer_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->M; ++j) {
+        y_col_sum_buffer_opt_list2[layer_id].at(i).push_back(0);
+      }
+      assert (y_col_sum_buffer_opt_list2[layer_id].at(i).size() == Y->M);
+    }
+
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        y_col_sum_buffer_opt_list2[layer_id].at(i).at(j) += Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+      // cout << j << " : " <<  y_col_sum_buffer_opt_list2[layer_id].at(i).at(j) << "\n";
+    }
+  }
+
+  // SHIFT x
+  for (int i = 0; i < X->B; ++i) {
+    for (int j = 0; j < X->M; ++j) {
+      for (int k = 0; k < X->N; ++k) {
+        X->data[i * X->M * X->N + j * X->N + k] += SHIFT_AMT;
+        // out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k];
+      }
+    }
+  }
+
+  // SHIFT Y
+  for (int i = 0; i < Y->B; ++i) {
+    for (int j = 0; j < Y->M; ++j) {
+      for (int k = 0; k < Y->N; ++k) {
+        Y->data[i * Y->M * Y->N + j * Y->N + k] += SHIFT_AMT;
+        // out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k];
+      }
+    }
+  }
+
+  for (int i = 0; i < X->B; ++i) {
+    key_a_opt_list2[layer_id].at(i).clear();
+    for (int j = 0; j < X->M; ++j) {
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_a_opt_list2[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    // you only sample one time, Y->B does not increase
+    if (key_b_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->M; ++j) {
+        uint32_t idx;
+        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        idx = idx % SECRET_KEY_POOL_SIZE;
+        key_b_opt_list2[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
+      }
+    }
+  }
+
+  for (int i = 0; i < X->B; ++i) {
+    // it increases 
+    if (key_c_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < X->N; ++j) {
+        uint32_t idx;
+        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        idx = idx % SECRET_KEY_POOL_SIZE;
+        key_c_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    } else {
+      // sample 1
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_c_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
+
+  for (int i = 0; i < Y->B; ++i) {
+    if (key_d_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->N; ++j) {
+        uint32_t idx;
+        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        idx = idx % SECRET_KEY_POOL_SIZE;
+        key_d_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+      }
+    } else {
+      // sample 1
+      uint32_t idx;
+      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      idx = idx % SECRET_KEY_POOL_SIZE;
+      key_d_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
+    }
+  }
 
   // Encrypt X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] =X->data[i * X->M * X->N + j * X->N + k] +
-                      pv_blind_factor_u_list[layer_id]->data[i * X->N + k];
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a_opt_list2[layer_id].at(i).at(j).first + key_c_opt_list2[layer_id].at(i).at(k).first;
       }
     }
   }
-
 
   // Encrypt Y
-
   for (int i = 0; i < Y->B; ++i) {
+    bool is_gen = Y->N == 1; // if Y_N is 1, then it is generation phase
     for (int j = 0; j < Y->M; ++j) {
       for (int k = 0; k < Y->N; ++k) {
-        out2[i * Y->M * Y->N + j * Y->N + k] =Y->data[i * Y->M * Y->N + j * Y->N + k] +
-                      pv_blind_factor_v_list[layer_id]->data[i * Y->M + j];
+        uint32_t d = is_gen ? key_d_opt_list2[layer_id].at(i).back().first : key_d_opt_list2[layer_id].at(i).at(k).first;
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_b_opt_list2[layer_id].at(i).at(j).first + d;
       }
     }
   }
-
-  // auto end = std::chrono::steady_clock::now();
-  // auto diff = end - start;
-  // printf("Enc time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
 }
 
 void Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
@@ -782,135 +1175,86 @@ void Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   // auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
-
-  struct TensorInt32* xv = CreateTensorInt32(X->B, X->M, Y->M);
-
-  // Calculate sum and multiply without vectorization
+ 
   for (int i = 0; i < X->B; ++i) {
+    // z_row_factor is trivial
+    z_row_factor_opt_list2[layer_id].at(i).clear();
     for (int j = 0; j < X->M; ++j) {
-      int sum = 0;
+      uint32_t sum = 0;
       for (int k = 0; k < X->N; ++k) {
-        sum += X->data[i * X->M * X->N + j * X->N + k];
+        sum += (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_d_opt_list2[layer_id].at(i).at(k).first;
       }
-      for (int k = 0; k < Y->M; ++k) {
-        xv->data[i * X->M * Y->M + j * Y->M + k] = sum * pv_blind_factor_v_list[layer_id]->data[i * Y->M + k];
+      sum *= key_a_opt_list2[layer_id].at(i).at(j).first;
+      z_row_factor_opt_list2[layer_id].at(i).push_back(sum);
+    }
+
+    // Not stacked like QK but updated
+    if (z_col_factor_opt_list2[layer_id].at(i).empty()) {
+      for (int j = 0; j < Y->M; ++j) {
+        z_col_factor_opt_list2[layer_id].at(i).push_back(0);
       }
+    }
+
+    for (int j = 0; j < Y->M; ++j) {
+      uint32_t sum = 0;
+
+      bool is_gen = Y->N == 1; // if Y_N is 1, then it is generation phase
+      for (int k = 0; k < Y->N; ++k) {
+        uint32_t c = is_gen ? key_c_opt_list2[layer_id].at(i).back().first : key_c_opt_list2[layer_id].at(i).at(k).first;
+        sum += (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * c;
+      }
+      sum *= key_b_opt_list2[layer_id].at(i).at(j).first;
+      z_col_factor_opt_list2[layer_id].at(i).at(j) += sum;
     }
   }
 
-  if (pv_uv_unblind_factor_accum_list[layer_id] == NULL) {
-    pv_uy_unblind_factor_accum_list[layer_id] =
-        MatmulS32S32S32_Naive(pv_blind_factor_u_list[layer_id], Y);  // B, 1, Y_M
-    pv_uv_unblind_factor_accum_list[layer_id] =
-        CreateTensorInt32(X->B, 1, Y->M);  // B, 1, Y_M
-
+  if (z_dot_product_factor_opt_list_done2[layer_id] == false) {
     for (int i = 0; i < X->B; ++i) {
-      int sum = 0;
+      uint32_t sum = 0;
       for (int j = 0; j < X->N; ++j) {
-        sum += pv_blind_factor_u_list[layer_id]->data[i * X->N + j];
+        sum += key_c_opt_list2[layer_id].at(i).at(j).first * key_d_opt_list2[layer_id].at(i).at(j).first;
       }
-      for (int j = 0; j < Y->M; ++j) {
-        pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + j] =sum * pv_blind_factor_v_list[layer_id]->data[i * Y->M + j];
-      }
+      z_dot_product_factor_opt_list2[layer_id].at(i) = sum;
     }
+    z_dot_product_factor_opt_list_done2[layer_id] = true;
   } else {
-    // Update pv_uy_unblind_factor_accum
+    // update with newly added add keys
     for (int i = 0; i < X->B; ++i) {
-      int u_last = pv_blind_factor_u_list[layer_id]->data[i * X->N + X->N - 1];
-      for (int j = 0; j < Y->M; ++j) {
-        pv_uy_unblind_factor_accum_list[layer_id]->data[i * Y->M + j] += u_last * Y->data[i * Y->M + j];;
-        pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + j] +=u_last * pv_blind_factor_v_list[layer_id]->data[i * Y->M + j];
-      }
+      z_dot_product_factor_opt_list2[layer_id].at(i) += key_c_opt_list2[layer_id].at(i).back().first * key_d_opt_list2[layer_id].at(i).back().first;
     }
   }
-
-  // struct TensorInt32* decryption_key = CreateTensorInt32(X->B, X->M, Y->M);
-  decryption_key_buffer->B = X->B;
-  decryption_key_buffer->M = X->M;
-  decryption_key_buffer->N = Y->M;
-
-  for (int i = 0; i < X->B; ++i) {
-    for (int j = 0; j < X->M; ++j) {
-      for (int k = 0; k < Y->M; ++k) {
-        decryption_key_buffer->data[i * X->M * Y->M + j * Y->M + k] =pv_uv_unblind_factor_accum_list[layer_id]->data[i * Y->M + k] +
-                      xv->data[i * X->M * Y->M + j * Y->M + k] +
-                      pv_uy_unblind_factor_accum_list[layer_id]->data[i * Y->M + k];
-      }
-    }
-  }
-
-  // int curr_id = tensor_int32_id;
-  // if (tensor_int32_list[tensor_int32_id] != NULL) {
-  //   DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
-  // }
-  // tensor_int32_list[curr_id] = decryption_key;
-  // tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
-
-  // // auto end = std::chrono::steady_clock::now();
-  // // auto diff = end - start;
-  // // printf("Gen Dec time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
-  // return curr_id;
 }
 
-int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M,
-                                                  int N) {
+int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
+                                                  int N, int layer_id) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
-  int total_elements = decryption_key_buffer->B * decryption_key_buffer->M * decryption_key_buffer->N;
 
-  // Process data without vectorization
-  for (int idx = 0; idx < total_elements; ++idx) {
-    tensor->data[idx] =  data[idx] - decryption_key_buffer->data[idx];
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        int b_index = key_b_opt_list2[layer_id].at(i).at(k).second;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor_opt_list2[layer_id].at(i).at(j) - z_col_factor_opt_list2[layer_id].at(i).at(k) - z_dot_product_factor_opt_list2[layer_id].at(i);
+        tmp = (tmp * mult_key_inv_precompute.at(key_a_opt_list2[layer_id].at(i).at(j).second).at(b_index)) % MODULO;
+        tensor->data[i * M * N + j * N + k] = (int) tmp;
+      }
+    }
   }
 
-  if (tensor_int32_list[tensor_int32_id] != NULL) {
-    DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
+  for (int i = 0; i < B; ++i) {
+    for (int j = 0; j < M; ++j) {
+      for (int k = 0; k < N; ++k) {
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer_opt_list2[layer_id].at(i).at(j) + y_col_sum_buffer_opt_list2[layer_id].at(i).at(k) + share_dim_pv_opt * SHIFT_AMT);
+        tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
+        // tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k];
+      }
+    }
   }
+
   int curr_id = tensor_int32_id;
   tensor_int32_list[curr_id] = tensor;
   tensor_int32_id = (tensor_int32_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
-}
-
-void Sgx_Pre_Init() {
-  for (int i = 0; i < STATIC_LIST_LEN; ++i) {
-    if (qk_blind_factor_u_list[i] != NULL) {
-      DeleteTensorInt32(qk_blind_factor_u_list[i]);
-      qk_blind_factor_u_list[i] = NULL;
-    }
-    if (qk_blind_factor_v_list[i] != NULL) {
-      DeleteTensorInt32(qk_blind_factor_v_list[i]);
-      qk_blind_factor_v_list[i] = NULL;
-    }
-    if (qk_uy_unblind_factor_accum_list[i] != NULL) {
-      DeleteTensorInt32(qk_uy_unblind_factor_accum_list[i]);
-      qk_uy_unblind_factor_accum_list[i] = NULL;
-    }
-    if (qk_uv_dot_list[i] != NULL) {
-      DeleteTensorInt32(qk_uv_dot_list[i]);
-      qk_uv_dot_list[i] = NULL;
-    }
-    if (pv_blind_factor_u_list[i] != NULL) {
-      DeleteTensorInt32(pv_blind_factor_u_list[i]);
-      pv_blind_factor_u_list[i] = NULL;
-    }
-    if (pv_blind_factor_v_list[i] != NULL) {
-      DeleteTensorInt32(pv_blind_factor_v_list[i]);
-      pv_blind_factor_v_list[i] = NULL;
-    }
-    if (pv_uy_unblind_factor_accum_list[i] != NULL) {
-      DeleteTensorInt32(pv_uy_unblind_factor_accum_list[i]);
-      pv_uy_unblind_factor_accum_list[i] = NULL;
-    }
-    if (pv_uv_unblind_factor_accum_list[i] != NULL) {
-      DeleteTensorInt32(pv_uv_unblind_factor_accum_list[i]);
-      pv_uv_unblind_factor_accum_list[i] = NULL;
-    }
-  }
-
-  if (decryption_key_buffer == NULL) {
-    decryption_key_buffer = CreateTensorInt32(MAX_BATCH_SIZE, MAX_SEQ_LEN, MAX_EMBED_DIM);
-  }
 }
 
 int Sgx_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
@@ -1355,27 +1699,27 @@ int Sgx_CPU_Bmm(int src_id1, int src_id2) {
 }
 
 
-void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
-  Sgx_Get_Encrypted_Tensor_QK_Int32(src_id1,src_id2,out1,out2,blind_factor_ids);
+void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2) {
+  Sgx_Get_Encrypted_Tensor_QK_Int32(src_id1,src_id2,out1,out2);
 }
 
-void ecall_Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id) {
-  Sgx_Generate_Decryption_Key_QK_Int32(src_id1,src_id2,blind_factor_u_id,blind_factor_v_id);
+void ecall_Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2) {
+  Sgx_Generate_Decryption_Key_QK_Int32(src_id1,src_id2);
 }
 
-void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(int* data, int B, int M, int N, int* ret_id) {
+void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(uint32_t* data, int B, int M, int N, int* ret_id) {
   *ret_id = Sgx_Set_Decrypted_Tensor_QK_Int32(data,B,M,N);
 }
 
-void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids) {
-  Sgx_Get_Encrypted_Tensor_PV_Int32(src_id1,src_id2,out1,out2,blind_factor_ids);
+void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2) {
+  Sgx_Get_Encrypted_Tensor_PV_Int32(src_id1,src_id2,out1,out2);
 }
 
-void ecall_Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id) {
-  Sgx_Generate_Decryption_Key_PV_Int32(src_id1,src_id2,blind_factor_u_id,blind_factor_v_id);
+void ecall_Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2) {
+  Sgx_Generate_Decryption_Key_PV_Int32(src_id1,src_id2);
 }
 
-void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(int* data, int B, int M, int N, int* ret_id) {
+void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(uint32_t* data, int B, int M, int N, int* ret_id) {
   *ret_id = Sgx_Set_Decrypted_Tensor_PV_Int32(data,B,M,N);
 }
 
@@ -1495,7 +1839,7 @@ void ecall_Sgx_Residual_Add(int residual, int hidden_states, int* ret_id) {
   *ret_id = Sgx_Residual_Add(residual,hidden_states);
 }
 
-void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int* out1, int* out2, int layer_id) {
+void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id) {
   Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(src_id1, src_id2, out1, out2, layer_id);
 }
 
@@ -1503,11 +1847,11 @@ void ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int sr
   Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id);
 }
 
-void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(data, B, M, N);
+void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M, int N, int layer_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(data, B, M, N, layer_id);
 }
 
-void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int* out1, int* out2, int layer_id) {
+void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id) {
   Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(src_id1, src_id2, out1, out2, layer_id);
 }
 
@@ -1515,12 +1859,16 @@ void ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int sr
   Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id);
 }
 
-void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(int* data, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(data, B, M, N);
+void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M, int N, int layer_id, int* ret_id) {
+  *ret_id = Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(data, B, M, N, layer_id);
 }
 
 void ecall_Sgx_Pre_Init() {
   Sgx_Pre_Init();
+}
+
+void ecall_Sgx_Reset() {
+  Sgx_Reset();
 }
 
 void ecall_Sgx_CPU_Bmm(int src_id1, int src_id2, int* ret_id) {

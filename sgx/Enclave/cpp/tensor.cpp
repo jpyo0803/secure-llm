@@ -7,6 +7,37 @@
 
 extern "C" {
 
+struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M,
+                                                int N) {
+  struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
+  int total_elements = B * M * N;
+
+  // Generate random int32 elements in the range [low, high]
+  for (int i = 0; i < total_elements; ++i) {
+    uint32_t rand_val;
+    sgx_read_rand((unsigned char*)&rand_val, sizeof(rand_val));
+    tensor->data[i] = low + (rand_val % (high - low + 1));
+  }
+
+  return tensor;
+}
+
+struct TensorUint32* CreateTensorUint32(int B, int M, int N) {
+  struct TensorUint32* tensor =
+      (struct TensorUint32*)malloc(sizeof(struct TensorUint32));
+  tensor->num_bytes = B * M * N * sizeof(unsigned int);
+  tensor->data = (unsigned int*)aligned_alloc(64, B * M * N * sizeof(unsigned int));
+  tensor->B = B;
+  tensor->M = M;
+  tensor->N = N;
+  return tensor;
+}
+
+void DeleteTensorUint32(struct TensorUint32* tensor) {
+  free(tensor->data);
+  free(tensor);
+}
+
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   struct TensorInt32* tensor =
       (struct TensorInt32*)malloc(sizeof(struct TensorInt32));
@@ -35,21 +66,6 @@ struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N) {
   // Copy any remaining elements (if total_elements is not a multiple of 16)
   for (; i < total_elements; ++i) {
     tensor->data[i] = data[i];
-  }
-
-  return tensor;
-}
-
-struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M,
-                                                int N) {
-  struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
-  int total_elements = B * M * N;
-
-  // Generate random int32 elements in the range [low, high]
-  for (int i = 0; i < total_elements; ++i) {
-    uint32_t rand_val;
-    sgx_read_rand((unsigned char*)&rand_val, sizeof(rand_val));
-    tensor->data[i] = low + (rand_val % (high - low + 1));
   }
 
   return tensor;
@@ -137,7 +153,7 @@ void DeleteTensorInt8(struct TensorInt8* tensor) {
 }
 
 struct TensorInt32* MatmulS32S32S32_Naive(struct TensorInt32* X,
-                                          struct TensorInt32* Y){
+                                          struct TensorInt32* Y) {
   int B = X->B;
   int M = X->M;
   int K = X->N;
@@ -159,7 +175,6 @@ struct TensorInt32* MatmulS32S32S32_Naive(struct TensorInt32* X,
   }
   return Z;
 }
-
 
 struct TensorInt64* CreateTensorInt64(int B, int M, int N) {
   struct TensorInt64* tensor =
@@ -226,6 +241,4 @@ void MatmulS32S8S32_Naive_Buffer(struct TensorInt32* X,
     }
   }
 }
-
 }
-

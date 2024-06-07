@@ -4,20 +4,17 @@
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
-	int* ms_blind_factor_ids;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_t;
 
 typedef struct ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int ms_blind_factor_u_id;
-	int ms_blind_factor_v_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
@@ -27,20 +24,17 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t {
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
-	int* ms_blind_factor_ids;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_t;
 
 typedef struct ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int ms_blind_factor_u_id;
-	int ms_blind_factor_v_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
@@ -50,8 +44,8 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t {
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 	int ms_layer_id;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt_t;
 
@@ -62,18 +56,19 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt_t {
 } ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
+	int ms_layer_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 	int ms_layer_id;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt_t;
 
@@ -84,10 +79,11 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt_t {
 } ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
+	int ms_layer_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t;
 
@@ -332,7 +328,7 @@ static const struct {
 		(void*)Enclave_ocall_end_clock,
 	}
 };
-sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids)
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_t ms;
@@ -340,24 +336,21 @@ sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int s
 	ms.ms_src_id2 = src_id2;
 	ms.ms_out1 = out1;
 	ms.ms_out2 = out2;
-	ms.ms_blind_factor_ids = blind_factor_ids;
 	status = sgx_ecall(eid, 0, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id)
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t ms;
 	ms.ms_src_id1 = src_id1;
 	ms.ms_src_id2 = src_id2;
-	ms.ms_blind_factor_u_id = blind_factor_u_id;
-	ms.ms_blind_factor_v_id = blind_factor_v_id;
 	status = sgx_ecall(eid, 1, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, uint32_t* data, int B, int M, int N, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t ms;
@@ -370,7 +363,7 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(sgx_enclave_id_t eid, int* 
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int* blind_factor_ids)
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_t ms;
@@ -378,24 +371,21 @@ sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int s
 	ms.ms_src_id2 = src_id2;
 	ms.ms_out1 = out1;
 	ms.ms_out2 = out2;
-	ms.ms_blind_factor_ids = blind_factor_ids;
 	status = sgx_ecall(eid, 3, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2, int blind_factor_u_id, int blind_factor_v_id)
+sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32(sgx_enclave_id_t eid, int src_id1, int src_id2)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t ms;
 	ms.ms_src_id1 = src_id1;
 	ms.ms_src_id2 = src_id2;
-	ms.ms_blind_factor_u_id = blind_factor_u_id;
-	ms.ms_blind_factor_v_id = blind_factor_v_id;
 	status = sgx_ecall(eid, 4, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, uint32_t* data, int B, int M, int N, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t ms;
@@ -408,7 +398,7 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(sgx_enclave_id_t eid, int* 
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int layer_id)
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt_t ms;
@@ -432,7 +422,7 @@ sgx_status_t ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(sgx_enclave
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, uint32_t* data, int B, int M, int N, int layer_id, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t ms;
@@ -440,12 +430,13 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(sgx_enclave_id
 	ms.ms_B = B;
 	ms.ms_M = M;
 	ms.ms_N = N;
+	ms.ms_layer_id = layer_id;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 8, &ocall_table_Enclave, &ms);
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, int* out1, int* out2, int layer_id)
+sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt_t ms;
@@ -469,7 +460,7 @@ sgx_status_t ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(sgx_enclave
 	return status;
 }
 
-sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, int* data, int B, int M, int N, int* ret_id)
+sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id_t eid, uint32_t* data, int B, int M, int N, int layer_id, int* ret_id)
 {
 	sgx_status_t status;
 	ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t ms;
@@ -477,6 +468,7 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(sgx_enclave_id
 	ms.ms_B = B;
 	ms.ms_M = M;
 	ms.ms_N = N;
+	ms.ms_layer_id = layer_id;
 	ms.ms_ret_id = ret_id;
 	status = sgx_ecall(eid, 11, &ocall_table_Enclave, &ms);
 	return status;
@@ -489,6 +481,13 @@ sgx_status_t ecall_Sgx_Pre_Init(sgx_enclave_id_t eid)
 	return status;
 }
 
+sgx_status_t ecall_Sgx_Reset(sgx_enclave_id_t eid)
+{
+	sgx_status_t status;
+	status = sgx_ecall(eid, 13, &ocall_table_Enclave, NULL);
+	return status;
+}
+
 sgx_status_t ecall_Sgx_Set_Hidden_States(sgx_enclave_id_t eid, float* hidden_states, int B, int M, int N, int* ret_id)
 {
 	sgx_status_t status;
@@ -498,7 +497,7 @@ sgx_status_t ecall_Sgx_Set_Hidden_States(sgx_enclave_id_t eid, float* hidden_sta
 	ms.ms_M = M;
 	ms.ms_N = N;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 13, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 14, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -508,7 +507,7 @@ sgx_status_t ecall_Sgx_Copy_Hidden_States(sgx_enclave_id_t eid, int src_id, int*
 	ms_ecall_Sgx_Copy_Hidden_States_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 14, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 15, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -521,7 +520,7 @@ sgx_status_t ecall_Sgx_Set_Layer_Norm_Param(sgx_enclave_id_t eid, float* gamma, 
 	ms.ms_N = N;
 	ms.ms_eps = eps;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 15, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 16, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -532,7 +531,7 @@ sgx_status_t ecall_Sgx_Layer_Norm_Q(sgx_enclave_id_t eid, int src_id, int layer_
 	ms.ms_src_id = src_id;
 	ms.ms_layer_norm_param_id = layer_norm_param_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 16, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 17, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -547,7 +546,7 @@ sgx_status_t ecall_Sgx_Set_Linear_Param_WS8BS8(sgx_enclave_id_t eid, char* weigh
 	ms.ms_alpha = alpha;
 	ms.ms_beta = beta;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 17, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 18, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -561,7 +560,7 @@ sgx_status_t ecall_Sgx_Set_Linear_Param_WS8BFP32(sgx_enclave_id_t eid, char* wei
 	ms.ms_N = N;
 	ms.ms_alpha = alpha;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 18, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 19, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -571,7 +570,7 @@ sgx_status_t ecall_Sgx_Get_Tensor_Dim_Int32(sgx_enclave_id_t eid, int src_id, in
 	ms_ecall_Sgx_Get_Tensor_Dim_Int32_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_dim = dim;
-	status = sgx_ecall(eid, 19, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 20, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -581,7 +580,7 @@ sgx_status_t ecall_Sgx_Get_Tensor_Int32(sgx_enclave_id_t eid, int src_id, int* o
 	ms_ecall_Sgx_Get_Tensor_Int32_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_out = out;
-	status = sgx_ecall(eid, 20, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 21, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -594,7 +593,7 @@ sgx_status_t ecall_Sgx_Set_Tensor_Int32(sgx_enclave_id_t eid, int* data, int B, 
 	ms.ms_M = M;
 	ms.ms_N = N;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 21, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 22, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -605,7 +604,7 @@ sgx_status_t ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int
 	ms.ms_src_id = src_id;
 	ms.ms_linear_param_id = linear_param_id;
 	ms.ms_out = out;
-	status = sgx_ecall(eid, 22, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 23, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -616,7 +615,7 @@ sgx_status_t ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(sgx_enclave_id_t eid, 
 	ms.ms_blind_factor_id = blind_factor_id;
 	ms.ms_linear_param_id = linear_param_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 23, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 24, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -630,7 +629,7 @@ sgx_status_t ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(sgx_enclave_id_t eid, int
 	ms.ms_N = N;
 	ms.ms_linear_param_id = linear_param_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 24, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 25, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -640,7 +639,7 @@ sgx_status_t ecall_Sgx_Get_Tensor_Dim_Int8(sgx_enclave_id_t eid, int src_id, int
 	ms_ecall_Sgx_Get_Tensor_Dim_Int8_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_dim = dim;
-	status = sgx_ecall(eid, 25, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 26, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -650,7 +649,7 @@ sgx_status_t ecall_Sgx_Get_Tensor_Int8(sgx_enclave_id_t eid, int src_id, char* o
 	ms_ecall_Sgx_Get_Tensor_Int8_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_out = out;
-	status = sgx_ecall(eid, 26, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 27, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -663,7 +662,7 @@ sgx_status_t ecall_Sgx_Set_Tensor_Int8(sgx_enclave_id_t eid, char* data, int B, 
 	ms.ms_M = M;
 	ms.ms_N = N;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 27, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 28, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -673,7 +672,7 @@ sgx_status_t ecall_Sgx_Get_Tensor_Dim_Float(sgx_enclave_id_t eid, int src_id, in
 	ms_ecall_Sgx_Get_Tensor_Dim_Float_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_dim = dim;
-	status = sgx_ecall(eid, 28, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 29, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -683,7 +682,7 @@ sgx_status_t ecall_Sgx_Get_Tensor_Float(sgx_enclave_id_t eid, int src_id, float*
 	ms_ecall_Sgx_Get_Tensor_Float_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_out = out;
-	status = sgx_ecall(eid, 29, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 30, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -696,7 +695,7 @@ sgx_status_t ecall_Sgx_Set_Tensor_Float(sgx_enclave_id_t eid, float* data, int B
 	ms.ms_M = M;
 	ms.ms_N = N;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 30, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 31, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -707,7 +706,7 @@ sgx_status_t ecall_Sgx_Compute_Epilogue_WS8BS8(sgx_enclave_id_t eid, int src_id,
 	ms.ms_src_id = src_id;
 	ms.ms_linear_param_id = linear_param_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 31, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 32, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -718,7 +717,7 @@ sgx_status_t ecall_Sgx_Compute_Epilogue_WS8BFP32(sgx_enclave_id_t eid, int src_i
 	ms.ms_src_id = src_id;
 	ms.ms_linear_param_id = linear_param_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 32, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 33, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -729,7 +728,7 @@ sgx_status_t ecall_Sgx_Compute_Epilogue_BMM(sgx_enclave_id_t eid, int src_id, in
 	ms.ms_src_id = src_id;
 	ms.ms_bmm_param_id = bmm_param_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 33, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 34, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -739,7 +738,7 @@ sgx_status_t ecall_Sgx_ReLU(sgx_enclave_id_t eid, int src_id, int* ret_id)
 	ms_ecall_Sgx_ReLU_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 34, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 35, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -749,7 +748,7 @@ sgx_status_t ecall_Sgx_Softmax(sgx_enclave_id_t eid, int src_id, int* ret_id)
 	ms_ecall_Sgx_Softmax_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 35, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 36, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -759,7 +758,7 @@ sgx_status_t ecall_Sgx_Quantize_Post_Softmax(sgx_enclave_id_t eid, int src_id, i
 	ms_ecall_Sgx_Quantize_Post_Softmax_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 36, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 37, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -769,7 +768,7 @@ sgx_status_t ecall_Sgx_Cast_From_Float_To_Int8(sgx_enclave_id_t eid, int src_id,
 	ms_ecall_Sgx_Cast_From_Float_To_Int8_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 37, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 38, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -779,7 +778,7 @@ sgx_status_t ecall_Sgx_Cast_From_Float_To_Int32(sgx_enclave_id_t eid, int src_id
 	ms_ecall_Sgx_Cast_From_Float_To_Int32_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 38, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 39, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -789,7 +788,7 @@ sgx_status_t ecall_Sgx_Cast_From_Int8_To_Int32(sgx_enclave_id_t eid, int src_id,
 	ms_ecall_Sgx_Cast_From_Int8_To_Int32_t ms;
 	ms.ms_src_id = src_id;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 39, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 40, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -799,7 +798,7 @@ sgx_status_t ecall_Sgx_Set_Bmm_Param(sgx_enclave_id_t eid, float alpha, int* ret
 	ms_ecall_Sgx_Set_Bmm_Param_t ms;
 	ms.ms_alpha = alpha;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 40, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 41, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -810,7 +809,7 @@ sgx_status_t ecall_Sgx_Residual_Add(sgx_enclave_id_t eid, int residual, int hidd
 	ms.ms_residual = residual;
 	ms.ms_hidden_states = hidden_states;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 41, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 42, &ocall_table_Enclave, &ms);
 	return status;
 }
 
@@ -821,7 +820,7 @@ sgx_status_t ecall_Sgx_CPU_Bmm(sgx_enclave_id_t eid, int src_id1, int src_id2, i
 	ms.ms_src_id1 = src_id1;
 	ms.ms_src_id2 = src_id2;
 	ms.ms_ret_id = ret_id;
-	status = sgx_ecall(eid, 42, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 43, &ocall_table_Enclave, &ms);
 	return status;
 }
 

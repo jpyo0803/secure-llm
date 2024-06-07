@@ -103,7 +103,7 @@ else
 endif
 
 Enclave_C_Flags += $(Enclave_Include_Paths)
-Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++11 -nostdinc++
+Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++17 -nostdinc++
 Enclave_Cpp_Flags += -march=native -maes
 
 # To generate a proper enclave, it is recommended to follow below guideline to link the trusted libraries:

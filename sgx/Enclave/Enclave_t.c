@@ -30,20 +30,17 @@
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
-	int* ms_blind_factor_ids;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_t;
 
 typedef struct ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int ms_blind_factor_u_id;
-	int ms_blind_factor_v_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
@@ -53,20 +50,17 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_t {
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
-	int* ms_blind_factor_ids;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_t;
 
 typedef struct ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int ms_blind_factor_u_id;
-	int ms_blind_factor_v_id;
 } ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
@@ -76,8 +70,8 @@ typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_t {
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 	int ms_layer_id;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt_t;
 
@@ -88,18 +82,19 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt_t {
 } ms_ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
+	int ms_layer_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt_t {
 	int ms_src_id1;
 	int ms_src_id2;
-	int* ms_out1;
-	int* ms_out2;
+	uint32_t* ms_out1;
+	uint32_t* ms_out2;
 	int ms_layer_id;
 } ms_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt_t;
 
@@ -110,10 +105,11 @@ typedef struct ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt_t {
 } ms_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt_t;
 
 typedef struct ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t {
-	int* ms_data;
+	uint32_t* ms_data;
 	int ms_B;
 	int ms_M;
 	int ms_N;
+	int ms_layer_id;
 	int* ms_ret_id;
 } ms_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt_t;
 
@@ -328,12 +324,11 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(void* 
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_out1 = __in_ms.ms_out1;
-	int* _tmp_out2 = __in_ms.ms_out2;
-	int* _tmp_blind_factor_ids = __in_ms.ms_blind_factor_ids;
+	uint32_t* _tmp_out1 = __in_ms.ms_out1;
+	uint32_t* _tmp_out2 = __in_ms.ms_out2;
 
 
-	ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2, _tmp_blind_factor_ids);
+	ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2);
 
 
 	return status;
@@ -354,7 +349,7 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Generate_Decryption_Key_QK_Int32(voi
 	sgx_status_t status = SGX_SUCCESS;
 
 
-	ecall_Sgx_Generate_Decryption_Key_QK_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, __in_ms.ms_blind_factor_u_id, __in_ms.ms_blind_factor_v_id);
+	ecall_Sgx_Generate_Decryption_Key_QK_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2);
 
 
 	return status;
@@ -373,7 +368,7 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(void* 
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_data = __in_ms.ms_data;
+	uint32_t* _tmp_data = __in_ms.ms_data;
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
@@ -396,12 +391,11 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(void* 
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_out1 = __in_ms.ms_out1;
-	int* _tmp_out2 = __in_ms.ms_out2;
-	int* _tmp_blind_factor_ids = __in_ms.ms_blind_factor_ids;
+	uint32_t* _tmp_out1 = __in_ms.ms_out1;
+	uint32_t* _tmp_out2 = __in_ms.ms_out2;
 
 
-	ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2, _tmp_blind_factor_ids);
+	ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2);
 
 
 	return status;
@@ -422,7 +416,7 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Generate_Decryption_Key_PV_Int32(voi
 	sgx_status_t status = SGX_SUCCESS;
 
 
-	ecall_Sgx_Generate_Decryption_Key_PV_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2, __in_ms.ms_blind_factor_u_id, __in_ms.ms_blind_factor_v_id);
+	ecall_Sgx_Generate_Decryption_Key_PV_Int32(__in_ms.ms_src_id1, __in_ms.ms_src_id2);
 
 
 	return status;
@@ -441,7 +435,7 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(void* 
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_data = __in_ms.ms_data;
+	uint32_t* _tmp_data = __in_ms.ms_data;
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
@@ -464,8 +458,8 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cac
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_out1 = __in_ms.ms_out1;
-	int* _tmp_out2 = __in_ms.ms_out2;
+	uint32_t* _tmp_out1 = __in_ms.ms_out1;
+	uint32_t* _tmp_out2 = __in_ms.ms_out2;
 
 
 	ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2, __in_ms.ms_layer_id);
@@ -508,11 +502,11 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cac
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_data = __in_ms.ms_data;
+	uint32_t* _tmp_data = __in_ms.ms_data;
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
-	ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, _tmp_ret_id);
+	ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_layer_id, _tmp_ret_id);
 
 
 	return status;
@@ -531,8 +525,8 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cac
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_out1 = __in_ms.ms_out1;
-	int* _tmp_out2 = __in_ms.ms_out2;
+	uint32_t* _tmp_out1 = __in_ms.ms_out1;
+	uint32_t* _tmp_out2 = __in_ms.ms_out2;
 
 
 	ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(__in_ms.ms_src_id1, __in_ms.ms_src_id2, _tmp_out1, _tmp_out2, __in_ms.ms_layer_id);
@@ -575,11 +569,11 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cac
 		return SGX_ERROR_UNEXPECTED;
 	}
 	sgx_status_t status = SGX_SUCCESS;
-	int* _tmp_data = __in_ms.ms_data;
+	uint32_t* _tmp_data = __in_ms.ms_data;
 	int* _tmp_ret_id = __in_ms.ms_ret_id;
 
 
-	ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, _tmp_ret_id);
+	ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(_tmp_data, __in_ms.ms_B, __in_ms.ms_M, __in_ms.ms_N, __in_ms.ms_layer_id, _tmp_ret_id);
 
 
 	return status;
@@ -590,6 +584,14 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Pre_Init(void* pms)
 	sgx_status_t status = SGX_SUCCESS;
 	if (pms != NULL) return SGX_ERROR_INVALID_PARAMETER;
 	ecall_Sgx_Pre_Init();
+	return status;
+}
+
+static sgx_status_t SGX_CDECL sgx_ecall_Sgx_Reset(void* pms)
+{
+	sgx_status_t status = SGX_SUCCESS;
+	if (pms != NULL) return SGX_ERROR_INVALID_PARAMETER;
+	ecall_Sgx_Reset();
 	return status;
 }
 
@@ -1266,9 +1268,9 @@ static sgx_status_t SGX_CDECL sgx_ecall_Sgx_CPU_Bmm(void* pms)
 
 SGX_EXTERNC const struct {
 	size_t nr_ecall;
-	struct {void* ecall_addr; uint8_t is_priv; uint8_t is_switchless;} ecall_table[43];
+	struct {void* ecall_addr; uint8_t is_priv; uint8_t is_switchless;} ecall_table[44];
 } g_ecall_table = {
-	43,
+	44,
 	{
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Get_Encrypted_Tensor_QK_Int32, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Generate_Decryption_Key_QK_Int32, 0, 0},
@@ -1283,6 +1285,7 @@ SGX_EXTERNC const struct {
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Pre_Init, 0, 0},
+		{(void*)(uintptr_t)sgx_ecall_Sgx_Reset, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Hidden_States, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Copy_Hidden_States, 0, 0},
 		{(void*)(uintptr_t)sgx_ecall_Sgx_Set_Layer_Norm_Param, 0, 0},
@@ -1318,14 +1321,14 @@ SGX_EXTERNC const struct {
 
 SGX_EXTERNC const struct {
 	size_t nr_ocall;
-	uint8_t entry_table[4][43];
+	uint8_t entry_table[4][44];
 } g_dyn_entry_table = {
 	4,
 	{
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
-		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },
 	}
 };
 
