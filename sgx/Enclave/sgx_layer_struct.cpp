@@ -923,9 +923,10 @@ void Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   // Encrypt X as usual
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
+      uint32_t key_a = key_a_opt_list[layer_id].at(i).at(j).first;
       for (int k = 0; k < X->N; ++k) {
         // out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k];
-        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a_opt_list[layer_id].at(i).at(j).first + key_c_opt_list[layer_id].at(i).at(k).first;
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a + key_c_opt_list[layer_id].at(i).at(k).first;
       }
     }
   }
@@ -1002,11 +1003,14 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
   // bool is_gen = M == 1; // if Y_M is 1, then it is generation phase
 
   for (int i = 0; i < B; ++i) {
+    uint32_t z_dot_product_factor = z_dot_product_factor_opt_list[layer_id].at(i);
     for (int j = 0; j < M; ++j) {
+      uint32_t z_row_factor = z_row_factor_opt_list[layer_id].at(i).at(j);
+      int a_index = key_a_opt_list[layer_id].at(i).at(j).second;
       for (int k = 0; k < N; ++k) {
         int b_index = key_b_opt_list[layer_id].at(i).at(k).second;
-        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor_opt_list[layer_id].at(i).at(j) - z_col_factor_opt_list[layer_id].at(i).at(k) - z_dot_product_factor_opt_list[layer_id].at(i);
-        tmp = (tmp * mult_key_inv_precompute.at(key_a_opt_list[layer_id].at(i).at(j).second).at(b_index)) % MODULO;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor - z_col_factor_opt_list[layer_id].at(i).at(k) - z_dot_product_factor;
+        tmp = (tmp * mult_key_inv_precompute.at(a_index).at(b_index)) % MODULO;
         tensor->data[i * M * N + j * N + k] = (int) tmp;
       }
     }
@@ -1014,8 +1018,9 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
+      int x_row_sum = x_row_sum_buffer_opt_list[layer_id].at(i).at(j);
       for (int k = 0; k < N; ++k) {
-        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer_opt_list[layer_id].at(i).at(j) + y_col_sum_buffer_opt_list[layer_id].at(i).at(k) + share_dim * SHIFT_AMT);
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum + y_col_sum_buffer_opt_list[layer_id].at(i).at(k) + share_dim * SHIFT_AMT);
         tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
       }
     }
@@ -1065,9 +1070,11 @@ void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     }
 
     for (int j = 0; j < Y->M; ++j) {
+      int sum = 0;
       for (int k = 0; k < Y->N; ++k) {
-        y_col_sum_buffer_opt_list2[layer_id].at(i).at(j) += Y->data[i * Y->M * Y->N + j * Y->N + k];
+        sum += Y->data[i * Y->M * Y->N + j * Y->N + k];
       }
+      y_col_sum_buffer_opt_list2[layer_id].at(i).at(j) += sum;
       // cout << j << " : " <<  y_col_sum_buffer_opt_list2[layer_id].at(i).at(j) << "\n";
     }
   }
@@ -1152,8 +1159,9 @@ void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   // Encrypt X
   for (int i = 0; i < X->B; ++i) {
     for (int j = 0; j < X->M; ++j) {
+      uint32_t key_a = key_a_opt_list2[layer_id].at(i).at(j).first;
       for (int k = 0; k < X->N; ++k) {
-        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a_opt_list2[layer_id].at(i).at(j).first + key_c_opt_list2[layer_id].at(i).at(k).first;
+        out1[i * X->M * X->N + j * X->N + k] = (uint32_t)X->data[i * X->M * X->N + j * X->N + k] * key_a + key_c_opt_list2[layer_id].at(i).at(k).first;
       }
     }
   }
@@ -1162,9 +1170,10 @@ void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < Y->B; ++i) {
     bool is_gen = Y->N == 1; // if Y_N is 1, then it is generation phase
     for (int j = 0; j < Y->M; ++j) {
+      uint32_t key_b = key_b_opt_list2[layer_id].at(i).at(j).first;
       for (int k = 0; k < Y->N; ++k) {
         uint32_t d = is_gen ? key_d_opt_list2[layer_id].at(i).back().first : key_d_opt_list2[layer_id].at(i).at(k).first;
-        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_b_opt_list2[layer_id].at(i).at(j).first + d;
+        out2[i * Y->M * Y->N + j * Y->N + k] = (uint32_t)Y->data[i * Y->M * Y->N + j * Y->N + k] * key_b + d;
       }
     }
   }
@@ -1231,11 +1240,14 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
 
   for (int i = 0; i < B; ++i) {
+    uint32_t z_dot_product_factor = z_dot_product_factor_opt_list2[layer_id].at(i);
     for (int j = 0; j < M; ++j) {
+      int a_index = key_a_opt_list2[layer_id].at(i).at(j).second;
+      uint32_t z_row_factor = z_row_factor_opt_list2[layer_id].at(i).at(j);
       for (int k = 0; k < N; ++k) {
         int b_index = key_b_opt_list2[layer_id].at(i).at(k).second;
-        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor_opt_list2[layer_id].at(i).at(j) - z_col_factor_opt_list2[layer_id].at(i).at(k) - z_dot_product_factor_opt_list2[layer_id].at(i);
-        tmp = (tmp * mult_key_inv_precompute.at(key_a_opt_list2[layer_id].at(i).at(j).second).at(b_index)) % MODULO;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor - z_col_factor_opt_list2[layer_id].at(i).at(k) - z_dot_product_factor;
+        tmp = (tmp * mult_key_inv_precompute.at(a_index).at(b_index)) % MODULO;
         tensor->data[i * M * N + j * N + k] = (int) tmp;
       }
     }
@@ -1243,8 +1255,9 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
+      int x_row_sum = x_row_sum_buffer_opt_list2[layer_id].at(i).at(j);
       for (int k = 0; k < N; ++k) {
-        int undo_shift_factor = SHIFT_AMT * (x_row_sum_buffer_opt_list2[layer_id].at(i).at(j) + y_col_sum_buffer_opt_list2[layer_id].at(i).at(k) + share_dim_pv_opt * SHIFT_AMT);
+        int undo_shift_factor = SHIFT_AMT * (x_row_sum + y_col_sum_buffer_opt_list2[layer_id].at(i).at(k) + share_dim_pv_opt * SHIFT_AMT);
         tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
         // tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k];
       }
