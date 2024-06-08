@@ -8,6 +8,7 @@
 #endif
 #include <stdlib.h>
 
+#define NUM_STATIC_TENSOR 20
 
 extern "C" {
 
@@ -25,31 +26,65 @@ struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M,
   return tensor;
 }
 
+struct TensorUint32* static_tensor_uint32_list[NUM_STATIC_TENSOR];
+bool static_tensor_uint32_list_initialized = false;
+int static_tensor_uint32_id = 0;
+
 struct TensorUint32* CreateTensorUint32(int B, int M, int N) {
-  struct TensorUint32* tensor =
-      (struct TensorUint32*)malloc(sizeof(struct TensorUint32));
-  tensor->num_bytes = B * M * N * sizeof(unsigned int);
-  tensor->data = (unsigned int*)aligned_alloc(64, B * M * N * sizeof(unsigned int));
+  if (static_tensor_uint32_list_initialized == false) {
+    for (int i = 0; i < NUM_STATIC_TENSOR; ++i) {
+      static_tensor_uint32_list[i] = (struct TensorUint32*)malloc(sizeof(struct TensorUint32));
+      static_tensor_uint32_list[i]->B = 24;
+      static_tensor_uint32_list[i]->M = 2048;
+      static_tensor_uint32_list[i]->N = 2048*4;
+   
+      static_tensor_uint32_list[i]->num_bytes = static_tensor_uint32_list[i]->B * static_tensor_uint32_list[i]->M * static_tensor_uint32_list[i]->N * sizeof(unsigned int);
+      static_tensor_uint32_list[i]->data = (unsigned int*)aligned_alloc(64, static_tensor_uint32_list[i]->B * static_tensor_uint32_list[i]->M * static_tensor_uint32_list[i]->N * sizeof(unsigned int));
+    }
+    static_tensor_uint32_list_initialized = true;
+  }
+
+  struct TensorUint32* tensor = static_tensor_uint32_list[static_tensor_uint32_id];
   tensor->B = B;
   tensor->M = M;
   tensor->N = N;
+  tensor->num_bytes = B * M * N * sizeof(unsigned int);
+
+  static_tensor_uint32_id = (static_tensor_uint32_id + 1) % NUM_STATIC_TENSOR;
   return tensor;
 }
 
 void DeleteTensorUint32(struct TensorUint32* tensor) {
-  free(tensor->data);
-  free(tensor);
+  // free(tensor->data);
+  // free(tensor);
 }
 
+struct TensorInt32* static_tensor_int32_list[NUM_STATIC_TENSOR];
+bool static_tensor_int32_list_initialized = false;
+int static_tensor_int32_id = 0;
+
 struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
-  struct TensorInt32* tensor =
-      (struct TensorInt32*)malloc(sizeof(struct TensorInt32));
-  tensor->num_bytes = B * M * N * sizeof(int);
-  // tensor->data = (int*)malloc(tensor->num_bytes);
-  tensor->data = (int*)aligned_alloc(64, B * M * N * sizeof(int));
+
+  if (static_tensor_int32_list_initialized == false) {
+    for (int i = 0; i < NUM_STATIC_TENSOR; ++i) {
+      static_tensor_int32_list[i] = (struct TensorInt32*)malloc(sizeof(struct TensorInt32));
+      static_tensor_int32_list[i]->B = 24;
+      static_tensor_int32_list[i]->M = 2048;
+      static_tensor_int32_list[i]->N = 2048*4;
+   
+      static_tensor_int32_list[i]->num_bytes = static_tensor_int32_list[i]->B * static_tensor_int32_list[i]->M * static_tensor_int32_list[i]->N * sizeof(int);
+      static_tensor_int32_list[i]->data = (int*)aligned_alloc(64, static_tensor_int32_list[i]->B * static_tensor_int32_list[i]->M * static_tensor_int32_list[i]->N * sizeof(int));
+    }
+    static_tensor_int32_list_initialized = true;
+  }
+
+  struct TensorInt32* tensor = static_tensor_int32_list[static_tensor_int32_id];
   tensor->B = B;
   tensor->M = M;
   tensor->N = N;
+  tensor->num_bytes = B * M * N * sizeof(int);
+
+  static_tensor_int32_id = (static_tensor_int32_id + 1) % NUM_STATIC_TENSOR;
   return tensor;
 }
 
@@ -65,19 +100,35 @@ struct TensorInt32* CreateTensorInt32FromData(int32_t* data, int B, int M, int N
 }
 
 void DeleteTensorInt32(struct TensorInt32* tensor) {
-  free(tensor->data);
-  free(tensor);
+  // free(tensor->data);
+  // free(tensor);
 }
 
+struct TensorFloat* static_tensor_float_list[NUM_STATIC_TENSOR];
+bool static_tensor_float_list_initialized = false;
+int static_tensor_float_id = 0;
+
 struct TensorFloat* CreateTensorFloat(int B, int M, int N) {
-  struct TensorFloat* tensor =
-      (struct TensorFloat*)malloc(sizeof(struct TensorFloat));
-  tensor->num_bytes = B * M * N * sizeof(float);
-  tensor->data = (float*)aligned_alloc(
-      64, tensor->num_bytes);  // Use aligned_alloc for alignment
+  if (static_tensor_float_list_initialized == false) {
+    for (int i = 0; i < NUM_STATIC_TENSOR; ++i) {
+      static_tensor_float_list[i] = (struct TensorFloat*)malloc(sizeof(struct TensorFloat));
+      static_tensor_float_list[i]->B = 24;
+      static_tensor_float_list[i]->M = 2048;
+      static_tensor_float_list[i]->N = 2048*4;
+   
+      static_tensor_float_list[i]->num_bytes = static_tensor_float_list[i]->B * static_tensor_float_list[i]->M * static_tensor_float_list[i]->N * sizeof(float);
+      static_tensor_float_list[i]->data = (float*)aligned_alloc(64, static_tensor_float_list[i]->B * static_tensor_float_list[i]->M * static_tensor_float_list[i]->N * sizeof(float));
+    }
+    static_tensor_float_list_initialized = true;
+  }
+
+  struct TensorFloat* tensor = static_tensor_float_list[static_tensor_float_id];
   tensor->B = B;
   tensor->M = M;
   tensor->N = N;
+  tensor->num_bytes = B * M * N * sizeof(float);
+
+  static_tensor_float_id = (static_tensor_float_id + 1) % NUM_STATIC_TENSOR;
   return tensor;
 }
 
@@ -94,18 +145,35 @@ struct TensorFloat* CreateTensorFloatFromData(float* data, int B, int M,
 }
 
 void DeleteTensorFloat(struct TensorFloat* tensor) {
-  free(tensor->data);
-  free(tensor);
+  // free(tensor->data);
+  // free(tensor);
 }
 
+struct TensorInt8* static_tensor_int8_list[NUM_STATIC_TENSOR];
+bool static_tensor_int8_list_initialized = false;
+int static_tensor_int8_id = 0;
+
 struct TensorInt8* CreateTensorInt8(int B, int M, int N) {
-  struct TensorInt8* tensor =
-      (struct TensorInt8*)malloc(sizeof(struct TensorInt8));
-  tensor->num_bytes = B * M * N * sizeof(char);
-  tensor->data = (char*)aligned_alloc(64, B * M * N * sizeof(char));
+  if (static_tensor_int8_list_initialized == false) {
+    for (int i = 0; i < NUM_STATIC_TENSOR; ++i) {
+      static_tensor_int8_list[i] = (struct TensorInt8*)malloc(sizeof(struct TensorInt8));
+      static_tensor_int8_list[i]->B = 24;
+      static_tensor_int8_list[i]->M = 2048;
+      static_tensor_int8_list[i]->N = 2048*4;
+   
+      static_tensor_int8_list[i]->num_bytes = static_tensor_int8_list[i]->B * static_tensor_int8_list[i]->M * static_tensor_int8_list[i]->N * sizeof(char);
+      static_tensor_int8_list[i]->data = (char*)aligned_alloc(64, static_tensor_int8_list[i]->B * static_tensor_int8_list[i]->M * static_tensor_int8_list[i]->N * sizeof(char));
+    }
+    static_tensor_int8_list_initialized = true;
+  }
+
+  struct TensorInt8* tensor = static_tensor_int8_list[static_tensor_int8_id];
   tensor->B = B;
   tensor->M = M;
   tensor->N = N;
+  tensor->num_bytes = B * M * N * sizeof(char);
+
+  static_tensor_int8_id = (static_tensor_int8_id + 1) % NUM_STATIC_TENSOR;
   return tensor;
 }
 
@@ -121,8 +189,8 @@ struct TensorInt8* CreateTensorInt8FromData(int8_t* data, int B, int M, int N) {
 }
 
 void DeleteTensorInt8(struct TensorInt8* tensor) {
-  free(tensor->data);
-  free(tensor);
+  // free(tensor->data);
+  // free(tensor);
 }
 
 struct TensorInt32* MatmulS32S32S32_Naive(struct TensorInt32* X,

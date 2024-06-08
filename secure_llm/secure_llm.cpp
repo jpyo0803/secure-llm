@@ -88,6 +88,32 @@ void Ex_Reset() {
     key_b_opt_list2[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
     key_c_opt_list2[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
     key_d_opt_list2[i] = std::vector<std::vector<std::pair<uint32_t, int32_t>>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
+
+    if (i == 0) {
+      for (int j = 0; j < MAX_BATCH_SIZE * MAX_NUM_HEAD; ++j) {
+        x_row_sum_buffer_opt_list[i][j].reserve(MAX_SEQ_LEN);
+        y_col_sum_buffer_opt_list[i][j].reserve(MAX_SEQ_LEN);
+
+        z_row_factor_opt_list[i][j].reserve(MAX_SEQ_LEN);
+        z_col_factor_opt_list[i][j].reserve(MAX_SEQ_LEN);
+
+        key_a_opt_list[i][j].reserve(MAX_SEQ_LEN);
+        key_b_opt_list[i][j].reserve(MAX_SEQ_LEN);
+        key_c_opt_list[i][j].reserve(MAX_SEQ_LEN);
+        key_d_opt_list[i][j].reserve(MAX_SEQ_LEN);
+
+        x_row_sum_buffer_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+        y_col_sum_buffer_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+
+        z_row_factor_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+        z_col_factor_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+
+        key_a_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+        key_b_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+        key_c_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+        key_d_opt_list2[i][j].reserve(MAX_SEQ_LEN);
+      }
+    }
   }
 }
 
