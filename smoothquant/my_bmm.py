@@ -81,14 +81,14 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
                         self.cache_len_sim += 1
                     x = self.lsc.Get_Tensor_Int8(x)
                     y = self.lsc.Get_Tensor_Int8(y)
-                    z = torch.rand((x.shape[0], x.shape[1], self.cache_len_sim), dtype=torch.float32)
+                    z = torch.ones((x.shape[0], x.shape[1], self.cache_len_sim), dtype=torch.float32)
                     z = self.lsc.Set_Tensor_Float(z)
                     return z
                 else:
                     x = self.lsc.Get_Tensor_Int8(x)
                     y = self.lsc.Get_Tensor_Int8(y)
                     last_dim = y.shape[-2]     
-                    z = torch.rand((x.shape[0], x.shape[1], last_dim), dtype=torch.float32)
+                    z = torch.ones((x.shape[0], x.shape[1], last_dim), dtype=torch.float32)
                     z = self.lsc.Set_Tensor_Float(z)
                     return z
                 

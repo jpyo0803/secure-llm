@@ -37,7 +37,7 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
 
     def __run(self, x):
         x = self.lsc.Get_Tensor_Int8(x)
-        y = torch.rand((x.shape[0], x.shape[1], self.weight_last_dim), dtype=torch.float32)
+        y = torch.ones((x.shape[0], x.shape[1], self.weight_last_dim), dtype=torch.float32)
         y = self.lsc.Set_Tensor_Float(y)
         return y
 
@@ -94,7 +94,7 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
 
     def __run(self, x):
         x = self.lsc.Get_Tensor_Int8(x)
-        y = torch.rand((x.shape[0], x.shape[1], self.weight_last_dim), dtype=torch.float32)
+        y = torch.ones((x.shape[0], x.shape[1], self.weight_last_dim), dtype=torch.float32)
         y = self.lsc.Set_Tensor_Float(y)
         return y
 
