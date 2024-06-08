@@ -1005,12 +1005,12 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
   for (int i = 0; i < B; ++i) {
     uint32_t z_dot_product_factor = z_dot_product_factor_opt_list[layer_id].at(i);
     for (int j = 0; j < M; ++j) {
-      uint32_t z_row_factor = z_row_factor_opt_list[layer_id].at(i).at(j);
+      uint32_t sub_factor = z_row_factor_opt_list[layer_id].at(i).at(j) + z_dot_product_factor;
       int a_index = key_a_opt_list[layer_id].at(i).at(j).second;
       for (int k = 0; k < N; ++k) {
         int b_index = key_b_opt_list[layer_id].at(i).at(k).second;
-        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor - z_col_factor_opt_list[layer_id].at(i).at(k) - z_dot_product_factor;
-        tmp = (tmp * mult_key_inv_precompute.at(a_index).at(b_index)) % MODULO;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_col_factor_opt_list[layer_id].at(i).at(k) - sub_factor;
+        tmp *= mult_key_inv_precompute.at(a_index).at(b_index);
         tensor->data[i * M * N + j * N + k] = (int) tmp;
       }
     }
@@ -1018,9 +1018,9 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
-      int x_row_sum = x_row_sum_buffer_opt_list[layer_id].at(i).at(j);
+      int sub_factor = x_row_sum_buffer_opt_list[layer_id].at(i).at(j) + share_dim * SHIFT_AMT;
       for (int k = 0; k < N; ++k) {
-        int undo_shift_factor = SHIFT_AMT * (x_row_sum + y_col_sum_buffer_opt_list[layer_id].at(i).at(k) + share_dim * SHIFT_AMT);
+        int undo_shift_factor = SHIFT_AMT * (y_col_sum_buffer_opt_list[layer_id].at(i).at(k) + sub_factor);
         tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
       }
     }
@@ -1243,11 +1243,11 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
     uint32_t z_dot_product_factor = z_dot_product_factor_opt_list2[layer_id].at(i);
     for (int j = 0; j < M; ++j) {
       int a_index = key_a_opt_list2[layer_id].at(i).at(j).second;
-      uint32_t z_row_factor = z_row_factor_opt_list2[layer_id].at(i).at(j);
+      uint32_t sub_factor = z_row_factor_opt_list2[layer_id].at(i).at(j) + z_dot_product_factor;
       for (int k = 0; k < N; ++k) {
         int b_index = key_b_opt_list2[layer_id].at(i).at(k).second;
-        uint32_t tmp = data[i * M * N + j * N + k] - z_row_factor - z_col_factor_opt_list2[layer_id].at(i).at(k) - z_dot_product_factor;
-        tmp = (tmp * mult_key_inv_precompute.at(a_index).at(b_index)) % MODULO;
+        uint32_t tmp = data[i * M * N + j * N + k] - z_col_factor_opt_list2[layer_id].at(i).at(k) - sub_factor;
+        tmp *= mult_key_inv_precompute.at(a_index).at(b_index);
         tensor->data[i * M * N + j * N + k] = (int) tmp;
       }
     }
@@ -1255,9 +1255,9 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
-      int x_row_sum = x_row_sum_buffer_opt_list2[layer_id].at(i).at(j);
+      int sub_factor = x_row_sum_buffer_opt_list2[layer_id].at(i).at(j) + share_dim_pv_opt * SHIFT_AMT;
       for (int k = 0; k < N; ++k) {
-        int undo_shift_factor = SHIFT_AMT * (x_row_sum + y_col_sum_buffer_opt_list2[layer_id].at(i).at(k) + share_dim_pv_opt * SHIFT_AMT);
+        int undo_shift_factor = SHIFT_AMT * (y_col_sum_buffer_opt_list2[layer_id].at(i).at(k) + sub_factor);
         tensor->data[i * M * N + j * N + k] -= undo_shift_factor;
         // tensor->data[i * M * N + j * N + k] = data[i * M * N + j * N + k];
       }
