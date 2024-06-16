@@ -3,7 +3,7 @@ from ctypes import POINTER
 
 import torch
 
-TRUSTED_LIB = "sgx/App/enclave_bridge.so"
+TRUSTED_LIB = "secure_llm/App/enclave_bridge.so"
 
 class SgxLayerStructC:
   def __new__(cls, num_enclaves=1):

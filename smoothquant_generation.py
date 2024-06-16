@@ -14,13 +14,13 @@ amt.set_clock_speed()
 
 timer = st.SingletonTimer()
 
-import sgx.sgx_layer_struct as sgx_lsc
+import secure_llm.secure_llm_sgx as sgx_lsc
 
 timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode9
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
 model_size = '125m'
 target_input_token_len = 128
 target_output_token_len = 256

@@ -8,7 +8,7 @@ import smoothquant.opt
 
 
 import smoothquant.layer_struct_c as lsc
-import sgx.sgx_layer_struct as sgx_lsc
+import secure_llm.secure_llm_sgx as sgx_lsc
 
 import singleton_timer as st
 
