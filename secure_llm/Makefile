@@ -1,17 +1,20 @@
 ######## SGX SDK Settings ########
 
+# means, assign value only if it is not already assigned
 SGX_SDK ?= /opt/intel/sgxsdk
 SGX_MODE ?= HW
 SGX_ARCH ?= x64
 SGX_DEBUG ?= 0
 SGX_PRERELEASE ?= 1
 
+# determine target architecture, either 32 bit or 64 bit
 ifeq ($(shell getconf LONG_BIT), 32)
 	SGX_ARCH := x86
 else ifeq ($(findstring -m32, $(CXXFLAGS)), -m32)
 	SGX_ARCH := x86
 endif
 
+# set paths according to the target architecture
 ifeq ($(SGX_ARCH), x86)
 	SGX_COMMON_CFLAGS := -m32
 	SGX_LIBRARY_PATH := $(SGX_SDK)/lib
@@ -30,6 +33,7 @@ $(error Cannot set SGX_DEBUG and SGX_PRERELEASE at the same time!!)
 endif
 endif
 
+# set optimization level
 ifeq ($(SGX_DEBUG), 1)
         SGX_COMMON_CFLAGS += -O3 -g
 else
@@ -38,6 +42,8 @@ endif
 
 ######## App Settings ########
 
+# set whether it is simulation or hardware mode
+# urts = untrusted runtime system
 ifneq ($(SGX_MODE), HW)
 	Urts_Library_Name := sgx_urts_sim
 else
@@ -63,7 +69,7 @@ else
         App_C_Flags += -DNDEBUG -UEDEBUG -UDEBUG
 endif
 
-App_Cpp_Flags := $(App_C_Flags) -std=c++11 -shared -DUSE_SGX
+App_Cpp_Flags := $(App_C_Flags) -std=c++17 -shared -DUSE_SGX
 App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -L$(TF_LIB) -pthread -fopenmp
 
 ifneq ($(SGX_MODE), HW)
@@ -87,12 +93,13 @@ else
 endif
 Crypto_Library_Name := sgx_tcrypto
 
-My_Cpp_Files := Enclave/cpp/aes_stream.cpp Enclave/cpp/tensor.cpp
+My_Cpp_Files := common/aes_stream.cpp common/tensor.cpp secure_llm.cpp secure_llm_sgx.cpp
+My_Inc_Dirs := -Icommon 
 
-Enclave_Cpp_Files := Enclave/Enclave.cpp Enclave/sgx_layer_struct.cpp $(My_Cpp_Files)
+Enclave_Cpp_Files := Enclave/Enclave.cpp $(My_Cpp_Files)
 # SGXDNN_Cpp_Files := sgxdnn_main.cpp json11.cpp Crypto.cpp sgxaes.cpp aes-stream.cpp
 #SGXDNN_Cpp_Files += aesni_ghash.cpp aesni_key.cpp  aesni-wrap.cpp
-Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx -IEnclave/cpp -I/usr/lib/gcc/x86_64-linux-gnu/11/include
+Enclave_Include_Paths :=  -I$(SGX_SDK)/include -Icommon -IEnclave -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx -I/usr/lib/gcc/x86_64-linux-gnu/11/include
 # Enclave_Include_Paths += -IInclude -IInclude/eigen3_sgx -I/usr/lib/gcc/x86_64-linux-gnu/5.4.0/include 
 
 CC_BELOW_4_9 := $(shell expr "`$(CC) -dumpversion`" \< "4.9")
@@ -105,6 +112,7 @@ endif
 Enclave_C_Flags += $(Enclave_Include_Paths)
 Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++17 -nostdinc++
 Enclave_Cpp_Flags += -march=native -maes
+
 
 # To generate a proper enclave, it is recommended to follow below guideline to link the trusted libraries:
 #    1. Link sgx_trts with the `--whole-archive' and `--no-whole-archive' options,
@@ -180,58 +188,92 @@ run: all
 
 ######## App Objects ########
 
+# Generate proxy calls to ecall and ocall
 App/Enclave_u.c: $(SGX_EDGER8R) Enclave/Enclave.edl
+	@echo "Running 1 " $@
 	cd App && $(SGX_EDGER8R) --untrusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include 
 	@echo "GEN  =>  $@"
+	@echo "\n"
 
+# Compile untrusted app
 App/Enclave_u.o: App/Enclave_u.c
+	@echo "Running 2 " $@
 	$(CC) $(App_C_Flags) -c $< -o $@
 	@echo "CC   <=  $<"
+	@echo "\n"
 
+# Compile bridge
 App/enclave_bridge.so: App/enclave_bridge.cpp App/Enclave_u.o
+	@echo "Running 3 " $@
 	$(CXX) $(App_Cpp_Flags) App/enclave_bridge.cpp -o $@ App/Enclave_u.o $(App_Link_Flags)
 	@echo "CXX  <=  $<"
+	@echo "\n"
 
-#App/relu_slalom.so: App/relu_slalom.cc
-#	$(CXX) $(App_Cpp_Flags) App/relu_slalom.cc -o $@ App/Enclave_u.o App/enclave_bridge.so $(App_Link_Flags)
-#	@echo "CXX  <=  $<"
 
 App/%.so: App/%.cc App/Enclave_u.o
+	@echo "Running 4 " $@
+	@echo "App_Cpp_Flags: " $(App_Cpp_Flags)
 	$(CXX) $(App_Cpp_Flags) $< -o $@ App/Enclave_u.o $(App_Link_Flags)
 	@echo "CXX  <=  $<"
+	@echo "\n"
 
 $(App_Name): App/Enclave_u.o App/enclave_bridge.so #$(App_Cpp_Objects) $(App_CC_Objects)
+	@echo "Running 5 " $@
 	$(CXX) $^ -o $@ $(App_Link_Flags)
 	@echo "LINK =>  $@"
+	@echo "\n"
 
 .config_$(Build_Mode)_$(SGX_ARCH):
 	#rm -f .config_* $(App_Cpp_Objects) $(App_CC_Objects)
 	rm -f .config_* App/enclave_bridge.so 
 	@touch .config_$(Build_Mode)_$(SGX_ARCH)
+	@echo "\n"
 
 ######## Enclave Objects ########
 
 Enclave/Enclave_t.c: $(SGX_EDGER8R) Enclave/Enclave.edl
+	@echo "Running 6 " $@
 	cd Enclave && $(SGX_EDGER8R) --trusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include
 	@echo "GEN  =>  $@"
+	@echo "\n"
 
 Enclave/Enclave_t.o: Enclave/Enclave_t.c
+	@echo "Running 7 " $@
 	$(CC) $(Enclave_C_Flags) -c $< -o $@
 	@echo "CC   <=  $<"
+	@echo "\n"
 
-
-Enclave/%.o: Enclave/%.cpp
+common/%.o: common/%.cpp
+	@echo "Running 8-1 " $@
 	$(CXX) $(Enclave_Cpp_Flags) -c $< -o $@
 	@echo "CXX  <=  $<"
+	@echo "\n"
+
+%.o: %.cpp
+	@echo "Running 8-2 " $@
+	$(CXX) $(Enclave_Cpp_Flags) -c $< -o $@
+	@echo "CXX  <=  $<"
+	@echo "\n"
+
+Enclave/%.o: Enclave/%.cpp
+	@echo "Running 8 " $@
+	@echo "FLAGS: " $(Enclave_Cpp_Flags)
+	@echo "COMMAND: $(CXX) $(Enclave_Cpp_Flags) -c $< -o $@"
+	@echo "before"
+	$(CXX)  $(Enclave_Cpp_Flags) -c $< -o $@
+	@echo "after"
+	@echo "\n"
 
 $(Enclave_Name): Enclave/Enclave_t.o $(Enclave_Cpp_Objects)
-
+	@echo "Running 9 " $@
 	$(CXX) $^ -o $@ $(Enclave_Link_Flags)
-	@echo "LINK =>  $@"
+	@echo "\n"
 
 $(Signed_Enclave_Name): $(Enclave_Name)
+	@echo "Running 10 " $@
 	$(SGX_ENCLAVE_SIGNER) sign -key Enclave/Enclave_private.pem -enclave $(Enclave_Name) -out $@ -config $(Enclave_Config_File)
 	@echo "SIGN =>  $@"
+	@echo "\n"
 
 .PHONY: clean
 

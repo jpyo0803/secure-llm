@@ -223,6 +223,10 @@ extern "C"
 	// 	}
     // }
 
+    /*
+        This is untrusted side's proxy to ecalls
+    */
+
     void Sgx_Get_Encrypted_Tensor_QK_Int32(unsigned long eid, int src_id1, int src_id2, uint32_t* out1, uint32_t* out2) {
         sgx_status_t ret = ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(eid,src_id1,src_id2,out1,out2);
         if (ret != SGX_SUCCESS) {

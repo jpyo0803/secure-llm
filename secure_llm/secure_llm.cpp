@@ -1,12 +1,17 @@
 
-#include "sgx_layer_struct.h"
+#include "secure_llm.h"
 
-#include "Enclave.h"
+#include "Enclave/Enclave.h"
 #include <immintrin.h>
 #include <chrono>
 #include <numeric>
 
+#include "common/aes_stream.h"
+#include "common/dynamic_glob_data.h"
+#include "common/static_glob_data.h"
+#include "common/tensor.h"
 #include <sgx_trts.h>
+
 using namespace std;
 
 
@@ -36,7 +41,7 @@ uint64_t RepeatedSqr(uint64_t base, uint64_t exp, uint64_t mod) {
   return result;
 }
 
-void Sgx_Reset() {
+void Ex_Reset() {
   z_row_factor = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
   z_col_factor = std::vector<std::vector<uint32_t>>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
   z_dot_product_factor = std::vector<uint32_t>(MAX_BATCH_SIZE * MAX_NUM_HEAD);
@@ -78,7 +83,7 @@ void Sgx_Reset() {
   }
 }
 
-void Sgx_Pre_Init() {
+void Ex_Pre_Init() {
   if (mult_key_pool.empty()) {
     mult_key_pool = std::vector<uint32_t>(SECRET_KEY_POOL_SIZE); // 1D array
     add_key_pool = std::vector<uint32_t>(SECRET_KEY_POOL_SIZE); // 1D array
@@ -107,7 +112,7 @@ void Sgx_Pre_Init() {
     }
   }
 
-  Sgx_Reset();
+  Ex_Reset();
 
   if (decryption_key_buffer == NULL) {
     // Not used now
@@ -115,7 +120,7 @@ void Sgx_Pre_Init() {
   }
 }
 
-int Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
+int Ex_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[curr_id]);
@@ -127,7 +132,7 @@ int Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N) {
   return curr_id;
 }
 
-int Sgx_Copy_Hidden_States(int src_id) {
+int Ex_Copy_Hidden_States(int src_id) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[curr_id]);
@@ -143,7 +148,7 @@ int Sgx_Copy_Hidden_States(int src_id) {
 }
 
 // Not offloaded so it does not need precomputation
-int Sgx_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
+int Ex_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
   int curr_id = layer_norm_param_id;
 
   struct LayerNormParam* layer_norm_param =
@@ -157,7 +162,7 @@ int Sgx_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps) {
   return curr_id;
 }
 
-int Sgx_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
+int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
   int curr_id = tensor_int8_id;
 
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
@@ -257,7 +262,7 @@ int Sgx_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
 }
 
 // Need precomputation
-int Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
+int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
                                float alpha, float beta) {
   int curr_id = linear_param_id;
 
@@ -289,7 +294,7 @@ int Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
   return curr_id;
 }
 
-int Sgx_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
+int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
                                  float alpha) {
   int curr_id = linear_param_id;
 
@@ -320,14 +325,14 @@ int Sgx_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
   return curr_id;
 }
 
-void Sgx_Get_Tensor_Dim_Int32(int src_id, int* dim) {
+void Ex_Get_Tensor_Dim_Int32(int src_id, int* dim) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   dim[0] = src_tensor->B;
   dim[1] = src_tensor->M;
   dim[2] = src_tensor->N;
 }
 
-void Sgx_Get_Tensor_Int32(int src_id, int* out) {
+void Ex_Get_Tensor_Int32(int src_id, int* out) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
   int i;
@@ -345,7 +350,7 @@ void Sgx_Get_Tensor_Int32(int src_id, int* out) {
   }
 }
 
-int Sgx_Set_Tensor_Int32(int* data, int B, int M, int N) {
+int Ex_Set_Tensor_Int32(int* data, int B, int M, int N) {
   int curr_id = tensor_int32_id;
   if (tensor_int32_list[curr_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[curr_id]);
@@ -356,9 +361,9 @@ int Sgx_Set_Tensor_Int32(int* data, int B, int M, int N) {
   return curr_id;
 }
 
-void Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id,
+void Ex_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id,
                                         int* out) {
-  Sgx_Get_Tensor_Int32(src_id, out);
+  Ex_Get_Tensor_Int32(src_id, out);
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
 
@@ -392,7 +397,7 @@ void Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id,
 }
 
 // depreciated
-int Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
+int Ex_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
                                           int linear_param_id) {
   struct TensorInt32* blind_factor = tensor_int32_list[blind_factor_id];
   struct TensorInt8* linear_weight = linear_param_list[linear_param_id]->weight;
@@ -410,7 +415,7 @@ int Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id,
   return curr_id;
 }
 
-int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
+int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
                                        int linear_param_id) {
   struct LinearParam* linear_param = linear_param_list[linear_param_id];
   struct TensorInt32* chosen_keys = linear_param->chosen_keys;
@@ -434,9 +439,9 @@ int Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N,
     }
   }
 
-  return Sgx_Set_Tensor_Int32(data, B, M, N);
+  return Ex_Set_Tensor_Int32(data, B, M, N);
 }
-void Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* out1,
+void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* out1,
                                       unsigned int* out2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
@@ -558,7 +563,7 @@ void Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* o
   // std::cout << "Time taken for encryption: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 }
 
-void Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2) {
+void Ex_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
   // auto start = std::chrono::steady_clock::now();
@@ -599,7 +604,7 @@ void Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2) {
   // std::cout << "Time taken for decryption key generation: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 }
 
-int Sgx_Set_Decrypted_Tensor_QK_Int32(unsigned int* data, int B, int M, int N) {
+int Ex_Set_Decrypted_Tensor_QK_Int32(unsigned int* data, int B, int M, int N) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
@@ -633,7 +638,7 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32(unsigned int* data, int B, int M, int N) {
   return curr_id;
 }
 
-void Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* out1,
+void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* out1,
                                       unsigned int* out2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
@@ -746,7 +751,7 @@ void Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* o
   }
 }
 
-void Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2) {
+void Ex_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
   // auto start = std::chrono::steady_clock::now();
@@ -786,7 +791,7 @@ void Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2) {
   }
 }
 
-int Sgx_Set_Decrypted_Tensor_PV_Int32(unsigned int* data, int B, int M, int N) {
+int Ex_Set_Decrypted_Tensor_PV_Int32(unsigned int* data, int B, int M, int N) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
 
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
@@ -820,7 +825,7 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32(unsigned int* data, int B, int M, int N) {
   return curr_id;
 }
 
-void Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                    uint32_t* out1, uint32_t* out2,
                                                    int layer_id) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
@@ -944,7 +949,7 @@ void Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   }
 }
 
-void Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+void Ex_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                      int layer_id) {
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B, Y_M, Y_N
@@ -993,7 +998,7 @@ void Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   }
 }
 
-int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
+int Ex_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
                                                   int N, int layer_id) {
   // printf("B %d M %d N %d\n", B, M, N);
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
@@ -1036,7 +1041,7 @@ int Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
   return curr_id;
 }
 
-void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                    uint32_t* out1, uint32_t* out2,
                                                    int layer_id) {
   // auto start = std::chrono::steady_clock::now();
@@ -1179,7 +1184,7 @@ void Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   }
 }
 
-void Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
+void Ex_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
                                                      int layer_id) {
   // auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B, X_M, X_N
@@ -1234,7 +1239,7 @@ void Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   }
 }
 
-int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
+int Ex_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
                                                   int N, int layer_id) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
   // struct TensorInt32* decryption_key = tensor_int32_list[decryption_key_id];
@@ -1270,7 +1275,7 @@ int Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M,
   return curr_id;
 }
 
-int Sgx_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
+int Ex_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
   if (tensor_float_list[tensor_float_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[tensor_float_id]);
   }
@@ -1305,7 +1310,7 @@ int Sgx_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id) {
   return curr_id;
 }
 
-int Sgx_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
+int Ex_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
   if (tensor_float_list[tensor_float_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[tensor_float_id]);
   }
@@ -1340,7 +1345,7 @@ int Sgx_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id) {
   return curr_id;
 }
 
-int Sgx_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
+int Ex_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
   if (tensor_float_list[tensor_float_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[tensor_float_id]);
   }
@@ -1364,7 +1369,7 @@ int Sgx_Compute_Epilogue_BMM(int src_id, int bmm_param_id) {
   return curr_id;
 }
 
-int Sgx_ReLU(int src_id) {
+int Ex_ReLU(int src_id) {
   if (tensor_float_list[tensor_float_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[tensor_float_id]);
   }
@@ -1397,7 +1402,7 @@ int Sgx_ReLU(int src_id) {
   return curr_id;
 }
 
-int Sgx_Softmax(int src_id) {
+int Ex_Softmax(int src_id) {
   if (tensor_float_list[tensor_float_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[tensor_float_id]);
   }
@@ -1438,7 +1443,7 @@ int Sgx_Softmax(int src_id) {
   return curr_id;
 }
 
-int Sgx_Quantize_Post_Softmax(int src_id) {
+int Ex_Quantize_Post_Softmax(int src_id) {
   if (tensor_int8_list[tensor_int8_id] != NULL) {
     DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
   }
@@ -1477,7 +1482,7 @@ int Sgx_Quantize_Post_Softmax(int src_id) {
   return curr_id;
 }
 
-int Sgx_Cast_From_Float_To_Int8(int src_id) {
+int Ex_Cast_From_Float_To_Int8(int src_id) {
   if (tensor_int8_list[tensor_int8_id] != NULL) {
     DeleteTensorInt8(tensor_int8_list[tensor_int8_id]);
   }
@@ -1513,7 +1518,7 @@ int Sgx_Cast_From_Float_To_Int8(int src_id) {
   return curr_id;
 }
 
-int Sgx_Cast_From_Float_To_Int32(int src_id) {
+int Ex_Cast_From_Float_To_Int32(int src_id) {
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
@@ -1545,7 +1550,7 @@ int Sgx_Cast_From_Float_To_Int32(int src_id) {
   return curr_id;
 }
 
-int Sgx_Cast_From_Int8_To_Int32(int src_id) {
+int Ex_Cast_From_Int8_To_Int32(int src_id) {
   if (tensor_int32_list[tensor_int32_id] != NULL) {
     DeleteTensorInt32(tensor_int32_list[tensor_int32_id]);
   }
@@ -1577,14 +1582,14 @@ int Sgx_Cast_From_Int8_To_Int32(int src_id) {
   return curr_id;
 }
 
-void Sgx_Get_Tensor_Dim_Int8(int src_id, int* dim) {
+void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
   dim[0] = src_tensor->B;
   dim[1] = src_tensor->M;
   dim[2] = src_tensor->N;
 }
 
-void Sgx_Get_Tensor_Int8(int src_id, char* out) {
+void Ex_Get_Tensor_Int8(int src_id, char* out) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
   int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
@@ -1599,7 +1604,7 @@ void Sgx_Get_Tensor_Int8(int src_id, char* out) {
   }
 }
 
-int Sgx_Set_Tensor_Int8(char* data, int B, int M, int N) {
+int Ex_Set_Tensor_Int8(char* data, int B, int M, int N) {
   int curr_id = tensor_int8_id;
   if (tensor_int8_list[curr_id] != NULL) {
     DeleteTensorInt8(tensor_int8_list[curr_id]);
@@ -1610,14 +1615,14 @@ int Sgx_Set_Tensor_Int8(char* data, int B, int M, int N) {
   return curr_id;
 }
 
-void Sgx_Get_Tensor_Dim_Float(int src_id, int* dim) {
+void Ex_Get_Tensor_Dim_Float(int src_id, int* dim) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
   dim[0] = src_tensor->B;
   dim[1] = src_tensor->M;
   dim[2] = src_tensor->N;
 }
 
-void Sgx_Get_Tensor_Float(int src_id, float* out) {
+void Ex_Get_Tensor_Float(int src_id, float* out) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
   int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
@@ -1632,7 +1637,7 @@ void Sgx_Get_Tensor_Float(int src_id, float* out) {
   }
 }
 
-int Sgx_Set_Tensor_Float(float* data, int B, int M, int N) {
+int Ex_Set_Tensor_Float(float* data, int B, int M, int N) {
   int curr_id = tensor_float_id;
   if (tensor_float_list[curr_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[curr_id]);
@@ -1643,14 +1648,14 @@ int Sgx_Set_Tensor_Float(float* data, int B, int M, int N) {
   return curr_id;
 }
 
-int Sgx_Set_Bmm_Param(float alpha) {
+int Ex_Set_Bmm_Param(float alpha) {
   int curr_id = bmm_param_id;
   bmm_param_list[curr_id] = alpha;
   bmm_param_id = (bmm_param_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
 }
 
-int Sgx_Residual_Add(int residual, int hidden_states) {
+int Ex_Residual_Add(int residual, int hidden_states) {
   if (tensor_float_list[tensor_float_id] != NULL) {
     DeleteTensorFloat(tensor_float_list[tensor_float_id]);
   }
@@ -1685,7 +1690,7 @@ int Sgx_Residual_Add(int residual, int hidden_states) {
   return curr_id;
 }
 
-int Sgx_CPU_Bmm(int src_id1, int src_id2) {
+int Ex_CPU_Bmm(int src_id1, int src_id2) {
   // auto start = std::chrono::steady_clock::now();
   struct TensorInt32* X = tensor_int32_list[src_id1];  // B x M x K
   struct TensorInt32* Y = tensor_int32_list[src_id2];  // B x N x K
@@ -1709,183 +1714,6 @@ int Sgx_CPU_Bmm(int src_id1, int src_id2) {
   // auto diff = end - start;
   // printf("CPU BMM time: %lld\n", std::chrono::duration_cast<std::chrono::microseconds>(diff).count());
   return curr_id;
-}
-
-
-void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2) {
-  Sgx_Get_Encrypted_Tensor_QK_Int32(src_id1,src_id2,out1,out2);
-}
-
-void ecall_Sgx_Generate_Decryption_Key_QK_Int32(int src_id1, int src_id2) {
-  Sgx_Generate_Decryption_Key_QK_Int32(src_id1,src_id2);
-}
-
-void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32(uint32_t* data, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_QK_Int32(data,B,M,N);
-}
-
-void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2) {
-  Sgx_Get_Encrypted_Tensor_PV_Int32(src_id1,src_id2,out1,out2);
-}
-
-void ecall_Sgx_Generate_Decryption_Key_PV_Int32(int src_id1, int src_id2) {
-  Sgx_Generate_Decryption_Key_PV_Int32(src_id1,src_id2);
-}
-
-void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32(uint32_t* data, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_PV_Int32(data,B,M,N);
-}
-
-void ecall_Sgx_Set_Hidden_States(float* hidden_states, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Hidden_States(hidden_states,B,M,N);
-}
-
-void ecall_Sgx_Copy_Hidden_States(int src_id, int* ret_id) {
-  *ret_id = Sgx_Copy_Hidden_States(src_id);
-}
-
-void ecall_Sgx_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps, int* ret_id) {
-  *ret_id = Sgx_Set_Layer_Norm_Param(gamma,beta,N,eps);
-}
-
-void ecall_Sgx_Layer_Norm_Q(int src_id, int layer_norm_param_id, int* ret_id) {
-  *ret_id = Sgx_Layer_Norm_Q(src_id,layer_norm_param_id);
-}
-
-void ecall_Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N, float alpha, float beta, int* ret_id) {
-  *ret_id = Sgx_Set_Linear_Param_WS8BS8(weight,bias,M,N,alpha,beta);
-}
-
-void ecall_Sgx_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N, float alpha, int* ret_id) {
-  *ret_id = Sgx_Set_Linear_Param_WS8BFP32(weight,bias,M,N,alpha);
-}
-
-void ecall_Sgx_Get_Tensor_Dim_Int32(int src_id, int* dim) {
-  Sgx_Get_Tensor_Dim_Int32(src_id,dim);
-}
-
-void ecall_Sgx_Get_Tensor_Int32(int src_id, int* out) {
-  Sgx_Get_Tensor_Int32(src_id,out);
-}
-
-void ecall_Sgx_Set_Tensor_Int32(int* data, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Tensor_Int32(data,B,M,N);
-}
-
-void ecall_Sgx_Get_Encrypted_Tensor_Opr1_Int32(int src_id, int linear_param_id, int* out) {
-  Sgx_Get_Encrypted_Tensor_Opr1_Int32(src_id, linear_param_id,out);
-}
-
-void ecall_Sgx_Generate_Decryption_Key_Opr1_Int32(int blind_factor_id, int linear_param_id, int* ret_id) {
-  *ret_id = Sgx_Generate_Decryption_Key_Opr1_Int32(blind_factor_id,linear_param_id);
-}
-
-void ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linear_param_id, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_Opr1_Int32(data,B,M,N,linear_param_id);
-}
-
-void ecall_Sgx_Get_Tensor_Dim_Int8(int src_id, int* dim) {
-  Sgx_Get_Tensor_Dim_Int8(src_id,dim);
-}
-
-void ecall_Sgx_Get_Tensor_Int8(int src_id, char* out) {
-  Sgx_Get_Tensor_Int8(src_id,out);
-}
-
-void ecall_Sgx_Set_Tensor_Int8(char* data, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Tensor_Int8(data,B,M,N);
-}
-
-void ecall_Sgx_Get_Tensor_Dim_Float(int src_id, int* dim) {
-  Sgx_Get_Tensor_Dim_Float(src_id,dim);
-}
-
-void ecall_Sgx_Get_Tensor_Float(int src_id, float* out) {
-  Sgx_Get_Tensor_Float(src_id,out);
-}
-
-void ecall_Sgx_Set_Tensor_Float(float* data, int B, int M, int N, int* ret_id) {
-  *ret_id = Sgx_Set_Tensor_Float(data,B,M,N);
-}
-
-void ecall_Sgx_Compute_Epilogue_WS8BS8(int src_id, int linear_param_id, int* ret_id) {
-  *ret_id = Sgx_Compute_Epilogue_WS8BS8(src_id,linear_param_id);
-}
-
-void ecall_Sgx_Compute_Epilogue_WS8BFP32(int src_id, int linear_param_id, int* ret_id) {
-  *ret_id = Sgx_Compute_Epilogue_WS8BFP32(src_id,linear_param_id);
-}
-
-void ecall_Sgx_Compute_Epilogue_BMM(int src_id, int bmm_param_id, int* ret_id) {
-  *ret_id = Sgx_Compute_Epilogue_BMM(src_id,bmm_param_id);
-}
-
-void ecall_Sgx_ReLU(int src_id, int* ret_id) {
-  *ret_id = Sgx_ReLU(src_id);
-}
-
-void ecall_Sgx_Softmax(int src_id, int* ret_id) {
-  *ret_id = Sgx_Softmax(src_id);
-}
-
-void ecall_Sgx_Quantize_Post_Softmax(int src_id, int* ret_id) {
-  *ret_id = Sgx_Quantize_Post_Softmax(src_id);
-}
-
-void ecall_Sgx_Cast_From_Float_To_Int8(int src_id, int* ret_id) {
-  *ret_id = Sgx_Cast_From_Float_To_Int8(src_id);
-}
-
-void ecall_Sgx_Cast_From_Float_To_Int32(int src_id, int* ret_id) {
-  *ret_id = Sgx_Cast_From_Float_To_Int32(src_id);
-}
-
-void ecall_Sgx_Cast_From_Int8_To_Int32(int src_id, int* ret_id) {
-  *ret_id = Sgx_Cast_From_Int8_To_Int32(src_id);
-}
-
-void ecall_Sgx_Set_Bmm_Param(float alpha, int* ret_id) {
-  *ret_id = Sgx_Set_Bmm_Param(alpha);
-}
-
-void ecall_Sgx_Residual_Add(int residual, int hidden_states, int* ret_id) {
-  *ret_id = Sgx_Residual_Add(residual,hidden_states);
-}
-
-void ecall_Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id) {
-  Sgx_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(src_id1, src_id2, out1, out2, layer_id);
-}
-
-void ecall_Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id) {
-  Sgx_Generate_Decryption_Key_QK_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id);
-}
-
-void ecall_Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(uint32_t* data, int B, int M, int N, int layer_id, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_QK_Int32_KV_Cache_Opt(data, B, M, N, layer_id);
-}
-
-void ecall_Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, uint32_t* out1, uint32_t* out2, int layer_id) {
-  Sgx_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(src_id1, src_id2, out1, out2, layer_id);
-}
-
-void ecall_Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2, int layer_id) {
-  Sgx_Generate_Decryption_Key_PV_Int32_KV_Cache_Opt(src_id1, src_id2, layer_id);
-}
-
-void ecall_Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(uint32_t* data, int B, int M, int N, int layer_id, int* ret_id) {
-  *ret_id = Sgx_Set_Decrypted_Tensor_PV_Int32_KV_Cache_Opt(data, B, M, N, layer_id);
-}
-
-void ecall_Sgx_Pre_Init() {
-  Sgx_Pre_Init();
-}
-
-void ecall_Sgx_Reset() {
-  Sgx_Reset();
-}
-
-void ecall_Sgx_CPU_Bmm(int src_id1, int src_id2, int* ret_id) {
-  *ret_id = Sgx_CPU_Bmm(src_id1, src_id2);
 }
 
 }
