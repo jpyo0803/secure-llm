@@ -5,10 +5,10 @@ import torch
 
 TRUSTED_LIB = "secure_llm/App/enclave_bridge.so"
 
-class SgxLayerStructC:
+class SgxSecureLLM:
   def __new__(cls, num_enclaves=1):
     if not hasattr(cls, "_instance"):
-      print("SgxLayerStructC Instance Created")
+      print("SgxSecureLLM Instance Created")
       cls._instance = super().__new__(cls)
       cls.lib = cdll.LoadLibrary(TRUSTED_LIB)
       cls.lib.initialize_enclave.restype = c_ulong
@@ -264,7 +264,7 @@ class SgxLayerStructC:
       return cls.lib.Sgx_CPU_Bmm(cls.eid[0],src_id1, src_id2)
 
 if __name__ == "__main__":
-  sgx = SgxLayerStructC()
+  sgx = SgxSecureLLM()
   print(sgx.eid)
   N = 23
   x = torch.randint(-10, 10, (23, 4, 3), dtype=torch.int8)

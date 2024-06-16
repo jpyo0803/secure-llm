@@ -29,13 +29,13 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.lsc = lsc.LayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode3:
             self.alpha = torch.tensor(

@@ -147,7 +147,7 @@ for state in ['Prefill', 'Generation']:
         f.close()
 
 if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
-    sgx_lsc.SgxLayerStructC().Destroy()
+    sgx_lsc.SgxSecureLLM().Destroy()
 
 amt.reset_clock_speed()
 

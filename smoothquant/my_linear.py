@@ -26,11 +26,11 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.lsc = lsc.LayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         else:
             assert False
 
@@ -272,11 +272,11 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
             self.lsc = lsc.LayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         else:
             assert False
 

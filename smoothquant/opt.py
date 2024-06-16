@@ -225,11 +225,11 @@ class Int8OPTAttention(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             self.lsc = lsc.LayerStructC()
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
         elif my_exec_mode == ExecMode.Mode8:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
 
 
     def pre_init(self):
@@ -968,11 +968,11 @@ class Int8OPTDecoderLayer(nn.Module):
         elif my_exec_mode == ExecMode.Mode5:
             self.lsc = lsc.LayerStructC()
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode7:
             self.lsc = lsc.LayerStructC()
         elif my_exec_mode == ExecMode.Mode8:
-            self.sgx_lsc = sgx_lsc.SgxLayerStructC()
+            self.sgx_lsc = sgx_lsc.SgxSecureLLM()
 
     def pre_init(self):
         # how to compare enum by value?
@@ -1624,7 +1624,7 @@ class Int8OPTModel(OPTPreTrainedModel):
         if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
             lsc.LayerStructC().Pre_Init() # Reset internal KV cache metadata
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
-            sgx_lsc.SgxLayerStructC().Pre_Init()
+            sgx_lsc.SgxSecureLLM().Pre_Init()
 
         self.decoder.pre_init()
 
@@ -1634,7 +1634,7 @@ class Int8OPTModel(OPTPreTrainedModel):
         if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
             lsc.LayerStructC().Reset() # Reset internal KV cache metadata
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
-            sgx_lsc.SgxLayerStructC().Reset()
+            sgx_lsc.SgxSecureLLM().Reset()
     
 
 
