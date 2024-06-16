@@ -6,6 +6,7 @@ SGX_MODE ?= HW
 SGX_ARCH ?= x64
 SGX_DEBUG ?= 0
 SGX_PRERELEASE ?= 1
+SGX_ENABLE ?= 1
 
 # determine target architecture, either 32 bit or 64 bit
 ifeq ($(shell getconf LONG_BIT), 32)
@@ -94,24 +95,51 @@ endif
 Crypto_Library_Name := sgx_tcrypto
 
 My_Cpp_Files := common/aes_stream.cpp common/tensor.cpp secure_llm.cpp secure_llm_sgx.cpp
-My_Inc_Dirs := -Icommon 
+
+ifeq ($(SGX_ENABLE), 1)
+	My_Cpp_Files += common/tools_sgx.cpp
+else
+	My_Cpp_Files += common/tools.cpp
+endif
+
+My_Inc_Dirs := -Icommon
 
 Enclave_Cpp_Files := Enclave/Enclave.cpp $(My_Cpp_Files)
 # SGXDNN_Cpp_Files := sgxdnn_main.cpp json11.cpp Crypto.cpp sgxaes.cpp aes-stream.cpp
 #SGXDNN_Cpp_Files += aesni_ghash.cpp aesni_key.cpp  aesni-wrap.cpp
-Enclave_Include_Paths :=  -I$(SGX_SDK)/include -Icommon -IEnclave -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx -I/usr/lib/gcc/x86_64-linux-gnu/11/include
+Enclave_Include_Paths :=  -I$(SGX_SDK)/include $(My_Inc_Dirs) -IEnclave -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx -I/usr/lib/gcc/x86_64-linux-gnu/11/include
 # Enclave_Include_Paths += -IInclude -IInclude/eigen3_sgx -I/usr/lib/gcc/x86_64-linux-gnu/5.4.0/include 
 
+# ifeq ($(SGX_ENABLE), 0)
+# Enclave_Include_Paths += -I/usr/include
+# endif
+
 CC_BELOW_4_9 := $(shell expr "`$(CC) -dumpversion`" \< "4.9")
+
+My_C_Flags := -fvisibility=hidden -fpie -ffunction-sections -fdata-sections
+ifeq ($(SGX_ENABLE), 1)
+	My_C_Flags += -nostdinc
+endif
+
 ifeq ($(CC_BELOW_4_9), 1)
-	Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -ffunction-sections -fdata-sections -fstack-protector
+	My_C_Flags += -fstack-protector
 else
-	Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -ffunction-sections -fdata-sections -fstack-protector-strong
+	My_C_Flags += -fstack-protector-strong
+endif
+
+ifeq ($(SGX_ENABLE), 1)
+	Enclave_C_Flags := $(SGX_COMMON_CFLAGS) $(My_C_Flags)
+else
+	Enclave_C_Flags := $(My_C_Flags)
 endif
 
 Enclave_C_Flags += $(Enclave_Include_Paths)
-Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++17 -nostdinc++
+Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++17
 Enclave_Cpp_Flags += -march=native -maes
+
+ifeq ($(SGX_ENABLE), 1)
+	Enclave_Cpp_Flags += -nostdinc++
+endif
 
 
 # To generate a proper enclave, it is recommended to follow below guideline to link the trusted libraries:
@@ -155,10 +183,10 @@ endif
 endif
 
 
-.PHONY: all run
+.PHONY: all run 
 
 ifeq ($(Build_Mode), HW_RELEASE)
-all: .config_$(Build_Mode)_$(SGX_ARCH) $(App_Name) $(Enclave_Name)
+all: .config_$(Build_Mode)_$(SGX_ARCH) $(App_Name) $(Enclave_Name) 
 	@echo "The project has been built in release hardware mode."
 	@echo "Please sign the $(Enclave_Name) first with your signing key before you run the $(App_Name) to launch and access the enclave."
 	@echo "To sign the enclave use the command:"

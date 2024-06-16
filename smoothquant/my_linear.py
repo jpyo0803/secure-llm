@@ -5,7 +5,7 @@ import smoothquant.opt
 
 from ctypes import *
 
-import smoothquant.layer_struct_c as lsc
+import secure_llm.secure_llm as lsc
 import secure_llm.secure_llm_sgx as sgx_lsc
 
 import singleton_timer as st

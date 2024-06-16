@@ -2,7 +2,7 @@ from ctypes import *
 import torch
 import time
 
-LAYER_STRUCT_C_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
+LAYER_STRUCT_C_LIB_PATH = "./secure_llm_no_sgx.so"
 
 
 class LayerStructC:

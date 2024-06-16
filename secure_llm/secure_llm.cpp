@@ -10,6 +10,8 @@
 #include "common/dynamic_glob_data.h"
 #include "common/static_glob_data.h"
 #include "common/tensor.h"
+
+
 #include <sgx_trts.h>
 
 using namespace std;
