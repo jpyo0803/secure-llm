@@ -3,6 +3,6 @@
 
 #include <stdint.h>
 
-uint32_t GenerateRandomNumber_Int32();
+uint32_t GenerateRandomNumber_Uint32();
 
 #endif

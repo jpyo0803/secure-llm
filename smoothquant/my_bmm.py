@@ -7,15 +7,12 @@ from ctypes import *
 import smoothquant.opt
 
 
-import secure_llm.secure_llm as lsc
+import secure_llm.secure_llm_no_sgx2 as non_sgx_lsc
 import secure_llm.secure_llm_sgx as sgx_lsc
 
 import singleton_timer as st
 
 timer = st.SingletonTimer()
-CIPHER_CPP_LIB_PATH = "./smoothquant/build/libcipher_cpp.so"
-cipher_cpp_lib = cdll.LoadLibrary(CIPHER_CPP_LIB_PATH)
-cipher_cpp_lib.GetCPRNG.argtypes = [POINTER(c_ubyte), c_int]
 
 class BMM_S8X_S8Y_FP32Z_Mixed:
     def __init__(self, torch_int_nn_bmm, privacy_on, module_name=None):
@@ -25,13 +22,13 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         # print(f'{module_name} is created')
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:

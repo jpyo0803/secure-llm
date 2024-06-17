@@ -1,7 +1,7 @@
 #include "tools.h"
 #include <random>
 
-uint32_t GenerateRandomNumber_Int32() {
+uint32_t GenerateRandomNumber_Uint32() {
     // Initialize static objects once
     static std::random_device rd;  // Seed
     static std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()

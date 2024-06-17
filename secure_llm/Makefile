@@ -1,12 +1,28 @@
 ######## SGX SDK Settings ########
 
 # means, assign value only if it is not already assigned
+SGX_ENABLE ?= 1
+
+# Common files
+My_Cpp_Files := common/aes_stream.cpp common/tensor.cpp secure_llm.cpp
+My_Inc_Dirs := -Icommon -I/usr/lib/gcc/x86_64-linux-gnu/11/include
+My_C_Flags := -fvisibility=hidden -fpie -ffunction-sections -fdata-sections -DSGX_ENABLE=1
+
+CC_BELOW_4_9 := $(shell expr "`$(CC) -dumpversion`" \< "4.9")
+ifeq ($(CC_BELOW_4_9), 1)
+	My_C_Flags += -fstack-protector
+else
+	My_C_Flags += -fstack-protector-strong
+endif
+
+My_Cpp_Files += secure_llm_sgx.cpp common/tools_sgx.cpp
+My_C_Flags += -nostdinc
+
 SGX_SDK ?= /opt/intel/sgxsdk
 SGX_MODE ?= HW
 SGX_ARCH ?= x64
 SGX_DEBUG ?= 0
 SGX_PRERELEASE ?= 1
-SGX_ENABLE ?= 1
 
 # determine target architecture, either 32 bit or 64 bit
 ifeq ($(shell getconf LONG_BIT), 32)
@@ -54,9 +70,9 @@ endif
 #App_CC_Files := App/relu_slalom.cc #App/relumaxpool_sgx.cc
 App_CC_Files := 
 App_Cpp_Files := App/enclave_bridge.cpp
-App_Include_Paths := -IApp -I$(SGX_SDK)/include -I$(TF_INC) -I$(TF_INC)/external/nsync/public
+App_Include_Paths := -IApp -I$(SGX_SDK)/include
 
-App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths) -fopenmp 
+App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths)
 
 # Three configuration modes - Debug, prerelease, release
 #   Debug - Macro DEBUG enabled.
@@ -71,7 +87,7 @@ else
 endif
 
 App_Cpp_Flags := $(App_C_Flags) -std=c++17 -shared -DUSE_SGX
-App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -L$(TF_LIB) -pthread -fopenmp
+App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name)
 
 ifneq ($(SGX_MODE), HW)
 	App_Link_Flags += -lsgx_uae_service_sim
@@ -94,53 +110,22 @@ else
 endif
 Crypto_Library_Name := sgx_tcrypto
 
-My_Cpp_Files := common/aes_stream.cpp common/tensor.cpp secure_llm.cpp secure_llm_sgx.cpp
-
-ifeq ($(SGX_ENABLE), 1)
-	My_Cpp_Files += common/tools_sgx.cpp
-else
-	My_Cpp_Files += common/tools.cpp
-endif
-
-My_Inc_Dirs := -Icommon
-
 Enclave_Cpp_Files := Enclave/Enclave.cpp $(My_Cpp_Files)
 # SGXDNN_Cpp_Files := sgxdnn_main.cpp json11.cpp Crypto.cpp sgxaes.cpp aes-stream.cpp
 #SGXDNN_Cpp_Files += aesni_ghash.cpp aesni_key.cpp  aesni-wrap.cpp
-Enclave_Include_Paths :=  -I$(SGX_SDK)/include $(My_Inc_Dirs) -IEnclave -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx -I/usr/lib/gcc/x86_64-linux-gnu/11/include
+Enclave_Include_Paths :=  -I$(SGX_SDK)/include $(My_Inc_Dirs) -IEnclave -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/libcxx
 # Enclave_Include_Paths += -IInclude -IInclude/eigen3_sgx -I/usr/lib/gcc/x86_64-linux-gnu/5.4.0/include 
 
 # ifeq ($(SGX_ENABLE), 0)
 # Enclave_Include_Paths += -I/usr/include
 # endif
 
-CC_BELOW_4_9 := $(shell expr "`$(CC) -dumpversion`" \< "4.9")
 
-My_C_Flags := -fvisibility=hidden -fpie -ffunction-sections -fdata-sections
-ifeq ($(SGX_ENABLE), 1)
-	My_C_Flags += -nostdinc
-endif
-
-ifeq ($(CC_BELOW_4_9), 1)
-	My_C_Flags += -fstack-protector
-else
-	My_C_Flags += -fstack-protector-strong
-endif
-
-ifeq ($(SGX_ENABLE), 1)
-	Enclave_C_Flags := $(SGX_COMMON_CFLAGS) $(My_C_Flags)
-else
-	Enclave_C_Flags := $(My_C_Flags)
-endif
+Enclave_C_Flags := $(SGX_COMMON_CFLAGS) $(My_C_Flags) 
 
 Enclave_C_Flags += $(Enclave_Include_Paths)
-Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++17
+Enclave_Cpp_Flags := $(Enclave_C_Flags) -std=c++17 -nostdinc++
 Enclave_Cpp_Flags += -march=native -maes
-
-ifeq ($(SGX_ENABLE), 1)
-	Enclave_Cpp_Flags += -nostdinc++
-endif
-
 
 # To generate a proper enclave, it is recommended to follow below guideline to link the trusted libraries:
 #    1. Link sgx_trts with the `--whole-archive' and `--no-whole-archive' options,
@@ -181,7 +166,6 @@ else
 	Build_Mode = SIM_RELEASE
 endif
 endif
-
 
 .PHONY: all run 
 

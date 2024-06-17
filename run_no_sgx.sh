@@ -1,0 +1,1 @@
+cd secure_llm && make -f Makefile.no_sgx clean ; make -f Makefile.no_sgx -j ; cp secure_llm_no_sgx.so .. && cd .. && python3 smoothquant_generation.py

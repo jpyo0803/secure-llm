@@ -2,16 +2,14 @@ from ctypes import *
 import torch
 import time
 
-LAYER_STRUCT_C_LIB_PATH = "./secure_llm_no_sgx.so"
+NON_SGX_LIB_PATH = "./secure_llm/secure_llm_no_sgx.so"
 
-
-class LayerStructC:
+class NonSgxSecureLLM:
     def __new__(cls):
         if not hasattr(cls, "_instance"):
-            print("LayerStructC Instance Created")
+            print("NonSgxSecureLLM Instance Created")
             cls._instance = super().__new__(cls)
-
-            cls.lib = cdll.LoadLibrary(LAYER_STRUCT_C_LIB_PATH)
+            cls.lib = cdll.LoadLibrary(NON_SGX_LIB_PATH)
 
         return cls._instance
 
@@ -260,3 +258,14 @@ class LayerStructC:
     @classmethod
     def CPU_Bmm(cls, src_id1, src_id2):
         return cls.lib.Ex_CPU_Bmm(src_id1, src_id2)
+    
+if __name__ == "__main__":
+  non_sgx = NonSgxSecureLLM()
+  N = 23
+  x = torch.randint(-10, 10, (23, 4, 3), dtype=torch.int8)
+  x = non_sgx.Set_Tensor_Int8(x)
+  print("before")
+  A, B, C = non_sgx.Get_Tensor_Dim_Int8(x)
+  print(A, B, C)
+#   y = non_sgx.Get_Tensor_Float(x)
+#   print("after: ", y)

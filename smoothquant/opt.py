@@ -24,7 +24,7 @@ import smoothquant.my_bmm as my_bmm
 from ctypes import *
 import time
 
-import secure_llm.secure_llm as lsc
+import secure_llm.secure_llm_no_sgx2 as non_sgx_lsc
 import secure_llm.secure_llm_sgx as sgx_lsc
 
 import singleton_timer as st
@@ -221,13 +221,13 @@ class Int8OPTAttention(nn.Module):
         self.my_out_proj = None
 
         if my_exec_mode == ExecMode.Mode4:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode5:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode7:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode8:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
 
@@ -964,13 +964,13 @@ class Int8OPTDecoderLayer(nn.Module):
         self.my_fc2 = None
         
         if my_exec_mode == ExecMode.Mode4:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode5:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode9:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode7:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif my_exec_mode == ExecMode.Mode8:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
 
@@ -1622,7 +1622,7 @@ class Int8OPTModel(OPTPreTrainedModel):
 
     def pre_init(self):
         if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
-            lsc.LayerStructC().Pre_Init() # Reset internal KV cache metadata
+           non_sgx_lsc.NonSgxSecureLLM().Pre_Init() # Reset internal KV cache metadata
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
             sgx_lsc.SgxSecureLLM().Pre_Init()
 
@@ -1632,7 +1632,7 @@ class Int8OPTModel(OPTPreTrainedModel):
         self.decoder.reset()
 
         if my_exec_mode == ExecMode.Mode5 or my_exec_mode == ExecMode.Mode7:
-            lsc.LayerStructC().Reset() # Reset internal KV cache metadata
+           non_sgx_lsc.NonSgxSecureLLM().Reset() # Reset internal KV cache metadata
         elif my_exec_mode == ExecMode.Mode6 or my_exec_mode == ExecMode.Mode8 or my_exec_mode == ExecMode.Mode9:
             sgx_lsc.SgxSecureLLM().Reset()
     

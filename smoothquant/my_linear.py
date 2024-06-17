@@ -5,7 +5,7 @@ import smoothquant.opt
 
 from ctypes import *
 
-import secure_llm.secure_llm as lsc
+import secure_llm.secure_llm_no_sgx2 as non_sgx_lsc
 import secure_llm.secure_llm_sgx as sgx_lsc
 
 import singleton_timer as st
@@ -22,13 +22,13 @@ class Linear_S8W_S8A_S8B_FP32O_Mixed:
         # print(f'{module_name} is created')
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         else:
@@ -268,13 +268,13 @@ class Linear_S8W_S8A_FP32B_FP32O_Mixed:
         # print(f'{module_name} is created')
 
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode4:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode5:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode7:
-            self.lsc = lsc.LayerStructC()
+            self.lsc =non_sgx_lsc.NonSgxSecureLLM()
         elif smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8:
             self.sgx_lsc = sgx_lsc.SgxSecureLLM()
         else:

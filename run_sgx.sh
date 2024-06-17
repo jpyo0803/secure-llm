@@ -1,0 +1,1 @@
+cd secure_llm && make clean ; make -j ; cp enclave.signed.so .. && cd .. && python3 smoothquant_generation.py

@@ -5,9 +5,9 @@ set(CMAKE_CXX_STANDARD 17)
 
 # find_package(OpenMP REQUIRED)
 
-include_directories(./cpp)
+include_directories(./common)
 
-file(GLOB SOURCES "c/*.cpp")
+file(GLOB SOURCES "common/*.cpp")
 add_library(cipher_cpp SHARED ${SOURCES})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")

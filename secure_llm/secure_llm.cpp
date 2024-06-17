@@ -10,9 +10,14 @@
 #include "common/dynamic_glob_data.h"
 #include "common/static_glob_data.h"
 #include "common/tensor.h"
+#include <cmath>
 
-
+#if SGX_ENABLE == 1
 #include <sgx_trts.h>
+#include "tools_sgx.h"
+#else
+#include "tools.h"
+#endif
 
 using namespace std;
 
@@ -497,8 +502,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < X->B; ++i) {
     key_a.at(i).clear();
     for (int j = 0; j < X->M; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_a.at(i).emplace_back(mult_key_pool.at(idx), idx);
     }
@@ -507,8 +511,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < Y->B; ++i) {
     key_b.at(i).clear();
     for (int j = 0; j < Y->M; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_b.at(i).emplace_back(mult_key_pool.at(idx), idx);
     }
@@ -517,8 +520,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < X->B; ++i) {
     key_c.at(i).clear();
     for (int j = 0; j < X->N; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_c.at(i).emplace_back(add_key_pool.at(idx), idx);
     }
@@ -527,8 +529,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < Y->B; ++i) {
     key_d.at(i).clear();
     for (int j = 0; j < Y->N; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_d.at(i).emplace_back(add_key_pool.at(idx), idx);
     }
@@ -697,8 +698,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < X->B; ++i) {
     key_a.at(i).clear();
     for (int j = 0; j < X->M; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_a.at(i).emplace_back(mult_key_pool.at(idx), idx);
     }
@@ -707,8 +707,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < Y->B; ++i) {
     key_b.at(i).clear();
     for (int j = 0; j < Y->M; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_b.at(i).emplace_back(mult_key_pool.at(idx), idx);
     }
@@ -717,8 +716,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < X->B; ++i) {
     key_c.at(i).clear();
     for (int j = 0; j < X->N; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_c.at(i).emplace_back(add_key_pool.at(idx), idx);
     }
@@ -727,8 +725,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32(int src_id1, int src_id2, unsigned int* ou
   for (int i = 0; i < Y->B; ++i) {
     key_d.at(i).clear();
     for (int j = 0; j < Y->N; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_d.at(i).emplace_back(add_key_pool.at(idx), idx);
     }
@@ -887,8 +884,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < X->B; ++i) {
     key_a_opt_list[layer_id].at(i).clear();
     for (int j = 0; j < X->M; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_a_opt_list[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
     }
@@ -897,8 +893,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < Y->B; ++i) {
     // key_b.at(i).clear(); // dont clear, must be stacked
     for (int j = 0; j < Y->M; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_b_opt_list[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
     }
@@ -908,8 +903,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < X->B; ++i) {
     if (key_c_opt_list[layer_id].at(i).empty()) {
       for (int j = 0; j < X->N; ++j) {
-        uint32_t idx;
-        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        uint32_t idx = GenerateRandomNumber_Uint32();
         idx = idx % SECRET_KEY_POOL_SIZE;
         key_c_opt_list[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
       }
@@ -919,8 +913,7 @@ void Ex_Get_Encrypted_Tensor_QK_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < Y->B; ++i) {
     if (key_d_opt_list[layer_id].at(i).empty()) {
       for (int j = 0; j < Y->N; ++j) {
-        uint32_t idx;
-        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        uint32_t idx = GenerateRandomNumber_Uint32();
         idx = idx % SECRET_KEY_POOL_SIZE;
         key_d_opt_list[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
       }
@@ -1109,8 +1102,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < X->B; ++i) {
     key_a_opt_list2[layer_id].at(i).clear();
     for (int j = 0; j < X->M; ++j) {
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_a_opt_list2[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
     }
@@ -1120,8 +1112,7 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     // you only sample one time, Y->B does not increase
     if (key_b_opt_list2[layer_id].at(i).empty()) {
       for (int j = 0; j < Y->M; ++j) {
-        uint32_t idx;
-        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        uint32_t idx = GenerateRandomNumber_Uint32();
         idx = idx % SECRET_KEY_POOL_SIZE;
         key_b_opt_list2[layer_id].at(i).emplace_back(mult_key_pool.at(idx), idx);
       }
@@ -1132,15 +1123,13 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
     // it increases 
     if (key_c_opt_list2[layer_id].at(i).empty()) {
       for (int j = 0; j < X->N; ++j) {
-        uint32_t idx;
-        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        uint32_t idx = GenerateRandomNumber_Uint32();
         idx = idx % SECRET_KEY_POOL_SIZE;
         key_c_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
       }
     } else {
       // sample 1
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_c_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
     }
@@ -1149,15 +1138,13 @@ void Ex_Get_Encrypted_Tensor_PV_Int32_KV_Cache_Opt(int src_id1, int src_id2,
   for (int i = 0; i < Y->B; ++i) {
     if (key_d_opt_list2[layer_id].at(i).empty()) {
       for (int j = 0; j < Y->N; ++j) {
-        uint32_t idx;
-        sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+        uint32_t idx = GenerateRandomNumber_Uint32();
         idx = idx % SECRET_KEY_POOL_SIZE;
         key_d_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
       }
     } else {
       // sample 1
-      uint32_t idx;
-      sgx_read_rand((unsigned char*)&idx, sizeof(idx));
+      uint32_t idx = GenerateRandomNumber_Uint32();
       idx = idx % SECRET_KEY_POOL_SIZE;
       key_d_opt_list2[layer_id].at(i).emplace_back(add_key_pool.at(idx), idx);
     }

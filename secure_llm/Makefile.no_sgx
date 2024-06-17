@@ -1,0 +1,24 @@
+######## Non-SGX Settings ########
+
+# Common files
+My_Cpp_Files := common/aes_stream.cpp common/tools.cpp common/tensor.cpp secure_llm.cpp
+My_Inc_Dirs := -Icommon -I/usr/include/python3.10  # Ensure Python 3.10 includes are added
+
+FLAGS        = -std=c++17 $(My_Inc_Dirs)
+CFLAGS       = -fPIC -g -DSGX_ENABLE=0 -march=native -maes -O3 -mavx512f
+LDFLAGS      = -shared -lpython3.10
+
+
+secure_llm_no_sgx.so: $(My_Cpp_Files:.cpp=.o)
+	$(CXX) $(LDFLAGS) -o $@ $^
+
+%.o: %.cpp
+	$(CXX) $(FLAGS) $(CFLAGS) -c $< -o $@
+
+clean:
+	rm -f *.o common/*.o secure_llm_no_sgx.so
+
+.PHONY: all clean
+
+all: secure_llm_no_sgx.so
+	@echo "The secure_llm_no_sgx.so has been built."

@@ -1,6 +1,11 @@
 #include "tensor.h"
 
+#if SGX_ENABLE == 1
 #include <sgx_trts.h>
+#include "tools_sgx.h"
+#else
+#include "tools.h"
+#endif
 #include <immintrin.h>
 #include <stdlib.h>
 
@@ -14,8 +19,7 @@ struct TensorInt32* CreateTensorInt32FromRandom(int low, int high, int B, int M,
 
   // Generate random int32 elements in the range [low, high]
   for (int i = 0; i < total_elements; ++i) {
-    uint32_t rand_val;
-    sgx_read_rand((unsigned char*)&rand_val, sizeof(rand_val));
+    uint32_t rand_val = GenerateRandomNumber_Uint32();
     tensor->data[i] = low + (rand_val % (high - low + 1));
   }
 
