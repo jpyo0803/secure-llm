@@ -6,7 +6,6 @@
 #else
 #include "tools.h"
 #endif
-#include <immintrin.h>
 #include <stdlib.h>
 
 
@@ -54,21 +53,11 @@ struct TensorInt32* CreateTensorInt32(int B, int M, int N) {
   return tensor;
 }
 
-struct TensorInt32* CreateTensorInt32FromData(int* data, int B, int M, int N) {
+struct TensorInt32* CreateTensorInt32FromData(int32_t* data, int B, int M, int N) {
   struct TensorInt32* tensor = CreateTensorInt32(B, M, N);
   int total_elements = B * M * N;
 
-  int i;
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    // Load 16 int32 elements from data
-    __m512i src_vec = _mm512_loadu_si512((__m512i*)&data[i]);
-
-    // Store 16 int32 elements to tensor->data
-    _mm512_storeu_si512((__m512i*)&tensor->data[i], src_vec);
-  }
-
-  // Copy any remaining elements (if total_elements is not a multiple of 16)
-  for (; i < total_elements; ++i) {
+  for (int i = 0; i < total_elements; ++i) {
     tensor->data[i] = data[i];
   }
 
@@ -97,17 +86,7 @@ struct TensorFloat* CreateTensorFloatFromData(float* data, int B, int M,
   struct TensorFloat* tensor = CreateTensorFloat(B, M, N);
   int total_elements = B * M * N;
 
-  int i;
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    // Load 16 float elements from data
-    __m512 src_vec = _mm512_loadu_ps(&data[i]);
-
-    // Store 16 float elements to tensor->data
-    _mm512_storeu_ps(&tensor->data[i], src_vec);
-  }
-
-  // Copy any remaining elements (if total_elements is not a multiple of 16)
-  for (; i < total_elements; ++i) {
+  for (int i = 0; i < total_elements; ++i) {
     tensor->data[i] = data[i];
   }
 
@@ -130,21 +109,11 @@ struct TensorInt8* CreateTensorInt8(int B, int M, int N) {
   return tensor;
 }
 
-struct TensorInt8* CreateTensorInt8FromData(char* data, int B, int M, int N) {
+struct TensorInt8* CreateTensorInt8FromData(int8_t* data, int B, int M, int N) {
   struct TensorInt8* tensor = CreateTensorInt8(B, M, N);
   int total_elements = B * M * N;
 
-  int i;
-  for (i = 0; i <= total_elements - 64; i += 64) {
-    // Load 64 int8 elements from data
-    __m512i src_vec = _mm512_loadu_si512((__m512i*)&data[i]);
-
-    // Store 64 int8 elements to tensor->data
-    _mm512_storeu_si512((__m512i*)&tensor->data[i], src_vec);
-  }
-
-  // Copy any remaining elements (if total_elements is not a multiple of 64)
-  for (; i < total_elements; ++i) {
+  for (int i = 0; i < total_elements; ++i) {
     tensor->data[i] = data[i];
   }
 

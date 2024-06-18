@@ -17,9 +17,9 @@ int Ex_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps);
 
 int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id);
 
-int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
+int Ex_Set_Linear_Param_WS8BS8(int8_t* weight, int8_t* bias, int M, int N,
                                 float alpha, float beta);
-int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
+int Ex_Set_Linear_Param_WS8BFP32(int8_t* weight, float* bias, int M, int N,
                                   float alpha);
 
 void Ex_Get_Tensor_Dim_Int32(int src_id, int* dim);
@@ -33,7 +33,7 @@ int Ex_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, int linea
 
 void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim);
 void Ex_Get_Tensor_Int8(int src_id, int8_t* out);
-int Ex_Set_Tensor_Int8(char* data, int B, int M, int N);
+int Ex_Set_Tensor_Int8(int8_t* data, int B, int M, int N);
 
 void Ex_Get_Tensor_Dim_Float(int src_id, int* dim);
 void Ex_Get_Tensor_Float(int src_id, float* out);

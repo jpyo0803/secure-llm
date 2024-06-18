@@ -225,7 +225,7 @@ int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
 }
 
 // Need precomputation
-int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
+int Ex_Set_Linear_Param_WS8BS8(int8_t* weight, int8_t* bias, int M, int N,
                                float alpha, float beta) {
   int curr_id = linear_param_id;
 
@@ -257,7 +257,7 @@ int Ex_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N,
   return curr_id;
 }
 
-int Ex_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N,
+int Ex_Set_Linear_Param_WS8BFP32(int8_t* weight, float* bias, int M, int N,
                                  float alpha) {
   int curr_id = linear_param_id;
 
@@ -1486,7 +1486,7 @@ void Ex_Get_Tensor_Int8(int src_id, int8_t* out) {
   }
 }
 
-int Ex_Set_Tensor_Int8(char* data, int B, int M, int N) {
+int Ex_Set_Tensor_Int8(int8_t* data, int B, int M, int N) {
   int curr_id = tensor_int8_id;
   if (tensor_int8_list[curr_id] != NULL) {
     DeleteTensorInt8(tensor_int8_list[curr_id]);

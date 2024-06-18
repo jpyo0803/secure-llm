@@ -59,7 +59,7 @@ struct TensorFloat* CreateTensorFloatFromData(float* data, int B, int M, int N);
 void DeleteTensorFloat(struct TensorFloat* tensor);
 
 struct TensorInt8* CreateTensorInt8(int B, int M, int N);
-struct TensorInt8* CreateTensorInt8FromData(char* data, int B, int M, int N);
+struct TensorInt8* CreateTensorInt8FromData(int8_t* data, int B, int M, int N);
 void DeleteTensorInt8(struct TensorInt8* tensor);
 
 
