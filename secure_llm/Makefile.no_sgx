@@ -2,11 +2,11 @@
 
 # Common files
 My_Cpp_Files := common/aes_stream.cpp common/tools.cpp common/tensor.cpp secure_llm.cpp
-My_Inc_Dirs := -Icommon -I/usr/include/python3.10  # Ensure Python 3.10 includes are added
+My_Inc_Dirs := -Icommon 
 
 FLAGS        = -std=c++17 $(My_Inc_Dirs)
-CFLAGS       = -fPIC -g -DSGX_ENABLE=0 -march=native -maes -O3 -mavx512f
-LDFLAGS      = -shared -lpython3.10
+CFLAGS       = -fPIC -g -DSGX_ENABLE=0 -march=native -maes -O3
+LDFLAGS      = -shared
 
 
 secure_llm_no_sgx.so: $(My_Cpp_Files:.cpp=.o)
