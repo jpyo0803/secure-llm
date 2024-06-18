@@ -1,7 +1,6 @@
 
 #include "secure_llm.h"
 
-#include "Enclave/Enclave.h"
 #include <immintrin.h>
 #include <chrono>
 #include <numeric>
@@ -11,12 +10,15 @@
 #include "common/static_glob_data.h"
 #include "common/tensor.h"
 #include <cmath>
+#include <cassert>
 
 #if SGX_ENABLE == 1
+#include "Enclave/Enclave.h"
 #include <sgx_trts.h>
 #include "tools_sgx.h"
 #else
 #include "tools.h"
+#include <iostream>
 #endif
 
 using namespace std;
@@ -182,6 +184,7 @@ int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
   int B = src_tensor->B;
   int M = src_tensor->M;
   int N = src_tensor->N;
+
 
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
@@ -1372,17 +1375,8 @@ int Ex_ReLU(int src_id) {
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
   int total_elements = B * M * N;
-  int i;
-  __m512 zero_vec = _mm512_setzero_ps();
-
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-    __m512 result_vec = _mm512_max_ps(src_vec, zero_vec);
-    _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
-  }
-
-  for (; i < total_elements; ++i) {
-    dst_tensor->data[i] = src_tensor->data[i] > 0.0 ? src_tensor->data[i] : 0.0;
+  for (int i = 0; i < total_elements; ++i) {
+    dst_tensor->data[i] = std::max(src_tensor->data[i], 0.0f);
   }
 
   int curr_id = tensor_float_id;
