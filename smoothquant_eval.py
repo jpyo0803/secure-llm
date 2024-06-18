@@ -11,9 +11,9 @@ from torch.nn.functional import pad
 import singleton_timer as st
 import accuracy_measure_tools as amt
 
-import sgx.sgx_layer_struct as sgx_lsc
+import secure_llm.secure_llm_sgx as sgx_lsc
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode9
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode7
 
 amt.set_clock_speed()
 
