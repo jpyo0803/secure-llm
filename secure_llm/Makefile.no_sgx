@@ -5,8 +5,8 @@ My_Cpp_Files := common/aes_stream.cpp common/tools.cpp common/tensor.cpp secure_
 My_Inc_Dirs := -Icommon 
 
 FLAGS        = -std=c++17 $(My_Inc_Dirs)
-CFLAGS       = -fPIC -g -DSGX_ENABLE=0 -march=native -maes -O3
-LDFLAGS      = -shared
+CFLAGS       = -fPIC -g -DSGX_ENABLE=0 -march=native -maes -O3 
+LDFLAGS      = -shared -lm
 
 
 secure_llm_no_sgx.so: $(My_Cpp_Files:.cpp=.o)

@@ -1,7 +1,6 @@
 
 #include "secure_llm.h"
 
-#include <immintrin.h>
 #include <chrono>
 #include <numeric>
 
@@ -187,85 +186,39 @@ int Ex_Layer_Norm_Q(int src_id, int layer_norm_param_id) {
 
 
   for (int i = 0; i < B; ++i) {
-    for (int j = 0; j < M; ++j) {
-      __m512 sum_vec = _mm512_setzero_ps();
-      __m512 sum_sqr_vec = _mm512_setzero_ps();
+      for (int j = 0; j < M; ++j) {
+          float sum = 0.0, sum_sqr = 0.0;
 
-      // Calculate sum and sum of squares
-      for (int k = 0; k <= N - 16; k += 16) {
-        __m512 src_vec =
-            _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
-        sum_vec = _mm512_add_ps(sum_vec, src_vec);
-        sum_sqr_vec = _mm512_fmadd_ps(src_vec, src_vec, sum_sqr_vec);
+          // Calculate sum and sum of squares
+          for (int k = 0; k < N; ++k) {
+              float src_val = src_tensor->data[i * M * N + j * N + k];
+              sum += src_val;
+              sum_sqr += src_val * src_val;
+          }
+
+          float mean = sum / N;
+          float var = sum_sqr / N - mean * mean;
+          float inv_std = 1.0f / sqrtf(var + layer_norm_param->eps);  // Use sqrtf directly
+
+          // Normalize and clamp
+          for (int k = 0; k < N; ++k) {
+              float src_val = src_tensor->data[i * M * N + j * N + k];
+              float norm_val = (src_val - mean) * inv_std;
+              norm_val = norm_val * layer_norm_param->gamma->data[k] + layer_norm_param->beta->data[k];
+              norm_val = roundf(norm_val);
+
+              // Clamp between -128 and 127
+              if (norm_val > 127.0f) {
+                  norm_val = 127.0f;
+              } else if (norm_val < -128.0f) {
+                  norm_val = -128.0f;
+              }
+
+              dst_tensor->data[i * M * N + j * N + k] = (char)norm_val;
+          }
       }
-
-      // Horizontally add the elements in sum_vec and sum_sqr_vec
-      float sum = 0.0, sum_sqr = 0.0;
-      float sum_array[16], sum_sqr_array[16];
-      _mm512_storeu_ps(sum_array, sum_vec);
-      _mm512_storeu_ps(sum_sqr_array, sum_sqr_vec);
-      for (int l = 0; l < 16; ++l) {
-        sum += sum_array[l];
-        sum_sqr += sum_sqr_array[l];
-      }
-
-      // Process any remaining elements
-      for (int k = (N / 16) * 16; k < N; ++k) {
-        float tmp = src_tensor->data[i * M * N + j * N + k];
-        sum += tmp;
-        sum_sqr += tmp * tmp;
-      }
-
-      float mean = sum / N;
-      float var = sum_sqr / N - mean * mean;
-      float inv_std = 1.0f / sqrtf(var + layer_norm_param->eps);
-
-      __m512 mean_vec = _mm512_set1_ps(mean);
-      __m512 inv_std_vec = _mm512_set1_ps(inv_std);
-      __m512 gamma_vec, beta_vec;
-
-      // Normalize and clamp
-      for (int k = 0; k <= N - 16; k += 16) {
-        __m512 src_vec =
-            _mm512_loadu_ps(&src_tensor->data[i * M * N + j * N + k]);
-        __m512 norm_vec = _mm512_sub_ps(src_vec, mean_vec);
-        norm_vec = _mm512_mul_ps(norm_vec, inv_std_vec);
-
-        gamma_vec = _mm512_loadu_ps(&layer_norm_param->gamma->data[k]);
-        beta_vec = _mm512_loadu_ps(&layer_norm_param->beta->data[k]);
-
-        norm_vec = _mm512_fmadd_ps(norm_vec, gamma_vec, beta_vec);
-        norm_vec = _mm512_roundscale_ps(
-            norm_vec, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
-
-        // Clamp between -128 and 127
-        __m512i int_vec = _mm512_cvtps_epi32(norm_vec);
-        int_vec = _mm512_max_epi32(int_vec, _mm512_set1_epi32(-128));
-        int_vec = _mm512_min_epi32(int_vec, _mm512_set1_epi32(127));
-
-        // Store the result as int8
-        __m128i int8_vec = _mm512_cvtsepi32_epi8(int_vec);
-        _mm_storeu_si128((__m128i*)&dst_tensor->data[i * M * N + j * N + k],
-                         int8_vec);
-      }
-
-      // Process any remaining elements
-      for (int k = (N / 16) * 16; k < N; ++k) {
-        float tmp = src_tensor->data[i * M * N + j * N + k];
-        tmp = (tmp - mean) * inv_std * layer_norm_param->gamma->data[k] +
-              layer_norm_param->beta->data[k];
-        tmp = roundf(tmp);
-
-        // Clamp between -128 and 127
-        if (tmp > 127.0) {
-          tmp = 127.0;
-        } else if (tmp < -128.0) {
-          tmp = -128.0;
-        }
-        dst_tensor->data[i * M * N + j * N + k] = (char)tmp;
-      }
-    }
   }
+
   tensor_int8_list[curr_id] = dst_tensor;
   tensor_int8_id = (tensor_int8_id + 1) % DYNAMIC_LIST_LEN;
   return curr_id;
@@ -342,20 +295,12 @@ void Ex_Get_Tensor_Dim_Int32(int src_id, int* dim) {
   dim[2] = src_tensor->N;
 }
 
-void Ex_Get_Tensor_Int32(int src_id, int* out) {
+void Ex_Get_Tensor_Int32(int src_id, int32_t* out) {
   struct TensorInt32* src_tensor = tensor_int32_list[src_id];
-  int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
-  int i;
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    // Load 16 int32 elements from src_tensor
-    __m512i src_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
 
-    // Store 16 int32 elements to out
-    _mm512_storeu_si512((__m512i*)&out[i], src_vec);
-  }
-
-  // Copy any remaining elements (if total_elements is not a multiple of 16)
-  for (; i < total_elements; ++i) {
+  int total_elements = src_tensor->B * src_tensor->M * src_tensor->N; // be careful of overflow
+  
+  for (int i = 0; i < total_elements; ++i) {
     out[i] = src_tensor->data[i];
   }
 }
@@ -1439,24 +1384,10 @@ int Ex_Quantize_Post_Softmax(int src_id) {
 
   struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
-  __m512 scale_vec = _mm512_set1_ps(127.0f);
 
-  int total_elements = B * M * N;
-  int i;
-
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-    __m512 scaled_vec = _mm512_mul_ps(src_vec, scale_vec);
-    __m512i int_vec = _mm512_cvtps_epi32(scaled_vec);
-    __m512i clamped_vec =
-        _mm512_min_epi32(_mm512_max_epi32(int_vec, _mm512_set1_epi32(-128)),
-                         _mm512_set1_epi32(127));
-    __m128i result_vec = _mm512_cvtsepi32_epi8(clamped_vec);
-    _mm_storeu_si128((__m128i*)&dst_tensor->data[i], result_vec);
-  }
-
-  for (; i < total_elements; ++i) {
-    dst_tensor->data[i] = (char)roundf(src_tensor->data[i] * 127.0f);
+  int total_elements = B * M * N; // be careful of overflow
+  for (int i = 0; i < total_elements; ++i) {
+    dst_tensor->data[i] = (int8_t)round(src_tensor->data[i] * 127.0f);
   }
 
   int curr_id = tensor_int8_id;
@@ -1479,20 +1410,9 @@ int Ex_Cast_From_Float_To_Int8(int src_id) {
   struct TensorInt8* dst_tensor = CreateTensorInt8(B, M, N);
 
   int total_elements = B * M * N;
-  int i;
-
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-    __m512i int_vec = _mm512_cvtps_epi32(src_vec);
-    __m512i clamped_vec =
-        _mm512_max_epi32(_mm512_set1_epi32(-128),
-                         _mm512_min_epi32(int_vec, _mm512_set1_epi32(127)));
-    __m128i result_vec = _mm512_cvtsepi32_epi8(clamped_vec);
-    _mm_storeu_si128((__m128i*)&dst_tensor->data[i], result_vec);
-  }
-
-  for (; i < total_elements; ++i) {
-    dst_tensor->data[i] = (char)src_tensor->data[i];
+  
+  for (int i = 0; i < total_elements; ++i) {
+    dst_tensor->data[i] = (int8_t)src_tensor->data[i];
   }
 
   int curr_id = tensor_int8_id;
@@ -1515,16 +1435,8 @@ int Ex_Cast_From_Float_To_Int32(int src_id) {
   struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
   int total_elements = B * M * N;
-  int i;
-
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    __m512 src_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-    __m512i int_vec = _mm512_cvtps_epi32(src_vec);
-    _mm512_storeu_si512((__m512i*)&dst_tensor->data[i], int_vec);
-  }
-
-  for (; i < total_elements; ++i) {
-    dst_tensor->data[i] = (char)src_tensor->data[i];
+  for (int i = 0; i < total_elements; ++i) {
+    dst_tensor->data[i] = (int)src_tensor->data[i];
   }
 
   int curr_id = tensor_int32_id;
@@ -1547,16 +1459,9 @@ int Ex_Cast_From_Int8_To_Int32(int src_id) {
   struct TensorInt32* dst_tensor = CreateTensorInt32(B, M, N);
 
   int total_elements = B * M * N;
-  int i;
 
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    __m128i src_vec = _mm_loadu_si128((__m128i*)&src_tensor->data[i]);
-    __m512i int_vec = _mm512_cvtepi8_epi32(src_vec);
-    _mm512_storeu_si512((__m512i*)&dst_tensor->data[i], int_vec);
-  }
-
-  for (; i < total_elements; ++i) {
-    dst_tensor->data[i] = (char)src_tensor->data[i];
+  for (int i = 0; i < total_elements; ++i) {
+    dst_tensor->data[i] = (int32_t)src_tensor->data[i]; 
   }
 
   int curr_id = tensor_int32_id;
@@ -1572,17 +1477,11 @@ void Ex_Get_Tensor_Dim_Int8(int src_id, int* dim) {
   dim[2] = src_tensor->N;
 }
 
-void Ex_Get_Tensor_Int8(int src_id, char* out) {
+void Ex_Get_Tensor_Int8(int src_id, int8_t* out) {
   struct TensorInt8* src_tensor = tensor_int8_list[src_id];
   int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
-  int i;
-  for (i = 0; i <= total_elements - 64; i += 64) {
-    __m512i data_vec = _mm512_loadu_si512((__m512i*)&src_tensor->data[i]);
-    _mm512_storeu_si512((__m512i*)&out[i], data_vec);
-  }
-
-  for (; i < total_elements; ++i) {
+  for (int i = 0; i < total_elements; ++i) {
     out[i] = src_tensor->data[i];
   }
 }
@@ -1609,13 +1508,7 @@ void Ex_Get_Tensor_Float(int src_id, float* out) {
   struct TensorFloat* src_tensor = tensor_float_list[src_id];
   int total_elements = src_tensor->B * src_tensor->M * src_tensor->N;
 
-  int i;
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    __m512 data_vec = _mm512_loadu_ps(&src_tensor->data[i]);
-    _mm512_storeu_ps(&out[i], data_vec);
-  }
-
-  for (; i < total_elements; ++i) {
+  for (int i = 0; i < total_elements; ++i) {
     out[i] = src_tensor->data[i];
   }
 }
@@ -1652,19 +1545,9 @@ int Ex_Residual_Add(int residual, int hidden_states) {
 
   struct TensorFloat* dst_tensor = CreateTensorFloat(B, M, N);
 
-  int total_elements = B * M * N;
-  int i;
-
-  for (i = 0; i <= total_elements - 16; i += 16) {
-    __m512 residual_vec = _mm512_loadu_ps(&residual_tensor->data[i]);
-    __m512 hidden_vec = _mm512_loadu_ps(&hidden_states_tensor->data[i]);
-    __m512 result_vec = _mm512_add_ps(residual_vec, hidden_vec);
-    _mm512_storeu_ps(&dst_tensor->data[i], result_vec);
-  }
-
-  for (; i < total_elements; ++i) {
-    dst_tensor->data[i] =
-        residual_tensor->data[i] + hidden_states_tensor->data[i];
+  int total_elements = B * M * N; // be careful of overflow
+  for (int i = 0; i < total_elements; ++i) {
+    dst_tensor->data[i] = residual_tensor->data[i] + hidden_states_tensor->data[i];
   }
 
   int curr_id = tensor_float_id;
