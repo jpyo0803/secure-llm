@@ -13,7 +13,7 @@ import accuracy_measure_tools as amt
 
 import secure_llm.secure_llm_sgx as sgx_lsc
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode7
+smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
 
 amt.set_clock_speed()
 
@@ -132,6 +132,6 @@ print(
 
 
 if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode6 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode8 or smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
-    sgx_lsc.SgxLayerStructC().Destroy()
+    sgx_lsc.SgxSecureLLM().Destroy()
 
 amt.reset_clock_speed()

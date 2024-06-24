@@ -29,9 +29,9 @@ void ecall_Sgx_Set_Layer_Norm_Param(float* gamma, float* beta, int N, float eps,
 
 void ecall_Sgx_Layer_Norm_Q(int src_id, int layer_norm_param_id, int* ret_id);
 
-void ecall_Sgx_Set_Linear_Param_WS8BS8(char* weight, char* bias, int M, int N, float alpha, float beta, int* ret_id);
+void ecall_Sgx_Set_Linear_Param_WS8BS8(int8_t* weight, int8_t* bias, int M, int N, float alpha, float beta, int* ret_id);
 
-void ecall_Sgx_Set_Linear_Param_WS8BFP32(char* weight, float* bias, int M, int N, float alpha, int* ret_id);
+void ecall_Sgx_Set_Linear_Param_WS8BFP32(int8_t* weight, float* bias, int M, int N, float alpha, int* ret_id);
 
 void ecall_Sgx_Get_Tensor_Dim_Int32(int src_id, int* dim);
 
@@ -47,9 +47,9 @@ void ecall_Sgx_Set_Decrypted_Tensor_Opr1_Int32(int* data, int B, int M, int N, i
 
 void ecall_Sgx_Get_Tensor_Dim_Int8(int src_id, int* dim);
 
-void ecall_Sgx_Get_Tensor_Int8(int src_id, char* out);
+void ecall_Sgx_Get_Tensor_Int8(int src_id, int8_t* out);
 
-void ecall_Sgx_Set_Tensor_Int8(char* data, int B, int M, int N, int* ret_id);
+void ecall_Sgx_Set_Tensor_Int8(int8_t* data, int B, int M, int N, int* ret_id);
 
 void ecall_Sgx_Get_Tensor_Dim_Float(int src_id, int* dim);
 

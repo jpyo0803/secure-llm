@@ -6,7 +6,7 @@ My_Inc_Dirs := -Icommon
 
 FLAGS        = -std=c++17 $(My_Inc_Dirs)
 CFLAGS       = -fPIC -g -DSGX_ENABLE=0 -march=native -maes -O3 
-LDFLAGS      = -shared -lm -ltcmalloc
+LDFLAGS      = -shared -lm -L/usr/lib/x86_64-linux-gnu -ltcmalloc
 
 # For tcmalloc
 # 'apt-get install google-perftools libgoogle-perftools-dev' to install

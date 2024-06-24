@@ -6,6 +6,7 @@ import os
 from torch.nn.functional import pad
 import time
 import csv
+import sys
 
 import singleton_timer as st
 import accuracy_measure_tools as amt
@@ -20,11 +21,31 @@ timer.disable()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
+assert len(sys.argv) == 5
+if sys.argv[1] == 'mode5':
+    smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode5
+elif sys.argv[1] == 'mode6':
+    smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode6
+elif sys.argv[1] == 'mode7':
+    smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode7
+elif sys.argv[1] == 'mode8':
+    smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode8
+elif sys.argv[1] == 'mode9':
+    smoothquant.opt.my_exec_mode = smoothquant.opt.ExecMode.Mode9
+else:
+    assert False
+
 model_size = '125m'
-target_input_token_len = 128
-target_output_token_len = 256
-num_batches = 1
+
+target_input_token_len = int(sys.argv[2])
+target_output_token_len = int(sys.argv[3])
+num_batches = int(sys.argv[4])
+
+print("Model: ", model_size)
+print("Mode: ", smoothquant.opt.my_exec_mode)
+print("Input token length: ", target_input_token_len)
+print("Output token length: ", target_output_token_len)
+print("Number of batches: ", num_batches)
 
 
 '''
@@ -45,7 +66,6 @@ num_batches = 1
 '''
 
 
-print("Mode: ", smoothquant.opt.my_exec_mode)
 
 start_gpu = (smoothquant.opt.my_exec_mode ==
              smoothquant.opt.ExecMode.Mode1) or (smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode2)
