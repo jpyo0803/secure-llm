@@ -193,6 +193,8 @@ class BMM_S8X_S8Y_FP32Z_Mixed:
         if smoothquant.opt.my_exec_mode == smoothquant.opt.ExecMode.Mode9:
             pass
         else:
+            # if smoothquant.opt.is_prefill:
+            #     print("is pv bmm: ", self.is_pv_bmm, x.size(), y.size())
             x = x.to(torch.device('cuda:0'))
             y = y.to(torch.device('cuda:0'))
 
